@@ -8,6 +8,7 @@ import {
   TextInput,
   Switch,
   Alert,
+  Modal,
 } from 'react-native';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
@@ -21,10 +22,31 @@ import {
   ChevronRight,
   X,
   Plus,
+  UtensilsCrossed,
+  Trash2,
+  Check,
+  DollarSign,
 } from 'lucide-react-native';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { restaurantCategories } from '@/mocks/data';
+
+interface MenuItem {
+  id: string;
+  name: string;
+  description: string;
+  price: string;
+  category: string;
+  image?: string;
+}
+
+const MENU_CATEGORIES = ['Appetizers', 'Main Course', 'Desserts', 'Beverages', 'Specials'];
+
+const mockMenuItems: MenuItem[] = [
+  { id: '1', name: 'Margherita Pizza', description: 'Classic tomato and mozzarella', price: '14.99', category: 'Main Course' },
+  { id: '2', name: 'Caesar Salad', description: 'Romaine, croutons, parmesan', price: '9.99', category: 'Appetizers' },
+  { id: '3', name: 'Tiramisu', description: 'Coffee-flavored Italian dessert', price: '7.99', category: 'Desserts' },
+];
 
 export default function SettingsScreen() {
   const router = useRouter();
@@ -49,6 +71,16 @@ export default function SettingsScreen() {
     'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=400',
     'https://images.unsplash.com/photo-1552566626-52f8b828add9?w=400',
   ]);
+
+  const [menuItems, setMenuItems] = useState<MenuItem[]>(mockMenuItems);
+  const [showMenuModal, setShowMenuModal] = useState(false);
+  const [editingMenuItem, setEditingMenuItem] = useState<MenuItem | null>(null);
+  const [menuForm, setMenuForm] = useState({
+    name: '',
+    description: '',
+    price: '',
+    category: 'Main Course',
+  });
 
   const styles = createStyles(colors, isDark);
 
@@ -123,62 +155,90 @@ export default function SettingsScreen() {
   };
 
   const removeRestaurantImage = (index: number) => {
-    Alert.alert(
-      'Remove Image',
-      'Are you sure you want to remove this image?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Remove',
-          style: 'destructive',
-          onPress: () => {
-            const newImages = [...restaurantImages];
-            newImages.splice(index, 1);
-            setRestaurantImages(newImages);
-          },
+    Alert.alert('Remove Image', 'Are you sure?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Remove',
+        style: 'destructive',
+        onPress: () => {
+          const newImages = [...restaurantImages];
+          newImages.splice(index, 1);
+          setRestaurantImages(newImages);
         },
-      ]
-    );
+      },
+    ]);
   };
 
   const showImageOptions = (type: 'logo' | 'restaurant') => {
-    Alert.alert(
-      'Add Image',
-      'Choose an option',
-      [
-        {
-          text: 'Take Photo',
-          onPress: type === 'logo' ? takeLogo : takeRestaurantPhoto,
-        },
-        {
-          text: 'Choose from Library',
-          onPress: type === 'logo' ? pickLogo : pickRestaurantImage,
-        },
-        { text: 'Cancel', style: 'cancel' },
-      ]
-    );
+    Alert.alert('Add Image', 'Choose an option', [
+      { text: 'Take Photo', onPress: type === 'logo' ? takeLogo : takeRestaurantPhoto },
+      { text: 'Choose from Library', onPress: type === 'logo' ? pickLogo : pickRestaurantImage },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  };
+
+  const handleAddMenuItem = () => {
+    setEditingMenuItem(null);
+    setMenuForm({ name: '', description: '', price: '', category: 'Main Course' });
+    setShowMenuModal(true);
+  };
+
+  const handleEditMenuItem = (item: MenuItem) => {
+    setEditingMenuItem(item);
+    setMenuForm({
+      name: item.name,
+      description: item.description,
+      price: item.price,
+      category: item.category,
+    });
+    setShowMenuModal(true);
+  };
+
+  const handleSaveMenuItem = () => {
+    if (!menuForm.name || !menuForm.price) {
+      Alert.alert('Error', 'Please enter name and price');
+      return;
+    }
+
+    if (editingMenuItem) {
+      setMenuItems(prev => prev.map(item => 
+        item.id === editingMenuItem.id 
+          ? { ...item, ...menuForm }
+          : item
+      ));
+    } else {
+      const newItem: MenuItem = {
+        id: `menu_${Date.now()}`,
+        ...menuForm,
+      };
+      setMenuItems(prev => [...prev, newItem]);
+    }
+    setShowMenuModal(false);
+  };
+
+  const handleDeleteMenuItem = (id: string) => {
+    Alert.alert('Delete Item', 'Remove this menu item?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: () => setMenuItems(prev => prev.filter(item => item.id !== id)) },
+    ]);
   };
 
   const handleLogout = () => {
-    Alert.alert(
-      'Sign Out',
-      'Are you sure you want to sign out?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Sign Out',
-          style: 'destructive',
-          onPress: () => {
-            logout();
-            router.replace('/');
-          },
+    Alert.alert('Sign Out', 'Are you sure?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Sign Out',
+        style: 'destructive',
+        onPress: () => {
+          logout();
+          router.replace('/');
         },
-      ]
-    );
+      },
+    ]);
   };
 
   const handleSave = () => {
-    Alert.alert('Success', 'Restaurant settings saved successfully!');
+    Alert.alert('Success', 'Settings saved successfully!');
   };
 
   return (
@@ -214,12 +274,9 @@ export default function SettingsScreen() {
             <View style={styles.logoInfo}>
               <Text style={styles.logoInfoTitle}>Restaurant Logo</Text>
               <Text style={styles.logoInfoDesc}>
-                Upload a square logo for your restaurant. This will be displayed on your profile.
+                Upload a square logo for your restaurant.
               </Text>
-              <Pressable 
-                style={styles.changeLogoBtn}
-                onPress={() => showImageOptions('logo')}
-              >
+              <Pressable style={styles.changeLogoBtn} onPress={() => showImageOptions('logo')}>
                 <Text style={styles.changeLogoBtnText}>
                   {logoImage ? 'Change Logo' : 'Upload Logo'}
                 </Text>
@@ -230,9 +287,6 @@ export default function SettingsScreen() {
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Restaurant Photos</Text>
-          <Text style={styles.sectionDesc}>
-            Add photos of your restaurant, food, and ambiance to attract customers.
-          </Text>
           <ScrollView 
             horizontal 
             showsHorizontalScrollIndicator={false}
@@ -240,27 +294,54 @@ export default function SettingsScreen() {
           >
             {restaurantImages.map((image, index) => (
               <View key={index} style={styles.restaurantImageWrapper}>
-                <Image 
-                  source={{ uri: image }} 
-                  style={styles.restaurantImage} 
-                  contentFit="cover" 
-                />
-                <Pressable 
-                  style={styles.removeImageBtn}
-                  onPress={() => removeRestaurantImage(index)}
-                >
+                <Image source={{ uri: image }} style={styles.restaurantImage} contentFit="cover" />
+                <Pressable style={styles.removeImageBtn} onPress={() => removeRestaurantImage(index)}>
                   <X size={14} color="#fff" />
                 </Pressable>
               </View>
             ))}
-            <Pressable 
-              style={styles.addImageBtn}
-              onPress={() => showImageOptions('restaurant')}
-            >
+            <Pressable style={styles.addImageBtn} onPress={() => showImageOptions('restaurant')}>
               <Plus size={28} color={colors.primary} />
               <Text style={styles.addImageText}>Add Photo</Text>
             </Pressable>
           </ScrollView>
+        </View>
+
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <UtensilsCrossed size={20} color={colors.primary} />
+            <Text style={styles.sectionTitle}>Menu Items</Text>
+          </View>
+          <Pressable style={styles.addMenuBtn} onPress={handleAddMenuItem}>
+            <Plus size={18} color="#fff" />
+            <Text style={styles.addMenuBtnText}>Add Menu Item</Text>
+          </Pressable>
+
+          {MENU_CATEGORIES.map(category => {
+            const categoryItems = menuItems.filter(item => item.category === category);
+            if (categoryItems.length === 0) return null;
+            return (
+              <View key={category} style={styles.menuCategory}>
+                <Text style={styles.menuCategoryTitle}>{category}</Text>
+                {categoryItems.map(item => (
+                  <Pressable 
+                    key={item.id} 
+                    style={styles.menuItem}
+                    onPress={() => handleEditMenuItem(item)}
+                  >
+                    <View style={styles.menuItemInfo}>
+                      <Text style={styles.menuItemName}>{item.name}</Text>
+                      <Text style={styles.menuItemDesc} numberOfLines={1}>{item.description}</Text>
+                    </View>
+                    <Text style={styles.menuItemPrice}>${item.price}</Text>
+                    <Pressable onPress={() => handleDeleteMenuItem(item.id)}>
+                      <Trash2 size={16} color={colors.error} />
+                    </Pressable>
+                  </Pressable>
+                ))}
+              </View>
+            );
+          })}
         </View>
 
         <View style={styles.section}>
@@ -389,7 +470,7 @@ export default function SettingsScreen() {
             </View>
             {acceptsBooking && (
               <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>Booking Terms & Conditions</Text>
+                <Text style={styles.formLabel}>Booking Terms</Text>
                 <TextInput
                   style={[styles.formInput, styles.formTextarea]}
                   value={bookingTerms}
@@ -427,6 +508,92 @@ export default function SettingsScreen() {
           </Pressable>
         </View>
       </ScrollView>
+
+      <Modal visible={showMenuModal} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>
+                {editingMenuItem ? 'Edit Menu Item' : 'Add Menu Item'}
+              </Text>
+              <Pressable onPress={() => setShowMenuModal(false)}>
+                <X size={24} color={colors.text} />
+              </Pressable>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Name *</Text>
+                <TextInput
+                  style={styles.formInput}
+                  placeholder="Item name"
+                  placeholderTextColor={colors.placeholder}
+                  value={menuForm.name}
+                  onChangeText={(text) => setMenuForm({ ...menuForm, name: text })}
+                />
+              </View>
+
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Description</Text>
+                <TextInput
+                  style={[styles.formInput, styles.formTextarea]}
+                  placeholder="Brief description"
+                  placeholderTextColor={colors.placeholder}
+                  value={menuForm.description}
+                  onChangeText={(text) => setMenuForm({ ...menuForm, description: text })}
+                  multiline
+                  numberOfLines={2}
+                />
+              </View>
+
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Price *</Text>
+                <View style={styles.priceInput}>
+                  <DollarSign size={18} color={colors.textSecondary} />
+                  <TextInput
+                    style={[styles.formInput, { flex: 1, marginBottom: 0 }]}
+                    placeholder="0.00"
+                    placeholderTextColor={colors.placeholder}
+                    keyboardType="decimal-pad"
+                    value={menuForm.price}
+                    onChangeText={(text) => setMenuForm({ ...menuForm, price: text })}
+                  />
+                </View>
+              </View>
+
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Category</Text>
+                <View style={styles.categoryOptions}>
+                  {MENU_CATEGORIES.map(cat => (
+                    <Pressable
+                      key={cat}
+                      style={[
+                        styles.categoryOption,
+                        menuForm.category === cat && styles.categoryOptionActive,
+                      ]}
+                      onPress={() => setMenuForm({ ...menuForm, category: cat })}
+                    >
+                      <Text style={[
+                        styles.categoryOptionText,
+                        menuForm.category === cat && styles.categoryOptionTextActive,
+                      ]}>
+                        {cat}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+
+              <Pressable style={styles.saveMenuBtn} onPress={handleSaveMenuItem}>
+                <Check size={18} color="#fff" />
+                <Text style={styles.saveMenuBtnText}>
+                  {editingMenuItem ? 'Update Item' : 'Add Item'}
+                </Text>
+              </Pressable>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -473,17 +640,17 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     paddingHorizontal: 20,
     marginBottom: 24,
   },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+  },
   sectionTitle: {
     fontSize: 16,
     fontWeight: '600' as const,
     color: colors.text,
     marginBottom: 12,
-  },
-  sectionDesc: {
-    fontSize: 13,
-    color: colors.textSecondary,
-    marginBottom: 12,
-    marginTop: -4,
   },
   logoSection: {
     flexDirection: 'row',
@@ -599,6 +766,59 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     color: colors.primary,
     marginTop: 4,
   },
+  addMenuBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.primary,
+    paddingVertical: 12,
+    borderRadius: 12,
+    gap: 8,
+    marginBottom: 16,
+  },
+  addMenuBtnText: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: '#fff',
+  },
+  menuCategory: {
+    marginBottom: 16,
+  },
+  menuCategoryTitle: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: colors.textSecondary,
+    marginBottom: 8,
+  },
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    gap: 12,
+  },
+  menuItemInfo: {
+    flex: 1,
+  },
+  menuItemName: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: colors.text,
+  },
+  menuItemDesc: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  menuItemPrice: {
+    fontSize: 15,
+    fontWeight: '700' as const,
+    color: colors.primary,
+  },
   card: {
     backgroundColor: colors.surface,
     borderRadius: 16,
@@ -628,6 +848,41 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   formTextarea: {
     minHeight: 80,
     textAlignVertical: 'top',
+  },
+  priceInput: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.inputBackground,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+    gap: 8,
+  },
+  categoryOptions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  categoryOption: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: colors.backgroundSecondary,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  categoryOptionActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  categoryOptionText: {
+    fontSize: 13,
+    fontWeight: '500' as const,
+    color: colors.textSecondary,
+  },
+  categoryOptionTextActive: {
+    color: '#fff',
   },
   switchRow: {
     flexDirection: 'row',
@@ -710,5 +965,44 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     fontSize: 13,
     color: colors.textSecondary,
     marginTop: 2,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: colors.surface,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 20,
+    maxHeight: '80%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700' as const,
+    color: colors.text,
+  },
+  saveMenuBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.primary,
+    paddingVertical: 14,
+    borderRadius: 12,
+    marginTop: 8,
+    marginBottom: 20,
+    gap: 8,
+  },
+  saveMenuBtnText: {
+    fontSize: 15,
+    fontWeight: '600' as const,
+    color: '#fff',
   },
 });

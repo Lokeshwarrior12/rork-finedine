@@ -6,7 +6,6 @@ import {
   ScrollView,
   Pressable,
   TextInput,
-  Modal,
   Alert,
   Dimensions,
 } from 'react-native';
@@ -15,284 +14,109 @@ import {
   Plus,
   Trash2,
   TrendingDown,
-  TrendingUp,
   Calendar,
-  Clock,
-  DollarSign,
-  Package,
-  X,
-  Check,
   ChevronLeft,
   ChevronRight,
-  Search,
   Lightbulb,
   BarChart3,
-  RefreshCcw,
-  Leaf,
+  ArrowLeft,
 } from 'lucide-react-native';
+import { useRouter } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
-import { FoodWasteRecord, WasteRecommendation } from '@/types';
 
 const { width } = Dimensions.get('window');
 
-const WASTE_REASONS = [
-  { key: 'expired', label: 'Expired', color: '#ef4444' },
-  { key: 'spoiled', label: 'Spoiled', color: '#f97316' },
-  { key: 'overproduction', label: 'Overproduction', color: '#eab308' },
-  { key: 'customer_return', label: 'Customer Return', color: '#3b82f6' },
-  { key: 'preparation_error', label: 'Prep Error', color: '#8b5cf6' },
-  { key: 'other', label: 'Other', color: '#6b7280' },
-] as const;
+interface WasteEntry {
+  id: string;
+  itemName: string;
+  quantity: string;
+  date: string;
+  time: string;
+}
 
-const CATEGORIES = ['All', 'Meat', 'Vegetables', 'Dairy', 'Dry Goods', 'Prepared', 'Beverages'];
-
-const mockWasteRecords: FoodWasteRecord[] = [
-  {
-    id: '1',
-    restaurantId: '1',
-    itemName: 'Chicken Breast',
-    category: 'Meat',
-    quantity: 2.5,
-    unit: 'kg',
-    reason: 'expired',
-    costPerUnit: 8.99,
-    totalCost: 22.48,
-    date: '2026-01-24',
-    time: '09:30',
-    notes: 'Past expiration date',
-  },
-  {
-    id: '2',
-    restaurantId: '1',
-    itemName: 'Fresh Basil',
-    category: 'Vegetables',
-    quantity: 3,
-    unit: 'bunches',
-    reason: 'spoiled',
-    costPerUnit: 1.99,
-    totalCost: 5.97,
-    date: '2026-01-24',
-    time: '10:15',
-  },
-  {
-    id: '3',
-    restaurantId: '1',
-    itemName: 'Tomato Sauce',
-    category: 'Prepared',
-    quantity: 1.5,
-    unit: 'liters',
-    reason: 'overproduction',
-    costPerUnit: 4.50,
-    totalCost: 6.75,
-    date: '2026-01-23',
-    time: '22:00',
-  },
-  {
-    id: '4',
-    restaurantId: '1',
-    itemName: 'Mozzarella',
-    category: 'Dairy',
-    quantity: 0.8,
-    unit: 'kg',
-    reason: 'spoiled',
-    costPerUnit: 15.99,
-    totalCost: 12.79,
-    date: '2026-01-23',
-    time: '14:30',
-  },
-  {
-    id: '5',
-    restaurantId: '1',
-    itemName: 'Pasta Carbonara',
-    category: 'Prepared',
-    quantity: 2,
-    unit: 'portions',
-    reason: 'customer_return',
-    costPerUnit: 8.00,
-    totalCost: 16.00,
-    date: '2026-01-22',
-    time: '19:45',
-  },
-  {
-    id: '6',
-    restaurantId: '1',
-    itemName: 'Mixed Salad',
-    category: 'Vegetables',
-    quantity: 1.2,
-    unit: 'kg',
-    reason: 'preparation_error',
-    costPerUnit: 6.00,
-    totalCost: 7.20,
-    date: '2026-01-22',
-    time: '12:00',
-  },
+const mockWasteEntries: WasteEntry[] = [
+  { id: '1', itemName: 'Chicken Breast', quantity: '2.5 kg', date: '2026-01-24', time: '09:30' },
+  { id: '2', itemName: 'Fresh Basil', quantity: '3 bunches', date: '2026-01-24', time: '10:15' },
+  { id: '3', itemName: 'Tomato Sauce', quantity: '1.5 L', date: '2026-01-23', time: '22:00' },
+  { id: '4', itemName: 'Mozzarella', quantity: '0.8 kg', date: '2026-01-23', time: '14:30' },
+  { id: '5', itemName: 'Pasta Carbonara', quantity: '2 portions', date: '2026-01-22', time: '19:45' },
+  { id: '6', itemName: 'Mixed Salad', quantity: '1.2 kg', date: '2026-01-22', time: '12:00' },
+  { id: '7', itemName: 'Bread Rolls', quantity: '8 pcs', date: '2026-01-21', time: '21:00' },
+  { id: '8', itemName: 'Salmon Fillet', quantity: '0.6 kg', date: '2026-01-21', time: '15:30' },
 ];
 
-const mockRecommendations: WasteRecommendation[] = [
+const mockRecommendations = [
   {
     id: '1',
-    type: 'ordering',
     title: 'Reduce Chicken Order by 15%',
-    description: 'Chicken has been consistently wasted due to expiration. Consider reducing weekly orders.',
-    impact: 'high',
-    potentialSavings: 45.00,
-    basedOn: 'Last 30 days waste data',
+    description: 'Chicken has been consistently wasted. Consider reducing weekly orders.',
+    savings: '$45/mo',
   },
   {
     id: '2',
-    type: 'storage',
     title: 'Improve Herb Storage',
-    description: 'Fresh herbs are spoiling quickly. Consider using herb keepers or adjusting storage temperature.',
-    impact: 'medium',
-    potentialSavings: 25.00,
-    basedOn: 'Repeated spoilage of basil, parsley',
+    description: 'Fresh herbs spoiling quickly. Use herb keepers or adjust temperature.',
+    savings: '$25/mo',
   },
   {
     id: '3',
-    type: 'preparation',
     title: 'Batch Prepare Sauces',
-    description: 'Tomato sauce overproduction detected. Prepare smaller batches more frequently.',
-    impact: 'medium',
-    potentialSavings: 30.00,
-    basedOn: 'Evening waste patterns',
-  },
-  {
-    id: '4',
-    type: 'rotation',
-    title: 'Implement FIFO for Dairy',
-    description: 'Dairy products expiring before use. Ensure first-in-first-out rotation.',
-    impact: 'high',
-    potentialSavings: 50.00,
-    basedOn: 'Mozzarella, cream waste records',
+    description: 'Tomato sauce overproduction detected. Prepare smaller batches.',
+    savings: '$30/mo',
   },
 ];
 
 export default function FoodWasteScreen() {
+  const router = useRouter();
   const insets = useSafeAreaInsets();
   const { colors, isDark } = useTheme();
   
-  const [wasteRecords, setWasteRecords] = useState<FoodWasteRecord[]>(mockWasteRecords);
+  const [wasteEntries, setWasteEntries] = useState<WasteEntry[]>(mockWasteEntries);
   const [activeTab, setActiveTab] = useState<'records' | 'analytics'>('records');
-  const [selectedCategory, setSelectedCategory] = useState('All');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [showAddModal, setShowAddModal] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState(new Date());
-  
-  const [formData, setFormData] = useState({
-    itemName: '',
-    category: 'Meat',
-    quantity: '',
-    unit: 'kg',
-    reason: 'expired' as FoodWasteRecord['reason'],
-    costPerUnit: '',
-    notes: '',
-  });
+  const [newItemName, setNewItemName] = useState('');
+  const [newQuantity, setNewQuantity] = useState('');
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const styles = createStyles(colors, isDark);
 
-  const filteredRecords = useMemo(() => {
-    return wasteRecords.filter(record => {
-      const matchesCategory = selectedCategory === 'All' || record.category === selectedCategory;
-      const matchesSearch = record.itemName.toLowerCase().includes(searchQuery.toLowerCase());
-      return matchesCategory && matchesSearch;
-    });
-  }, [wasteRecords, selectedCategory, searchQuery]);
-
   const analytics = useMemo(() => {
-    const thisMonth = wasteRecords.filter(r => {
-      const recordDate = new Date(r.date);
-      return recordDate.getMonth() === selectedMonth.getMonth() &&
-             recordDate.getFullYear() === selectedMonth.getFullYear();
-    });
-
-    const totalCost = thisMonth.reduce((sum, r) => sum + r.totalCost, 0);
-    const totalQuantity = thisMonth.reduce((sum, r) => sum + r.quantity, 0);
-
-    const byCategory = CATEGORIES.filter(c => c !== 'All').map(category => {
-      const categoryRecords = thisMonth.filter(r => r.category === category);
-      const cost = categoryRecords.reduce((sum, r) => sum + r.totalCost, 0);
-      return {
-        category,
-        cost,
-        percentage: totalCost > 0 ? (cost / totalCost) * 100 : 0,
-      };
-    }).filter(c => c.cost > 0).sort((a, b) => b.cost - a.cost);
-
-    const byReason = WASTE_REASONS.map(reason => {
-      const reasonRecords = thisMonth.filter(r => r.reason === reason.key);
-      const cost = reasonRecords.reduce((sum, r) => sum + r.totalCost, 0);
-      return {
-        reason: reason.label,
-        color: reason.color,
-        cost,
-        count: reasonRecords.length,
-        percentage: totalCost > 0 ? (cost / totalCost) * 100 : 0,
-      };
-    }).filter(r => r.count > 0).sort((a, b) => b.cost - a.cost);
-
-    const topWasted = Object.values(
-      thisMonth.reduce((acc, record) => {
-        if (!acc[record.itemName]) {
-          acc[record.itemName] = {
-            itemName: record.itemName,
-            category: record.category,
-            totalCost: 0,
-            totalQuantity: 0,
-            count: 0,
-          };
-        }
-        acc[record.itemName].totalCost += record.totalCost;
-        acc[record.itemName].totalQuantity += record.quantity;
-        acc[record.itemName].count += 1;
+    const totalEntries = wasteEntries.length;
+    const uniqueItems = new Set(wasteEntries.map(e => e.itemName)).size;
+    const topWasted = Object.entries(
+      wasteEntries.reduce((acc, entry) => {
+        acc[entry.itemName] = (acc[entry.itemName] || 0) + 1;
         return acc;
-      }, {} as Record<string, { itemName: string; category: string; totalCost: number; totalQuantity: number; count: number }>)
-    ).sort((a, b) => b.totalCost - a.totalCost).slice(0, 5);
+      }, {} as Record<string, number>)
+    ).sort((a, b) => b[1] - a[1]).slice(0, 5);
 
-    return { totalCost, totalQuantity, byCategory, byReason, topWasted, recordCount: thisMonth.length };
-  }, [wasteRecords, selectedMonth]);
+    return { totalEntries, uniqueItems, topWasted };
+  }, [wasteEntries]);
 
-  const handleAddRecord = () => {
-    if (!formData.itemName || !formData.quantity || !formData.costPerUnit) {
-      Alert.alert('Error', 'Please fill in all required fields');
+  const handleAddEntry = () => {
+    if (!newItemName.trim() || !newQuantity.trim()) {
+      Alert.alert('Error', 'Please enter both item name and quantity');
       return;
     }
 
-    const quantity = parseFloat(formData.quantity);
-    const costPerUnit = parseFloat(formData.costPerUnit);
     const now = new Date();
-
-    const newRecord: FoodWasteRecord = {
+    const newEntry: WasteEntry = {
       id: `waste_${Date.now()}`,
-      restaurantId: '1',
-      itemName: formData.itemName,
-      category: formData.category,
-      quantity,
-      unit: formData.unit,
-      reason: formData.reason,
-      costPerUnit,
-      totalCost: quantity * costPerUnit,
+      itemName: newItemName.trim(),
+      quantity: newQuantity.trim(),
       date: now.toISOString().split('T')[0],
       time: now.toTimeString().slice(0, 5),
-      notes: formData.notes || undefined,
     };
 
-    setWasteRecords(prev => [newRecord, ...prev]);
-    setShowAddModal(false);
-    setFormData({
-      itemName: '',
-      category: 'Meat',
-      quantity: '',
-      unit: 'kg',
-      reason: 'expired',
-      costPerUnit: '',
-      notes: '',
-    });
+    setWasteEntries(prev => [newEntry, ...prev]);
+    setNewItemName('');
+    setNewQuantity('');
   };
 
-  const handleDeleteRecord = (id: string) => {
-    Alert.alert('Delete Record', 'Are you sure you want to delete this waste record?', [
+  const handleDeleteEntry = (id: string) => {
+    Alert.alert('Delete Entry', 'Remove this waste record?', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: () => setWasteRecords(prev => prev.filter(r => r.id !== id)) },
+      { text: 'Delete', style: 'destructive', onPress: () => setWasteEntries(prev => prev.filter(e => e.id !== id)) },
     ]);
   };
 
@@ -306,34 +130,15 @@ export default function FoodWasteScreen() {
     return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
   };
 
-  const getReasonColor = (reason: string) => {
-    return WASTE_REASONS.find(r => r.key === reason)?.color || colors.textMuted;
-  };
-
-  const getReasonLabel = (reason: string) => {
-    return WASTE_REASONS.find(r => r.key === reason)?.label || reason;
-  };
-
-  const getImpactColor = (impact: string) => {
-    switch (impact) {
-      case 'high': return colors.error;
-      case 'medium': return colors.warning;
-      case 'low': return colors.success;
-      default: return colors.textMuted;
-    }
-  };
-
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <Trash2 size={24} color={colors.error} />
+          <Pressable style={styles.backBtn} onPress={() => router.back()}>
+            <ArrowLeft size={22} color={colors.text} />
+          </Pressable>
           <Text style={styles.headerTitle}>Food Waste</Text>
         </View>
-        <Pressable style={styles.addButton} onPress={() => setShowAddModal(true)}>
-          <Plus size={20} color="#fff" />
-          <Text style={styles.addButtonText}>Record</Text>
-        </Pressable>
       </View>
 
       <View style={styles.tabBar}>
@@ -341,7 +146,7 @@ export default function FoodWasteScreen() {
           style={[styles.tab, activeTab === 'records' && styles.tabActive]}
           onPress={() => setActiveTab('records')}
         >
-          <Package size={18} color={activeTab === 'records' ? colors.primary : colors.textSecondary} />
+          <Trash2 size={18} color={activeTab === 'records' ? colors.primary : colors.textSecondary} />
           <Text style={[styles.tabText, activeTab === 'records' && styles.tabTextActive]}>Records</Text>
         </Pressable>
         <Pressable
@@ -353,391 +158,135 @@ export default function FoodWasteScreen() {
         </Pressable>
       </View>
 
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
-      >
-        {activeTab === 'records' ? (
-          <>
-            <View style={styles.statsRow}>
-              <View style={styles.statCard}>
-                <View style={[styles.statIcon, { backgroundColor: colors.errorLight }]}>
-                  <DollarSign size={20} color={colors.error} />
-                </View>
-                <Text style={[styles.statValue, { color: colors.error }]}>${analytics.totalCost.toFixed(0)}</Text>
-                <Text style={styles.statLabel}>This Month</Text>
-              </View>
-              <View style={styles.statCard}>
-                <View style={[styles.statIcon, { backgroundColor: colors.warningLight }]}>
-                  <Package size={20} color={colors.warning} />
-                </View>
-                <Text style={styles.statValue}>{analytics.recordCount}</Text>
-                <Text style={styles.statLabel}>Records</Text>
-              </View>
-              <View style={styles.statCard}>
-                <View style={[styles.statIcon, { backgroundColor: colors.primaryLight }]}>
-                  <TrendingDown size={20} color={colors.primary} />
-                </View>
-                <Text style={styles.statValue}>{analytics.totalQuantity.toFixed(1)}</Text>
-                <Text style={styles.statLabel}>Units Wasted</Text>
-              </View>
-            </View>
-
-            <View style={styles.searchContainer}>
-              <Search size={20} color={colors.textMuted} />
+      {activeTab === 'records' ? (
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
+        >
+          <View style={styles.addSection}>
+            <Text style={styles.addTitle}>Add Waste Entry</Text>
+            <View style={styles.addRow}>
               <TextInput
-                style={styles.searchInput}
-                placeholder="Search items..."
+                style={[styles.addInput, styles.addInputName]}
+                placeholder="Item Name"
                 placeholderTextColor={colors.placeholder}
-                value={searchQuery}
-                onChangeText={setSearchQuery}
+                value={newItemName}
+                onChangeText={setNewItemName}
               />
-            </View>
-
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.categoriesScroll}
-            >
-              {CATEGORIES.map((category) => (
-                <Pressable
-                  key={category}
-                  style={[styles.categoryChip, selectedCategory === category && styles.categoryChipActive]}
-                  onPress={() => setSelectedCategory(category)}
-                >
-                  <Text style={[styles.categoryChipText, selectedCategory === category && styles.categoryChipTextActive]}>
-                    {category}
-                  </Text>
-                </Pressable>
-              ))}
-            </ScrollView>
-
-            <View style={styles.recordsList}>
-              {filteredRecords.length === 0 ? (
-                <View style={styles.emptyState}>
-                  <Leaf size={48} color={colors.textMuted} />
-                  <Text style={styles.emptyTitle}>No waste records</Text>
-                  <Text style={styles.emptyText}>Great job! Keep tracking to minimize waste.</Text>
-                </View>
-              ) : (
-                filteredRecords.map((record) => (
-                  <View key={record.id} style={styles.recordCard}>
-                    <View style={styles.recordHeader}>
-                      <View style={styles.recordInfo}>
-                        <Text style={styles.recordName}>{record.itemName}</Text>
-                        <Text style={styles.recordCategory}>{record.category}</Text>
-                      </View>
-                      <View style={[styles.reasonBadge, { backgroundColor: `${getReasonColor(record.reason)}20` }]}>
-                        <Text style={[styles.reasonText, { color: getReasonColor(record.reason) }]}>
-                          {getReasonLabel(record.reason)}
-                        </Text>
-                      </View>
-                    </View>
-
-                    <View style={styles.recordDetails}>
-                      <View style={styles.recordDetail}>
-                        <Package size={14} color={colors.textSecondary} />
-                        <Text style={styles.recordDetailText}>{record.quantity} {record.unit}</Text>
-                      </View>
-                      <View style={styles.recordDetail}>
-                        <DollarSign size={14} color={colors.error} />
-                        <Text style={[styles.recordDetailText, { color: colors.error, fontWeight: '600' as const }]}>
-                          ${record.totalCost.toFixed(2)}
-                        </Text>
-                      </View>
-                      <View style={styles.recordDetail}>
-                        <Calendar size={14} color={colors.textSecondary} />
-                        <Text style={styles.recordDetailText}>{record.date}</Text>
-                      </View>
-                      <View style={styles.recordDetail}>
-                        <Clock size={14} color={colors.textSecondary} />
-                        <Text style={styles.recordDetailText}>{record.time}</Text>
-                      </View>
-                    </View>
-
-                    {record.notes && (
-                      <Text style={styles.recordNotes}>{record.notes}</Text>
-                    )}
-
-                    <Pressable style={styles.deleteBtn} onPress={() => handleDeleteRecord(record.id)}>
-                      <Trash2 size={16} color={colors.error} />
-                    </Pressable>
-                  </View>
-                ))
-              )}
-            </View>
-          </>
-        ) : (
-          <>
-            <View style={styles.monthNavigation}>
-              <Pressable style={styles.navBtn} onPress={() => navigateMonth(-1)}>
-                <ChevronLeft size={24} color={colors.text} />
-              </Pressable>
-              <View style={styles.monthDisplay}>
-                <Calendar size={18} color={colors.primary} />
-                <Text style={styles.monthText}>{formatMonth(selectedMonth)}</Text>
-              </View>
-              <Pressable style={styles.navBtn} onPress={() => navigateMonth(1)}>
-                <ChevronRight size={24} color={colors.text} />
+              <TextInput
+                style={[styles.addInput, styles.addInputQty]}
+                placeholder="Qty"
+                placeholderTextColor={colors.placeholder}
+                value={newQuantity}
+                onChangeText={setNewQuantity}
+              />
+              <Pressable style={styles.addBtn} onPress={handleAddEntry}>
+                <Plus size={20} color="#fff" />
               </Pressable>
             </View>
-
-            <View style={styles.summaryCard}>
-              <View style={styles.summaryHeader}>
-                <Text style={styles.summaryTitle}>Monthly Summary</Text>
-                <View style={[styles.trendBadge, { backgroundColor: colors.errorLight }]}>
-                  <TrendingUp size={14} color={colors.error} />
-                  <Text style={[styles.trendText, { color: colors.error }]}>+12%</Text>
-                </View>
-              </View>
-              <View style={styles.summaryStats}>
-                <View style={styles.summaryStat}>
-                  <Text style={styles.summaryValue}>${analytics.totalCost.toFixed(2)}</Text>
-                  <Text style={styles.summaryLabel}>Total Cost</Text>
-                </View>
-                <View style={styles.summaryDivider} />
-                <View style={styles.summaryStat}>
-                  <Text style={styles.summaryValue}>{analytics.recordCount}</Text>
-                  <Text style={styles.summaryLabel}>Incidents</Text>
-                </View>
-                <View style={styles.summaryDivider} />
-                <View style={styles.summaryStat}>
-                  <Text style={styles.summaryValue}>{analytics.totalQuantity.toFixed(1)}</Text>
-                  <Text style={styles.summaryLabel}>Units</Text>
-                </View>
-              </View>
-            </View>
-
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Waste by Category</Text>
-              {analytics.byCategory.length > 0 ? (
-                analytics.byCategory.map((item, index) => (
-                  <View key={item.category} style={styles.barItem}>
-                    <View style={styles.barHeader}>
-                      <Text style={styles.barLabel}>{item.category}</Text>
-                      <Text style={styles.barValue}>${item.cost.toFixed(2)}</Text>
-                    </View>
-                    <View style={styles.barContainer}>
-                      <View 
-                        style={[
-                          styles.barFill, 
-                          { 
-                            width: `${item.percentage}%`,
-                            backgroundColor: colors.primary,
-                          }
-                        ]} 
-                      />
-                    </View>
-                    <Text style={styles.barPercentage}>{item.percentage.toFixed(1)}%</Text>
-                  </View>
-                ))
-              ) : (
-                <Text style={styles.noDataText}>No data for this month</Text>
-              )}
-            </View>
-
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Waste by Reason</Text>
-              {analytics.byReason.length > 0 ? (
-                <View style={styles.reasonGrid}>
-                  {analytics.byReason.map((item) => (
-                    <View key={item.reason} style={styles.reasonCard}>
-                      <View style={[styles.reasonDot, { backgroundColor: item.color }]} />
-                      <Text style={styles.reasonLabel}>{item.reason}</Text>
-                      <Text style={styles.reasonCount}>{item.count} times</Text>
-                      <Text style={[styles.reasonCost, { color: colors.error }]}>${item.cost.toFixed(2)}</Text>
-                    </View>
-                  ))}
-                </View>
-              ) : (
-                <Text style={styles.noDataText}>No data for this month</Text>
-              )}
-            </View>
-
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Top Wasted Items</Text>
-              {analytics.topWasted.length > 0 ? (
-                analytics.topWasted.map((item, index) => (
-                  <View key={item.itemName} style={styles.topItem}>
-                    <View style={styles.topItemRank}>
-                      <Text style={styles.topItemRankText}>#{index + 1}</Text>
-                    </View>
-                    <View style={styles.topItemInfo}>
-                      <Text style={styles.topItemName}>{item.itemName}</Text>
-                      <Text style={styles.topItemCategory}>{item.category} • {item.count} incidents</Text>
-                    </View>
-                    <Text style={[styles.topItemCost, { color: colors.error }]}>${item.totalCost.toFixed(2)}</Text>
-                  </View>
-                ))
-              ) : (
-                <Text style={styles.noDataText}>No data for this month</Text>
-              )}
-            </View>
-
-            <View style={styles.section}>
-              <View style={styles.sectionHeader}>
-                <Lightbulb size={20} color={colors.warning} />
-                <Text style={styles.sectionTitle}>Recommendations</Text>
-              </View>
-              {mockRecommendations.map((rec) => (
-                <View key={rec.id} style={styles.recommendationCard}>
-                  <View style={styles.recHeader}>
-                    <View style={[styles.recTypeBadge, { backgroundColor: colors.primaryLight }]}>
-                      <RefreshCcw size={12} color={colors.primary} />
-                      <Text style={styles.recTypeText}>{rec.type}</Text>
-                    </View>
-                    <View style={[styles.impactBadge, { backgroundColor: `${getImpactColor(rec.impact)}20` }]}>
-                      <Text style={[styles.impactText, { color: getImpactColor(rec.impact) }]}>
-                        {rec.impact} impact
-                      </Text>
-                    </View>
-                  </View>
-                  <Text style={styles.recTitle}>{rec.title}</Text>
-                  <Text style={styles.recDescription}>{rec.description}</Text>
-                  <View style={styles.recFooter}>
-                    <Text style={styles.recBased}>{rec.basedOn}</Text>
-                    <Text style={[styles.recSavings, { color: colors.success }]}>
-                      Save ~${rec.potentialSavings}/mo
-                    </Text>
-                  </View>
-                </View>
-              ))}
-            </View>
-          </>
-        )}
-      </ScrollView>
-
-      <Modal visible={showAddModal} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Record Waste</Text>
-              <Pressable onPress={() => setShowAddModal(false)}>
-                <X size={24} color={colors.text} />
-              </Pressable>
-            </View>
-
-            <ScrollView showsVerticalScrollIndicator={false}>
-              <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>Item Name *</Text>
-                <TextInput
-                  style={styles.formInput}
-                  placeholder="e.g., Chicken Breast"
-                  placeholderTextColor={colors.placeholder}
-                  value={formData.itemName}
-                  onChangeText={(text) => setFormData({ ...formData, itemName: text })}
-                />
-              </View>
-
-              <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>Category</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                  <View style={styles.formChips}>
-                    {CATEGORIES.filter(c => c !== 'All').map((cat) => (
-                      <Pressable
-                        key={cat}
-                        style={[styles.formChip, formData.category === cat && styles.formChipActive]}
-                        onPress={() => setFormData({ ...formData, category: cat })}
-                      >
-                        <Text style={[styles.formChipText, formData.category === cat && styles.formChipTextActive]}>
-                          {cat}
-                        </Text>
-                      </Pressable>
-                    ))}
-                  </View>
-                </ScrollView>
-              </View>
-
-              <View style={styles.formRow}>
-                <View style={[styles.formGroup, { flex: 1 }]}>
-                  <Text style={styles.formLabel}>Quantity *</Text>
-                  <TextInput
-                    style={styles.formInput}
-                    placeholder="0"
-                    placeholderTextColor={colors.placeholder}
-                    keyboardType="decimal-pad"
-                    value={formData.quantity}
-                    onChangeText={(text) => setFormData({ ...formData, quantity: text })}
-                  />
-                </View>
-                <View style={[styles.formGroup, { flex: 1 }]}>
-                  <Text style={styles.formLabel}>Unit</Text>
-                  <TextInput
-                    style={styles.formInput}
-                    placeholder="kg"
-                    placeholderTextColor={colors.placeholder}
-                    value={formData.unit}
-                    onChangeText={(text) => setFormData({ ...formData, unit: text })}
-                  />
-                </View>
-              </View>
-
-              <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>Cost per Unit ($) *</Text>
-                <TextInput
-                  style={styles.formInput}
-                  placeholder="0.00"
-                  placeholderTextColor={colors.placeholder}
-                  keyboardType="decimal-pad"
-                  value={formData.costPerUnit}
-                  onChangeText={(text) => setFormData({ ...formData, costPerUnit: text })}
-                />
-              </View>
-
-              <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>Reason</Text>
-                <View style={styles.reasonOptions}>
-                  {WASTE_REASONS.map((reason) => (
-                    <Pressable
-                      key={reason.key}
-                      style={[
-                        styles.reasonOption,
-                        formData.reason === reason.key && { backgroundColor: `${reason.color}20`, borderColor: reason.color },
-                      ]}
-                      onPress={() => setFormData({ ...formData, reason: reason.key })}
-                    >
-                      <View style={[styles.reasonOptionDot, { backgroundColor: reason.color }]} />
-                      <Text style={[
-                        styles.reasonOptionText,
-                        formData.reason === reason.key && { color: reason.color },
-                      ]}>
-                        {reason.label}
-                      </Text>
-                    </Pressable>
-                  ))}
-                </View>
-              </View>
-
-              <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>Notes (Optional)</Text>
-                <TextInput
-                  style={[styles.formInput, styles.formTextarea]}
-                  placeholder="Add any notes..."
-                  placeholderTextColor={colors.placeholder}
-                  multiline
-                  numberOfLines={3}
-                  value={formData.notes}
-                  onChangeText={(text) => setFormData({ ...formData, notes: text })}
-                />
-              </View>
-
-              {formData.quantity && formData.costPerUnit && (
-                <View style={styles.totalCostPreview}>
-                  <Text style={styles.totalCostLabel}>Total Cost:</Text>
-                  <Text style={styles.totalCostValue}>
-                    ${(parseFloat(formData.quantity || '0') * parseFloat(formData.costPerUnit || '0')).toFixed(2)}
-                  </Text>
-                </View>
-              )}
-
-              <Pressable style={styles.saveBtn} onPress={handleAddRecord}>
-                <Check size={20} color="#fff" />
-                <Text style={styles.saveBtnText}>Record Waste</Text>
-              </Pressable>
-            </ScrollView>
           </View>
-        </View>
-      </Modal>
+
+          <View style={styles.spreadsheet}>
+            <View style={styles.spreadsheetHeader}>
+              <Text style={[styles.spreadsheetHeaderCell, styles.cellName]}>Item Name</Text>
+              <Text style={[styles.spreadsheetHeaderCell, styles.cellQty]}>Quantity</Text>
+              <Text style={[styles.spreadsheetHeaderCell, styles.cellDate]}>Date</Text>
+              <Text style={[styles.spreadsheetHeaderCell, styles.cellAction]}></Text>
+            </View>
+
+            {wasteEntries.map((entry, index) => (
+              <View 
+                key={entry.id} 
+                style={[
+                  styles.spreadsheetRow,
+                  index % 2 === 0 && styles.spreadsheetRowAlt,
+                ]}
+              >
+                <Text style={[styles.spreadsheetCell, styles.cellName]} numberOfLines={1}>
+                  {entry.itemName}
+                </Text>
+                <Text style={[styles.spreadsheetCell, styles.cellQty]}>
+                  {entry.quantity}
+                </Text>
+                <Text style={[styles.spreadsheetCell, styles.cellDate]}>
+                  {entry.date.slice(5)}
+                </Text>
+                <Pressable 
+                  style={[styles.spreadsheetCell, styles.cellAction]}
+                  onPress={() => handleDeleteEntry(entry.id)}
+                >
+                  <Trash2 size={16} color={colors.error} />
+                </Pressable>
+              </View>
+            ))}
+
+            {wasteEntries.length === 0 && (
+              <View style={styles.emptyState}>
+                <Trash2 size={40} color={colors.textMuted} />
+                <Text style={styles.emptyText}>No waste records yet</Text>
+              </View>
+            )}
+          </View>
+        </ScrollView>
+      ) : (
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
+        >
+          <View style={styles.monthNavigation}>
+            <Pressable style={styles.navBtn} onPress={() => navigateMonth(-1)}>
+              <ChevronLeft size={24} color={colors.text} />
+            </Pressable>
+            <View style={styles.monthDisplay}>
+              <Calendar size={18} color={colors.primary} />
+              <Text style={styles.monthText}>{formatMonth(selectedMonth)}</Text>
+            </View>
+            <Pressable style={styles.navBtn} onPress={() => navigateMonth(1)}>
+              <ChevronRight size={24} color={colors.text} />
+            </Pressable>
+          </View>
+
+          <View style={styles.statsRow}>
+            <View style={styles.statCard}>
+              <TrendingDown size={24} color={colors.error} />
+              <Text style={styles.statValue}>{analytics.totalEntries}</Text>
+              <Text style={styles.statLabel}>Total Entries</Text>
+            </View>
+            <View style={styles.statCard}>
+              <Trash2 size={24} color={colors.warning} />
+              <Text style={styles.statValue}>{analytics.uniqueItems}</Text>
+              <Text style={styles.statLabel}>Unique Items</Text>
+            </View>
+          </View>
+
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Most Wasted Items</Text>
+            {analytics.topWasted.map(([item, count], index) => (
+              <View key={item} style={styles.topItem}>
+                <View style={styles.topItemRank}>
+                  <Text style={styles.topItemRankText}>#{index + 1}</Text>
+                </View>
+                <Text style={styles.topItemName}>{item}</Text>
+                <Text style={styles.topItemCount}>{count}x</Text>
+              </View>
+            ))}
+          </View>
+
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Lightbulb size={20} color={colors.warning} />
+              <Text style={styles.sectionTitle}>Recommendations</Text>
+            </View>
+            {mockRecommendations.map((rec) => (
+              <View key={rec.id} style={styles.recCard}>
+                <Text style={styles.recTitle}>{rec.title}</Text>
+                <Text style={styles.recDesc}>{rec.description}</Text>
+                <Text style={styles.recSavings}>Potential savings: {rec.savings}</Text>
+              </View>
+            ))}
+          </View>
+        </ScrollView>
+      )}
     </View>
   );
 }
@@ -751,8 +300,8 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     backgroundColor: colors.surface,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
@@ -760,31 +309,25 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 12,
+  },
+  backBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: colors.backgroundSecondary,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   headerTitle: {
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: '700' as const,
     color: colors.text,
   },
-  addButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.primary,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 12,
-    gap: 6,
-  },
-  addButtonText: {
-    fontSize: 14,
-    fontWeight: '600' as const,
-    color: '#fff',
-  },
   tabBar: {
     flexDirection: 'row',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
     gap: 12,
     backgroundColor: colors.surface,
     borderBottomWidth: 1,
@@ -811,161 +354,108 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   tabTextActive: {
     color: colors.primary,
   },
-  statsRow: {
-    flexDirection: 'row',
+  addSection: {
     padding: 16,
-    gap: 12,
-  },
-  statCard: {
-    flex: 1,
     backgroundColor: colors.surface,
-    borderRadius: 16,
-    padding: 14,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-  },
-  statIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
     marginBottom: 8,
   },
-  statValue: {
-    fontSize: 20,
-    fontWeight: '700' as const,
+  addTitle: {
+    fontSize: 14,
+    fontWeight: '600' as const,
     color: colors.text,
+    marginBottom: 10,
   },
-  statLabel: {
-    fontSize: 11,
-    color: colors.textSecondary,
-    marginTop: 4,
-  },
-  searchContainer: {
+  addRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-    marginHorizontal: 16,
-    paddingHorizontal: 14,
-    height: 50,
-    borderRadius: 14,
-    gap: 10,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 15,
-    color: colors.text,
-  },
-  categoriesScroll: {
-    paddingHorizontal: 16,
-    paddingVertical: 16,
     gap: 8,
   },
-  categoryChip: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: colors.surface,
-    marginRight: 8,
+  addInput: {
+    backgroundColor: colors.inputBackground,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    fontSize: 14,
+    color: colors.text,
     borderWidth: 1,
     borderColor: colors.border,
   },
-  categoryChipActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
+  addInputName: {
+    flex: 2,
   },
-  categoryChipText: {
-    fontSize: 14,
-    fontWeight: '500' as const,
-    color: colors.textSecondary,
-  },
-  categoryChipTextActive: {
-    color: '#fff',
-  },
-  recordsList: {
-    paddingHorizontal: 16,
-  },
-  recordCard: {
-    backgroundColor: colors.surface,
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-  },
-  recordHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 12,
-  },
-  recordInfo: {
+  addInputQty: {
     flex: 1,
   },
-  recordName: {
-    fontSize: 16,
-    fontWeight: '600' as const,
+  addBtn: {
+    width: 48,
+    borderRadius: 10,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  spreadsheet: {
+    margin: 16,
+    backgroundColor: colors.surface,
+    borderRadius: 12,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  spreadsheetHeader: {
+    flexDirection: 'row',
+    backgroundColor: colors.primaryLight,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  spreadsheetHeaderCell: {
+    fontSize: 12,
+    fontWeight: '700' as const,
+    color: colors.primary,
+    textTransform: 'uppercase',
+  },
+  spreadsheetRow: {
+    flexDirection: 'row',
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    alignItems: 'center',
+  },
+  spreadsheetRowAlt: {
+    backgroundColor: colors.backgroundSecondary,
+  },
+  spreadsheetCell: {
+    fontSize: 14,
     color: colors.text,
   },
-  recordCategory: {
-    fontSize: 13,
+  cellName: {
+    flex: 2,
+    paddingRight: 8,
+  },
+  cellQty: {
+    flex: 1,
+    textAlign: 'center',
+  },
+  cellDate: {
+    flex: 1,
+    textAlign: 'center',
     color: colors.textSecondary,
-    marginTop: 2,
-  },
-  reasonBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  reasonText: {
     fontSize: 12,
-    fontWeight: '600' as const,
   },
-  recordDetails: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 16,
-  },
-  recordDetail: {
-    flexDirection: 'row',
+  cellAction: {
+    width: 40,
     alignItems: 'center',
-    gap: 4,
-  },
-  recordDetailText: {
-    fontSize: 13,
-    color: colors.textSecondary,
-  },
-  recordNotes: {
-    fontSize: 13,
-    color: colors.textMuted,
-    marginTop: 10,
-    fontStyle: 'italic',
-  },
-  deleteBtn: {
-    position: 'absolute',
-    top: 12,
-    right: 12,
-    padding: 8,
+    justifyContent: 'center',
   },
   emptyState: {
     alignItems: 'center',
-    paddingVertical: 60,
-  },
-  emptyTitle: {
-    fontSize: 18,
-    fontWeight: '600' as const,
-    color: colors.text,
-    marginTop: 16,
+    paddingVertical: 40,
   },
   emptyText: {
     fontSize: 14,
-    color: colors.textSecondary,
-    marginTop: 8,
-    textAlign: 'center',
+    color: colors.textMuted,
+    marginTop: 12,
   },
   monthNavigation: {
     flexDirection: 'row',
@@ -994,63 +484,34 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     fontWeight: '600' as const,
     color: colors.text,
   },
-  summaryCard: {
-    marginHorizontal: 16,
-    backgroundColor: colors.surface,
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
+  statsRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    gap: 12,
     marginBottom: 20,
   },
-  summaryHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  summaryTitle: {
-    fontSize: 16,
-    fontWeight: '700' as const,
-    color: colors.text,
-  },
-  trendBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-    gap: 4,
-  },
-  trendText: {
-    fontSize: 12,
-    fontWeight: '600' as const,
-  },
-  summaryStats: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  summaryStat: {
+  statCard: {
     flex: 1,
+    backgroundColor: colors.surface,
+    borderRadius: 14,
+    padding: 16,
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
   },
-  summaryValue: {
-    fontSize: 22,
+  statValue: {
+    fontSize: 28,
     fontWeight: '700' as const,
     color: colors.text,
+    marginTop: 8,
   },
-  summaryLabel: {
+  statLabel: {
     fontSize: 12,
     color: colors.textSecondary,
     marginTop: 4,
   },
-  summaryDivider: {
-    width: 1,
-    height: 40,
-    backgroundColor: colors.border,
-  },
   section: {
-    marginHorizontal: 16,
+    paddingHorizontal: 16,
     marginBottom: 24,
   },
   sectionHeader: {
@@ -1060,89 +521,16 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     marginBottom: 12,
   },
   sectionTitle: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '700' as const,
     color: colors.text,
     marginBottom: 12,
-  },
-  barItem: {
-    marginBottom: 16,
-  },
-  barHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 6,
-  },
-  barLabel: {
-    fontSize: 14,
-    fontWeight: '500' as const,
-    color: colors.text,
-  },
-  barValue: {
-    fontSize: 14,
-    fontWeight: '600' as const,
-    color: colors.error,
-  },
-  barContainer: {
-    height: 8,
-    backgroundColor: colors.backgroundSecondary,
-    borderRadius: 4,
-    overflow: 'hidden',
-  },
-  barFill: {
-    height: '100%',
-    borderRadius: 4,
-  },
-  barPercentage: {
-    fontSize: 11,
-    color: colors.textMuted,
-    marginTop: 4,
-  },
-  noDataText: {
-    fontSize: 14,
-    color: colors.textMuted,
-    textAlign: 'center',
-    paddingVertical: 20,
-  },
-  reasonGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-  },
-  reasonCard: {
-    width: (width - 52) / 2,
-    backgroundColor: colors.surface,
-    borderRadius: 12,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-  },
-  reasonDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    marginBottom: 8,
-  },
-  reasonLabel: {
-    fontSize: 13,
-    fontWeight: '600' as const,
-    color: colors.text,
-  },
-  reasonCount: {
-    fontSize: 12,
-    color: colors.textSecondary,
-    marginTop: 2,
-  },
-  reasonCost: {
-    fontSize: 15,
-    fontWeight: '700' as const,
-    marginTop: 4,
   },
   topItem: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.surface,
-    borderRadius: 12,
+    borderRadius: 10,
     padding: 12,
     marginBottom: 8,
     borderWidth: 1,
@@ -1162,222 +550,40 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     fontWeight: '700' as const,
     color: colors.primary,
   },
-  topItemInfo: {
-    flex: 1,
-  },
   topItemName: {
+    flex: 1,
     fontSize: 14,
-    fontWeight: '600' as const,
+    fontWeight: '500' as const,
     color: colors.text,
   },
-  topItemCategory: {
-    fontSize: 12,
-    color: colors.textSecondary,
-    marginTop: 2,
+  topItemCount: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: colors.error,
   },
-  topItemCost: {
-    fontSize: 15,
-    fontWeight: '700' as const,
-  },
-  recommendationCard: {
+  recCard: {
     backgroundColor: colors.surface,
-    borderRadius: 14,
-    padding: 16,
-    marginBottom: 12,
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 10,
     borderWidth: 1,
     borderColor: colors.cardBorder,
   },
-  recHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 10,
-  },
-  recTypeBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-    gap: 4,
-  },
-  recTypeText: {
-    fontSize: 11,
-    fontWeight: '600' as const,
-    color: colors.primary,
-    textTransform: 'capitalize',
-  },
-  impactBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  impactText: {
-    fontSize: 11,
-    fontWeight: '600' as const,
-    textTransform: 'capitalize',
-  },
   recTitle: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '600' as const,
     color: colors.text,
-    marginBottom: 6,
+    marginBottom: 4,
   },
-  recDescription: {
+  recDesc: {
     fontSize: 13,
     color: colors.textSecondary,
     lineHeight: 18,
-  },
-  recFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 12,
-    paddingTop: 10,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-  },
-  recBased: {
-    fontSize: 11,
-    color: colors.textMuted,
-    fontStyle: 'italic',
+    marginBottom: 8,
   },
   recSavings: {
     fontSize: 13,
-    fontWeight: '700' as const,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'flex-end',
-  },
-  modalContent: {
-    backgroundColor: colors.surface,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 20,
-    maxHeight: '90%',
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: '700' as const,
-    color: colors.text,
-  },
-  formGroup: {
-    marginBottom: 16,
-  },
-  formLabel: {
-    fontSize: 14,
     fontWeight: '600' as const,
-    color: colors.text,
-    marginBottom: 8,
-  },
-  formInput: {
-    backgroundColor: colors.inputBackground,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 15,
-    color: colors.text,
-  },
-  formTextarea: {
-    height: 80,
-    textAlignVertical: 'top',
-  },
-  formChips: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  formChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: colors.backgroundSecondary,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  formChipActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
-  formChipText: {
-    fontSize: 13,
-    fontWeight: '500' as const,
-    color: colors.textSecondary,
-  },
-  formChipTextActive: {
-    color: '#fff',
-  },
-  formRow: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  reasonOptions: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  reasonOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 10,
-    backgroundColor: colors.backgroundSecondary,
-    borderWidth: 1,
-    borderColor: colors.border,
-    gap: 6,
-  },
-  reasonOptionDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  reasonOptionText: {
-    fontSize: 13,
-    fontWeight: '500' as const,
-    color: colors.textSecondary,
-  },
-  totalCostPreview: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: colors.errorLight,
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 16,
-  },
-  totalCostLabel: {
-    fontSize: 14,
-    fontWeight: '600' as const,
-    color: colors.text,
-  },
-  totalCostValue: {
-    fontSize: 20,
-    fontWeight: '700' as const,
-    color: colors.error,
-  },
-  saveBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.primary,
-    paddingVertical: 16,
-    borderRadius: 14,
-    marginTop: 8,
-    marginBottom: 20,
-    gap: 8,
-  },
-  saveBtnText: {
-    fontSize: 16,
-    fontWeight: '600' as const,
-    color: '#fff',
+    color: colors.success,
   },
 });

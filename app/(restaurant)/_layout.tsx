@@ -1,5 +1,5 @@
 import { Tabs } from 'expo-router';
-import { LayoutDashboard, Tag, Package, BarChart3, Settings, ScanLine, Trash2 } from 'lucide-react-native';
+import { LayoutDashboard, Tag, BarChart3, Settings } from 'lucide-react-native';
 import React from 'react';
 import { Platform, View, StyleSheet } from 'react-native';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -59,17 +59,6 @@ export default function RestaurantLayout() {
         }}
       />
       <Tabs.Screen
-        name="inventory"
-        options={{
-          title: 'Inventory',
-          tabBarIcon: ({ color, focused }) => (
-            <View style={[styles.iconContainer, focused && { backgroundColor: `${colors.primary}15` }]}>
-              <Package size={22} color={color} strokeWidth={focused ? 2.5 : 2} />
-            </View>
-          ),
-        }}
-      />
-      <Tabs.Screen
         name="analytics"
         options={{
           title: 'Analytics',
@@ -81,34 +70,6 @@ export default function RestaurantLayout() {
         }}
       />
       <Tabs.Screen
-        name="scan"
-        options={{
-          title: 'Scan',
-          tabBarIcon: ({ color, focused }) => (
-            <View style={[styles.iconContainer, focused && { backgroundColor: `${colors.primary}15` }]}>
-              <ScanLine size={22} color={color} strokeWidth={focused ? 2.5 : 2} />
-            </View>
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="food-waste"
-        options={{
-          title: 'Waste',
-          tabBarIcon: ({ color, focused }) => (
-            <View style={[styles.iconContainer, focused && { backgroundColor: `${colors.primary}15` }]}>
-              <Trash2 size={22} color={color} strokeWidth={focused ? 2.5 : 2} />
-            </View>
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="schedule"
-        options={{
-          href: null,
-        }}
-      />
-      <Tabs.Screen
         name="settings"
         options={{
           title: 'Settings',
@@ -117,6 +78,30 @@ export default function RestaurantLayout() {
               <Settings size={22} color={color} strokeWidth={focused ? 2.5 : 2} />
             </View>
           ),
+        }}
+      />
+      <Tabs.Screen
+        name="inventory"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="scan"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="food-waste"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="schedule"
+        options={{
+          href: null,
         }}
       />
       <Tabs.Screen

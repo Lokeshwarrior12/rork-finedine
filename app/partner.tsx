@@ -8,60 +8,49 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Store, Mail, Phone, MapPin, X, Calendar, CheckCircle, Clock } from 'lucide-react-native';
+import { Store, Mail, Lock, X, CheckCircle } from 'lucide-react-native';
+import { useAuth } from '@/contexts/AuthContext';
 import Colors from '@/constants/colors';
 
 export default function PartnerScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { signup, signupPending } = useAuth();
 
-  const [name, setName] = useState('');
+  const [restaurantId, setRestaurantId] = useState('');
   const [email, setEmail] = useState('');
-  const [phone, setPhone] = useState('');
-  const [address, setAddress] = useState('');
-  const [submitted, setSubmitted] = useState(false);
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
 
-  const handleSubmit = () => {
-    if (!name || !email || !phone || !address) return;
-    setSubmitted(true);
+  const handleSignup = async () => {
+    if (!restaurantId || !email || !password) {
+      setError('Please fill in all fields');
+      return;
+    }
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters');
+      return;
+    }
+    setError('');
+    try {
+      await signup({
+        name: restaurantId,
+        email,
+        phone: '',
+        address: '',
+        role: 'restaurant_owner',
+        restaurantId,
+      });
+      router.replace('/(restaurant)/dashboard' as any);
+    } catch {
+      setError('Signup failed. Please try again.');
+    }
   };
-
-  if (submitted) {
-    return (
-      <View style={styles.container}>
-        <LinearGradient
-          colors={['#1A1A2E', '#16213E']}
-          style={StyleSheet.absoluteFill}
-        />
-        <View style={[styles.successContent, { paddingTop: insets.top + 60 }]}>
-          <View style={styles.successIcon}>
-            <CheckCircle size={64} color={Colors.success} />
-          </View>
-          <Text style={styles.successTitle}>Application Submitted!</Text>
-          <Text style={styles.successText}>
-            Thank you for your interest in partnering with DineDeals. Our team will review your application.
-          </Text>
-          <View style={styles.verificationCard}>
-            <Clock size={24} color={Colors.accent} />
-            <Text style={styles.verificationText}>
-              Verification may take up to 24 hours. We&apos;ll notify you via email.
-            </Text>
-          </View>
-          <Pressable style={styles.bookCallButton}>
-            <Calendar size={20} color={Colors.surface} />
-            <Text style={styles.bookCallText}>Book a Call with Our Team</Text>
-          </Pressable>
-          <Pressable style={styles.doneButton} onPress={() => router.replace('/')}>
-            <Text style={styles.doneButtonText}>Done</Text>
-          </Pressable>
-        </View>
-      </View>
-    );
-  }
 
   return (
     <View style={styles.container}>
@@ -89,20 +78,16 @@ export default function PartnerScreen() {
             <View style={styles.partnerIcon}>
               <Store size={32} color={Colors.primary} />
             </View>
-            <Text style={styles.title}>Become a Partner</Text>
+            <Text style={styles.title}>Restaurant Owner</Text>
             <Text style={styles.subtitle}>
-              Join our network of restaurants and reach thousands of hungry customers
+              Sign up to manage your restaurant, offers, and analytics
             </Text>
           </View>
 
           <View style={styles.pricingCard}>
-            <Text style={styles.pricingTitle}>Partnership Plan</Text>
-            <View style={styles.priceRow}>
-              <Text style={styles.price}>$500</Text>
-              <Text style={styles.pricePeriod}>/year</Text>
-            </View>
+            <Text style={styles.pricingTitle}>Partnership Benefits</Text>
             <View style={styles.features}>
-              {['Unlimited deals & coupons', 'Analytics dashboard', 'Table booking system', 'Priority support'].map((feature, index) => (
+              {['Unlimited deals & coupons', 'Analytics dashboard', 'Table booking system', 'Inventory management', 'Staff scheduling'].map((feature, index) => (
                 <View key={index} style={styles.featureRow}>
                   <CheckCircle size={16} color={Colors.success} />
                   <Text style={styles.featureText}>{feature}</Text>
@@ -116,10 +101,11 @@ export default function PartnerScreen() {
               <Store size={20} color={Colors.textLight} style={styles.inputIcon} />
               <TextInput
                 style={styles.input}
-                placeholder="Restaurant Name"
+                placeholder="Restaurant ID"
                 placeholderTextColor={Colors.textLight}
-                value={name}
-                onChangeText={setName}
+                value={restaurantId}
+                onChangeText={setRestaurantId}
+                autoCapitalize="none"
               />
             </View>
 
@@ -127,7 +113,7 @@ export default function PartnerScreen() {
               <Mail size={20} color={Colors.textLight} style={styles.inputIcon} />
               <TextInput
                 style={styles.input}
-                placeholder="Business Email"
+                placeholder="Email"
                 placeholderTextColor={Colors.textLight}
                 value={email}
                 onChangeText={setEmail}
@@ -137,31 +123,37 @@ export default function PartnerScreen() {
             </View>
 
             <View style={styles.inputContainer}>
-              <Phone size={20} color={Colors.textLight} style={styles.inputIcon} />
+              <Lock size={20} color={Colors.textLight} style={styles.inputIcon} />
               <TextInput
                 style={styles.input}
-                placeholder="Phone Number"
+                placeholder="Password"
                 placeholderTextColor={Colors.textLight}
-                value={phone}
-                onChangeText={setPhone}
-                keyboardType="phone-pad"
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry
               />
             </View>
 
-            <View style={styles.inputContainer}>
-              <MapPin size={20} color={Colors.textLight} style={styles.inputIcon} />
-              <TextInput
-                style={styles.input}
-                placeholder="Restaurant Address"
-                placeholderTextColor={Colors.textLight}
-                value={address}
-                onChangeText={setAddress}
-              />
-            </View>
+            {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
-            <Pressable style={styles.submitButton} onPress={handleSubmit}>
-              <Text style={styles.submitButtonText}>Submit Application</Text>
+            <Pressable 
+              style={[styles.submitButton, signupPending && styles.submitButtonDisabled]} 
+              onPress={handleSignup}
+              disabled={signupPending}
+            >
+              {signupPending ? (
+                <ActivityIndicator color={Colors.surface} />
+              ) : (
+                <Text style={styles.submitButtonText}>Create Account</Text>
+              )}
             </Pressable>
+
+            <View style={styles.loginRow}>
+              <Text style={styles.loginText}>Already have an account? </Text>
+              <Pressable onPress={() => router.push('/login?role=restaurant_owner')}>
+                <Text style={styles.loginLink}>Sign In</Text>
+              </Pressable>
+            </View>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -227,22 +219,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.primary,
     fontWeight: '600' as const,
-    marginBottom: 8,
-  },
-  priceRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    marginBottom: 16,
-  },
-  price: {
-    fontSize: 36,
-    fontWeight: '700' as const,
-    color: Colors.surface,
-  },
-  pricePeriod: {
-    fontSize: 16,
-    color: Colors.textLight,
-    marginLeft: 4,
+    marginBottom: 12,
   },
   features: {
     gap: 10,
@@ -277,6 +254,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: Colors.surface,
   },
+  errorText: {
+    color: Colors.error,
+    fontSize: 14,
+    textAlign: 'center',
+  },
   submitButton: {
     backgroundColor: Colors.primary,
     height: 56,
@@ -285,67 +267,26 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginTop: 8,
   },
+  submitButtonDisabled: {
+    opacity: 0.7,
+  },
   submitButtonText: {
     fontSize: 18,
     fontWeight: '600' as const,
     color: Colors.surface,
   },
-  successContent: {
-    flex: 1,
-    paddingHorizontal: 24,
-    alignItems: 'center',
+  loginRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginTop: 16,
   },
-  successIcon: {
-    marginBottom: 24,
-  },
-  successTitle: {
-    fontSize: 28,
-    fontWeight: '700' as const,
-    color: Colors.surface,
-    marginBottom: 12,
-  },
-  successText: {
-    fontSize: 16,
+  loginText: {
     color: 'rgba(255, 255, 255, 0.7)',
-    textAlign: 'center',
-    lineHeight: 24,
-    marginBottom: 24,
+    fontSize: 15,
   },
-  verificationCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 183, 3, 0.1)',
-    borderRadius: 16,
-    padding: 16,
-    gap: 12,
-    marginBottom: 24,
-  },
-  verificationText: {
-    flex: 1,
-    fontSize: 14,
-    color: Colors.accent,
-    lineHeight: 20,
-  },
-  bookCallButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.primary,
-    paddingVertical: 16,
-    paddingHorizontal: 24,
-    borderRadius: 16,
-    gap: 10,
-    marginBottom: 16,
-  },
-  bookCallText: {
-    fontSize: 16,
-    fontWeight: '600' as const,
+  loginLink: {
     color: Colors.surface,
-  },
-  doneButton: {
-    paddingVertical: 12,
-  },
-  doneButtonText: {
-    fontSize: 16,
-    color: Colors.textLight,
+    fontSize: 15,
+    fontWeight: '600' as const,
   },
 });
