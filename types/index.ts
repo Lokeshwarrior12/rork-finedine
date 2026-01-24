@@ -325,3 +325,46 @@ export interface WasteRecommendation {
   potentialSavings: number;
   basedOn: string;
 }
+
+export type OrderType = 'dinein' | 'pickup';
+export type OrderStatus = 'pending' | 'accepted' | 'preparing' | 'ready' | 'completed' | 'rejected' | 'cancelled';
+
+export interface OrderItem {
+  id: string;
+  name: string;
+  quantity: number;
+  price: number;
+  notes?: string;
+}
+
+export interface Order {
+  id: string;
+  restaurantId: string;
+  customerId: string;
+  customerName: string;
+  customerPhone: string;
+  customerPhoto?: string;
+  orderType: OrderType;
+  items: OrderItem[];
+  subtotal: number;
+  discount: number;
+  total: number;
+  status: OrderStatus;
+  tableNumber?: string;
+  pickupTime?: string;
+  specialInstructions?: string;
+  createdAt: string;
+  updatedAt: string;
+  estimatedTime?: number;
+  messages: OrderMessage[];
+}
+
+export interface OrderMessage {
+  id: string;
+  orderId: string;
+  senderId: string;
+  senderType: 'restaurant' | 'customer';
+  message: string;
+  timestamp: string;
+  read: boolean;
+}

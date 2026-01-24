@@ -19,7 +19,6 @@ import {
   Heart,
   TrendingUp,
   Clock,
-  BarChart3,
   ChevronRight,
   Package,
   Bell,
@@ -31,8 +30,8 @@ import {
   UtensilsCrossed,
   X,
   Check,
-  MapPin,
   Users,
+  ShoppingBag,
 } from 'lucide-react-native';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -120,7 +119,7 @@ export default function DashboardScreen() {
     { label: 'Inventory', icon: Package, route: '/(restaurant)/inventory', color: colors.accent },
     { label: 'Waste', icon: Trash2, route: '/(restaurant)/food-waste', color: colors.error },
     { label: 'Menu', icon: UtensilsCrossed, route: '/(restaurant)/settings', color: colors.secondary },
-    { label: 'Analytics', icon: BarChart3, route: '/(restaurant)/analytics', color: '#8b5cf6' },
+    { label: 'Orders', icon: ShoppingBag, route: '/(restaurant)/orders', color: '#8b5cf6' },
   ];
 
   const recentActivity = [
