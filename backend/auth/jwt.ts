@@ -1,7 +1,7 @@
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'finedine-secret-key-change-in-production';
+const JWT_SECRET = process.env.JWT_SECRET || process.env.EXPO_PUBLIC_RORK_DB_TOKEN || 'finedine-secret-key-change-in-production';
 const JWT_EXPIRES_IN = '7d';
 
 export interface JWTPayload {

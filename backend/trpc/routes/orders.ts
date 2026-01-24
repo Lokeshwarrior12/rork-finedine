@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { createTRPCRouter, publicProcedure, protectedProcedure, restaurantOwnerProcedure } from "../create-context";
+import { createTRPCRouter, protectedProcedure } from "../create-context";
 import { db } from "@/backend/db";
 import { Order, OrderStatus, OrderMessage } from "@/types";
 
