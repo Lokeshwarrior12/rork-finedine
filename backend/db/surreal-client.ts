@@ -1,33 +1,127 @@
-import Surreal from 'surrealdb';
-
-let db: Surreal | null = null;
-
-export async function getDB(): Promise<Surreal> {
-  if (db) return db;
-
+const getConfig = () => {
   const endpoint = process.env.EXPO_PUBLIC_RORK_DB_ENDPOINT;
   const namespace = process.env.EXPO_PUBLIC_RORK_DB_NAMESPACE;
   const token = process.env.EXPO_PUBLIC_RORK_DB_TOKEN;
 
   if (!endpoint || !namespace || !token) {
-    console.error('Missing SurrealDB configuration');
+    console.error('Missing database configuration');
     throw new Error('Database configuration missing');
   }
 
-  db = new Surreal();
+  return { endpoint, namespace, token };
+};
 
-  try {
-    await db.connect(endpoint);
-    await db.authenticate(token);
-    await db.use({ namespace, database: 'finedine' });
-    console.log('Connected to SurrealDB successfully');
-  } catch (error) {
-    console.error('Failed to connect to SurrealDB:', error);
-    db = null;
-    throw error;
+class SurrealHTTPClient {
+  private endpoint: string;
+  private namespace: string;
+  private database: string;
+  private token: string;
+
+  constructor() {
+    const config = getConfig();
+    this.endpoint = config.endpoint.replace(/\/$/, '');
+    this.namespace = config.namespace;
+    this.database = 'finedine';
+    this.token = config.token;
   }
 
-  return db;
+  private async request<T>(sql: string, vars?: Record<string, unknown>): Promise<T[]> {
+    try {
+      const url = `${this.endpoint}/sql`;
+      
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Authorization': `Bearer ${this.token}`,
+          'NS': this.namespace,
+          'DB': this.database,
+        },
+        body: vars ? JSON.stringify({ sql, vars }) : sql,
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Database request failed:', response.status, errorText);
+        throw new Error(`Database request failed: ${response.status}`);
+      }
+
+      const data = await response.json();
+      
+      if (Array.isArray(data)) {
+        const results: T[] = [];
+        for (const item of data) {
+          if (item.result) {
+            if (Array.isArray(item.result)) {
+              results.push(...item.result);
+            } else {
+              results.push(item.result);
+            }
+          }
+        }
+        return results;
+      }
+      
+      return data.result || [];
+    } catch (error) {
+      console.error('Database request error:', error);
+      throw error;
+    }
+  }
+
+  async query<T = unknown>(sql: string, vars?: Record<string, unknown>): Promise<T[][]> {
+    const results = await this.request<T>(sql, vars);
+    return [results];
+  }
+
+  async select<T = unknown>(thing: string): Promise<T | T[]> {
+    const results = await this.request<T>(`SELECT * FROM ${thing}`);
+    if (thing.includes(':')) {
+      return results[0] || null as T;
+    }
+    return results;
+  }
+
+  async create<T = unknown>(thing: string, data: Record<string, unknown>): Promise<T> {
+    const cleanData = { ...data };
+    delete cleanData.id;
+    
+    const fields = Object.keys(cleanData);
+    const values = fields.map(f => `${f} = $${f}`).join(', ');
+    const sql = `CREATE ${thing} SET ${values}`;
+    
+    const results = await this.request<T>(sql, cleanData);
+    return results[0];
+  }
+
+  async merge<T = unknown>(thing: string, data: Record<string, unknown>): Promise<T | null> {
+    const cleanData = { ...data };
+    delete cleanData.id;
+    
+    const fields = Object.keys(cleanData);
+    if (fields.length === 0) return null;
+    
+    const values = fields.map(f => `${f} = $${f}`).join(', ');
+    const sql = `UPDATE ${thing} SET ${values}`;
+    
+    const results = await this.request<T>(sql, cleanData);
+    return results[0] || null;
+  }
+
+  async delete(thing: string): Promise<void> {
+    await this.request(`DELETE ${thing}`);
+  }
+}
+
+let client: SurrealHTTPClient | null = null;
+
+export async function getDB(): Promise<SurrealHTTPClient> {
+  if (!client) {
+    client = new SurrealHTTPClient();
+    console.log('Database client initialized');
+  }
+  return client;
 }
 
 export async function initializeDatabase(): Promise<void> {
