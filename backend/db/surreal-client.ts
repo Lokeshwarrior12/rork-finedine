@@ -16,6 +16,7 @@ class SurrealHTTPClient {
   private namespace: string;
   private database: string;
   private token: string;
+  private isInitialized: boolean = false;
 
   constructor() {
     const config = getConfig();
@@ -26,48 +27,80 @@ class SurrealHTTPClient {
   }
 
   private async request<T>(sql: string, vars?: Record<string, unknown>): Promise<T[]> {
-    try {
-      const url = `${this.endpoint}/sql`;
-      
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'Authorization': `Bearer ${this.token}`,
-          'NS': this.namespace,
-          'DB': this.database,
-        },
-        body: vars ? JSON.stringify({ sql, vars }) : sql,
-      });
+    const maxRetries = 3;
+    let lastError: Error | null = null;
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Database request failed:', response.status, errorText);
-        throw new Error(`Database request failed: ${response.status}`);
-      }
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        const url = `${this.endpoint}/sql`;
+        
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 15000);
 
-      const data = await response.json();
-      
-      if (Array.isArray(data)) {
-        const results: T[] = [];
-        for (const item of data) {
-          if (item.result) {
-            if (Array.isArray(item.result)) {
-              results.push(...item.result);
-            } else {
-              results.push(item.result);
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'Authorization': `Bearer ${this.token}`,
+            'NS': this.namespace,
+            'DB': this.database,
+          },
+          body: vars ? JSON.stringify({ sql, vars }) : sql,
+          signal: controller.signal,
+        });
+
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error(`Database request failed (attempt ${attempt}):`, response.status, errorText);
+          
+          if (response.status === 404) {
+            console.log('Database endpoint not found, retrying...');
+            lastError = new Error('Database service temporarily unavailable');
+            if (attempt < maxRetries) {
+              await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+              continue;
             }
           }
+          
+          throw new Error(`Database error: ${response.status}`);
         }
-        return results;
+
+        const data = await response.json();
+        
+        if (Array.isArray(data)) {
+          const results: T[] = [];
+          for (const item of data) {
+            if (item.status === 'ERR') {
+              console.error('Database query error:', item.result);
+              continue;
+            }
+            if (item.result) {
+              if (Array.isArray(item.result)) {
+                results.push(...item.result);
+              } else {
+                results.push(item.result);
+              }
+            }
+          }
+          return results;
+        }
+        
+        return data.result || [];
+      } catch (error) {
+        console.error(`Database request error (attempt ${attempt}):`, error);
+        lastError = error as Error;
+        
+        if (attempt < maxRetries) {
+          await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+          continue;
+        }
       }
-      
-      return data.result || [];
-    } catch (error) {
-      console.error('Database request error:', error);
-      throw error;
     }
+
+    throw lastError || new Error('Database request failed after retries');
   }
 
   async query<T = unknown>(sql: string, vars?: Record<string, unknown>): Promise<T[][]> {

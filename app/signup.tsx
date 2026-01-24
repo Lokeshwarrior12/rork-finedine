@@ -14,9 +14,10 @@ import {
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { User, Mail, Lock, Phone, MapPin, X, ChevronRight, Star, Check } from 'lucide-react-native';
+import { User, Mail, Lock, Phone, MapPin, X, ChevronRight, Star, Check, Shield } from 'lucide-react-native';
 import { Image } from 'expo-image';
 import { useAuth } from '@/contexts/AuthContext';
+import { trpc } from '@/lib/trpc';
 import Colors from '@/constants/colors';
 import { UserRole } from '@/types';
 import { restaurants } from '@/mocks/data';
@@ -44,16 +45,38 @@ export default function SignupScreen() {
   const { role } = useLocalSearchParams<{ role: string }>();
   const { signup, signupPending } = useAuth();
 
-  const [step, setStep] = useState<'preferences' | 'signup'>('preferences');
+  const [step, setStep] = useState<'preferences' | 'details' | 'verify' | 'password'>('preferences');
   const [selectedCuisines, setSelectedCuisines] = useState<string[]>([]);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
   const [password, setPassword] = useState('');
+  const [verificationCode, setVerificationCode] = useState('');
   const [error, setError] = useState('');
 
   const isRestaurant = role === 'restaurant_owner';
+
+  const sendCodeMutation = trpc.auth.sendVerificationCode.useMutation({
+    onSuccess: (data) => {
+      console.log('Verification code sent:', data.code);
+      setStep('verify');
+      setError('');
+    },
+    onError: (err) => {
+      setError(err.message || 'Failed to send verification code');
+    },
+  });
+
+  const verifyCodeMutation = trpc.auth.verifyCode.useMutation({
+    onSuccess: () => {
+      setStep('password');
+      setError('');
+    },
+    onError: (err) => {
+      setError(err.message || 'Invalid verification code');
+    },
+  });
 
   const toggleCuisine = (cuisineId: string) => {
     if (selectedCuisines.includes(cuisineId)) {
@@ -70,18 +93,39 @@ export default function SignupScreen() {
     ))
     .slice(0, 3);
 
-  const handleContinue = () => {
+  const handleContinueFromPreferences = () => {
     if (selectedCuisines.length < 3) {
       setError('Please select 3 cuisine preferences');
       return;
     }
     setError('');
-    setStep('signup');
+    setStep('details');
+  };
+
+  const handleContinueFromDetails = () => {
+    if (!name || !email || !phone || !address) {
+      setError('Please fill in all fields');
+      return;
+    }
+    if (!email.includes('@')) {
+      setError('Please enter a valid email');
+      return;
+    }
+    setError('');
+    sendCodeMutation.mutate({ email });
+  };
+
+  const handleVerifyCode = () => {
+    if (verificationCode.length !== 6) {
+      setError('Please enter the 6-digit code');
+      return;
+    }
+    verifyCodeMutation.mutate({ email, code: verificationCode });
   };
 
   const handleSignup = async () => {
-    if (!name || !email || !phone || !address || !password) {
-      setError('Please fill in all fields');
+    if (!password || password.length < 6) {
+      setError('Password must be at least 6 characters');
       return;
     }
     setError('');
@@ -94,6 +138,7 @@ export default function SignupScreen() {
         password,
         role: (role as UserRole) || 'customer',
         cuisinePreferences: selectedCuisines,
+        skipVerification: true,
       });
       if (isRestaurant) {
         router.replace('/(restaurant)/dashboard' as any);
@@ -126,7 +171,7 @@ export default function SignupScreen() {
           <View style={styles.header}>
             <Text style={styles.title}>What do you love?</Text>
             <Text style={styles.subtitle}>
-              Select your 3 favorite cuisines and we'll suggest the best restaurants for you
+              Select your 3 favorite cuisines and we&apos;ll suggest the best restaurants for you
             </Text>
           </View>
 
@@ -190,13 +235,276 @@ export default function SignupScreen() {
               styles.continueButton,
               selectedCuisines.length < 3 && styles.continueButtonDisabled,
             ]}
-            onPress={handleContinue}
+            onPress={handleContinueFromPreferences}
             disabled={selectedCuisines.length < 3}
           >
             <Text style={styles.continueButtonText}>Continue</Text>
             <ChevronRight size={20} color={Colors.primary} />
           </Pressable>
         </ScrollView>
+      </View>
+    );
+  }
+
+  if (!isRestaurant && step === 'details') {
+    return (
+      <View style={styles.container}>
+        <LinearGradient
+          colors={[Colors.primary, Colors.primaryDark]}
+          style={StyleSheet.absoluteFill}
+        />
+        
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.keyboardView}
+        >
+          <ScrollView
+            contentContainerStyle={[
+              styles.scrollContent,
+              { paddingTop: insets.top + 20, paddingBottom: insets.bottom + 20 },
+            ]}
+            keyboardShouldPersistTaps="handled"
+          >
+            <Pressable style={styles.closeButton} onPress={() => router.back()}>
+              <X size={24} color={Colors.surface} />
+            </Pressable>
+
+            <View style={styles.header}>
+              <Text style={styles.title}>Your Details</Text>
+              <Text style={styles.subtitle}>
+                Tell us about yourself to get started
+              </Text>
+            </View>
+
+            <View style={styles.preferencesPreview}>
+              <Text style={styles.preferencesLabel}>Your preferences:</Text>
+              <View style={styles.preferencesChips}>
+                {selectedCuisines.map(cuisineId => {
+                  const cuisine = CUISINE_TYPES.find(c => c.id === cuisineId);
+                  return cuisine ? (
+                    <View key={cuisineId} style={styles.preferenceChip}>
+                      <Text style={styles.preferenceChipText}>{cuisine.emoji} {cuisine.name}</Text>
+                    </View>
+                  ) : null;
+                })}
+              </View>
+            </View>
+
+            <View style={styles.form}>
+              <View style={styles.inputContainer}>
+                <User size={20} color={Colors.textLight} style={styles.inputIcon} />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Full Name"
+                  placeholderTextColor={Colors.textLight}
+                  value={name}
+                  onChangeText={setName}
+                />
+              </View>
+
+              <View style={styles.inputContainer}>
+                <Mail size={20} color={Colors.textLight} style={styles.inputIcon} />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Email"
+                  placeholderTextColor={Colors.textLight}
+                  value={email}
+                  onChangeText={setEmail}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                />
+              </View>
+
+              <View style={styles.inputContainer}>
+                <Phone size={20} color={Colors.textLight} style={styles.inputIcon} />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Phone Number"
+                  placeholderTextColor={Colors.textLight}
+                  value={phone}
+                  onChangeText={setPhone}
+                  keyboardType="phone-pad"
+                />
+              </View>
+
+              <View style={styles.inputContainer}>
+                <MapPin size={20} color={Colors.textLight} style={styles.inputIcon} />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Address"
+                  placeholderTextColor={Colors.textLight}
+                  value={address}
+                  onChangeText={setAddress}
+                />
+              </View>
+
+              {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
+              <Pressable
+                style={[styles.signupButton, sendCodeMutation.isPending && styles.signupButtonDisabled]}
+                onPress={handleContinueFromDetails}
+                disabled={sendCodeMutation.isPending}
+              >
+                {sendCodeMutation.isPending ? (
+                  <ActivityIndicator color={Colors.primary} />
+                ) : (
+                  <Text style={styles.signupButtonText}>Continue</Text>
+                )}
+              </Pressable>
+
+              <Pressable style={styles.backLink} onPress={() => setStep('preferences')}>
+                <Text style={styles.backLinkText}>← Back to preferences</Text>
+              </Pressable>
+            </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </View>
+    );
+  }
+
+  if (!isRestaurant && step === 'verify') {
+    return (
+      <View style={styles.container}>
+        <LinearGradient
+          colors={[Colors.primary, Colors.primaryDark]}
+          style={StyleSheet.absoluteFill}
+        />
+        
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.keyboardView}
+        >
+          <ScrollView
+            contentContainerStyle={[
+              styles.scrollContent,
+              { paddingTop: insets.top + 20, paddingBottom: insets.bottom + 20 },
+            ]}
+            keyboardShouldPersistTaps="handled"
+          >
+            <Pressable style={styles.closeButton} onPress={() => router.back()}>
+              <X size={24} color={Colors.surface} />
+            </Pressable>
+
+            <View style={styles.verifyContainer}>
+              <View style={styles.verifyIconWrap}>
+                <Mail size={48} color={Colors.surface} />
+              </View>
+              <Text style={styles.verifyTitle}>Verify Your Email</Text>
+              <Text style={styles.verifySubtitle}>
+                We&apos;ve sent a 6-digit code to{'\n'}
+                <Text style={styles.verifyEmail}>{email}</Text>
+              </Text>
+
+              <View style={styles.codeInputContainer}>
+                <TextInput
+                  style={styles.codeInput}
+                  placeholder="000000"
+                  placeholderTextColor="rgba(255,255,255,0.3)"
+                  value={verificationCode}
+                  onChangeText={setVerificationCode}
+                  keyboardType="number-pad"
+                  maxLength={6}
+                />
+              </View>
+
+              {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
+              <Pressable
+                style={[styles.signupButton, verifyCodeMutation.isPending && styles.signupButtonDisabled]}
+                onPress={handleVerifyCode}
+                disabled={verifyCodeMutation.isPending}
+              >
+                {verifyCodeMutation.isPending ? (
+                  <ActivityIndicator color={Colors.primary} />
+                ) : (
+                  <Text style={styles.signupButtonText}>Verify Email</Text>
+                )}
+              </Pressable>
+
+              <Pressable 
+                style={styles.resendButton}
+                onPress={() => sendCodeMutation.mutate({ email })}
+                disabled={sendCodeMutation.isPending}
+              >
+                <Text style={styles.resendText}>
+                  {sendCodeMutation.isPending ? 'Sending...' : 'Resend Code'}
+                </Text>
+              </Pressable>
+
+              <Pressable style={styles.backLink} onPress={() => setStep('details')}>
+                <Text style={styles.backLinkText}>← Back</Text>
+              </Pressable>
+            </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </View>
+    );
+  }
+
+  if (!isRestaurant && step === 'password') {
+    return (
+      <View style={styles.container}>
+        <LinearGradient
+          colors={[Colors.primary, Colors.primaryDark]}
+          style={StyleSheet.absoluteFill}
+        />
+        
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.keyboardView}
+        >
+          <ScrollView
+            contentContainerStyle={[
+              styles.scrollContent,
+              { paddingTop: insets.top + 20, paddingBottom: insets.bottom + 20 },
+            ]}
+            keyboardShouldPersistTaps="handled"
+          >
+            <Pressable style={styles.closeButton} onPress={() => router.back()}>
+              <X size={24} color={Colors.surface} />
+            </Pressable>
+
+            <View style={styles.verifyContainer}>
+              <View style={[styles.verifyIconWrap, { backgroundColor: 'rgba(76, 175, 80, 0.2)' }]}>
+                <Shield size={48} color="#4CAF50" />
+              </View>
+              <Text style={styles.verifyTitle}>Almost Done!</Text>
+              <Text style={styles.verifySubtitle}>
+                Create a secure password to protect your account
+              </Text>
+
+              <View style={[styles.inputContainer, { width: '100%', marginTop: 20 }]}>
+                <Lock size={20} color={Colors.textLight} style={styles.inputIcon} />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Create Password (min 6 chars)"
+                  placeholderTextColor={Colors.textLight}
+                  value={password}
+                  onChangeText={setPassword}
+                  secureTextEntry
+                />
+              </View>
+
+              {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
+              <Pressable
+                style={[styles.signupButton, { width: '100%' }, signupPending && styles.signupButtonDisabled]}
+                onPress={handleSignup}
+                disabled={signupPending}
+              >
+                {signupPending ? (
+                  <ActivityIndicator color={Colors.primary} />
+                ) : (
+                  <Text style={styles.signupButtonText}>Create Account</Text>
+                )}
+              </Pressable>
+
+              <Pressable style={styles.backLink} onPress={() => setStep('verify')}>
+                <Text style={styles.backLinkText}>← Back</Text>
+              </Pressable>
+            </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
       </View>
     );
   }
@@ -229,22 +537,6 @@ export default function SignupScreen() {
               {isRestaurant ? 'Set up your restaurant account' : 'Join us and start saving'}
             </Text>
           </View>
-
-          {!isRestaurant && selectedCuisines.length > 0 && (
-            <View style={styles.preferencesPreview}>
-              <Text style={styles.preferencesLabel}>Your preferences:</Text>
-              <View style={styles.preferencesChips}>
-                {selectedCuisines.map(cuisineId => {
-                  const cuisine = CUISINE_TYPES.find(c => c.id === cuisineId);
-                  return cuisine ? (
-                    <View key={cuisineId} style={styles.preferenceChip}>
-                      <Text style={styles.preferenceChipText}>{cuisine.emoji} {cuisine.name}</Text>
-                    </View>
-                  ) : null;
-                })}
-              </View>
-            </View>
-          )}
 
           <View style={styles.form}>
             <View style={styles.inputContainer}>
@@ -595,5 +887,69 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '500' as const,
     color: Colors.surface,
+  },
+  backLink: {
+    alignItems: 'center',
+    marginTop: 16,
+    padding: 8,
+  },
+  backLinkText: {
+    color: 'rgba(255, 255, 255, 0.7)',
+    fontSize: 14,
+  },
+  verifyContainer: {
+    alignItems: 'center',
+    paddingTop: 40,
+  },
+  verifyIconWrap: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 24,
+  },
+  verifyTitle: {
+    fontSize: 26,
+    fontWeight: '700' as const,
+    color: Colors.surface,
+    marginBottom: 8,
+  },
+  verifySubtitle: {
+    fontSize: 15,
+    color: 'rgba(255, 255, 255, 0.7)',
+    textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: 24,
+  },
+  verifyEmail: {
+    color: Colors.surface,
+    fontWeight: '600' as const,
+  },
+  codeInputContainer: {
+    width: '100%',
+    marginBottom: 16,
+  },
+  codeInput: {
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 16,
+    height: 64,
+    fontSize: 32,
+    fontWeight: '600' as const,
+    color: Colors.surface,
+    textAlign: 'center',
+    letterSpacing: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  resendButton: {
+    marginTop: 16,
+    padding: 12,
+  },
+  resendText: {
+    color: Colors.surface,
+    fontSize: 14,
+    fontWeight: '600' as const,
   },
 });

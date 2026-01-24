@@ -6,6 +6,51 @@ import { generateToken, hashPassword, verifyPassword } from "@/backend/auth/jwt"
 import { User, UserRole } from "@/types";
 
 export const authRouter = createTRPCRouter({
+  sendVerificationCode: publicProcedure
+    .input(z.object({
+      email: z.string().email(),
+    }))
+    .mutation(async ({ input }) => {
+      console.log('Sending verification code to:', input.email);
+      
+      try {
+        const code = await db.verificationCodes.create(input.email);
+        console.log(`Verification code for ${input.email}: ${code}`);
+        
+        return { 
+          success: true, 
+          message: 'Verification code sent to your email',
+          code: process.env.NODE_ENV === 'development' ? code : undefined,
+        };
+      } catch (error) {
+        console.error('Error sending verification code:', error);
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to send verification code. Please try again.",
+        });
+      }
+    }),
+
+  verifyCode: publicProcedure
+    .input(z.object({
+      email: z.string().email(),
+      code: z.string().length(6),
+    }))
+    .mutation(async ({ input }) => {
+      console.log('Verifying code for:', input.email);
+      
+      const isValid = await db.verificationCodes.verify(input.email, input.code);
+      
+      if (!isValid) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Invalid or expired verification code.",
+        });
+      }
+      
+      return { success: true, message: 'Email verified successfully' };
+    }),
+
   login: publicProcedure
     .input(z.object({
       email: z.string().email(),
@@ -68,71 +113,92 @@ export const authRouter = createTRPCRouter({
       role: z.enum(['customer', 'restaurant_owner']),
       cuisinePreferences: z.array(z.string()).optional(),
       restaurantId: z.string().optional(),
+      verificationCode: z.string().length(6).optional(),
+      skipVerification: z.boolean().optional(),
     }))
     .mutation(async ({ input }) => {
       console.log('Signup attempt:', input.email, input.role);
 
-      const existing = await db.users.getByEmail(input.email);
-      if (existing) {
-        throw new TRPCError({
-          code: "CONFLICT",
-          message: "An account with this email already exists. Please login instead.",
-        });
-      }
+      try {
+        if (!input.skipVerification && input.verificationCode) {
+          const isValid = await db.verificationCodes.verify(input.email, input.verificationCode);
+          if (!isValid) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: "Invalid or expired verification code.",
+            });
+          }
+        }
 
-      const passwordHash = await hashPassword(input.password);
-      const userId = `user_${Date.now()}`;
-      const restaurantId = input.role === 'restaurant_owner' 
-        ? (input.restaurantId || `rest_${Date.now()}`)
-        : undefined;
+        const existing = await db.users.getByEmail(input.email);
+        if (existing) {
+          throw new TRPCError({
+            code: "CONFLICT",
+            message: "An account with this email already exists. Please login instead.",
+          });
+        }
 
-      const newUser: User & { passwordHash: string } = {
-        id: userId,
-        name: input.name,
-        email: input.email,
-        phone: input.phone || '',
-        address: input.address || '',
-        role: input.role as UserRole,
-        points: 0,
-        favorites: [],
-        restaurantId,
-        cuisinePreferences: input.cuisinePreferences,
-        passwordHash,
-      };
+        const passwordHash = await hashPassword(input.password);
+        const userId = `user_${Date.now()}`;
+        const restaurantId = input.role === 'restaurant_owner' 
+          ? (input.restaurantId || `rest_${Date.now()}`)
+          : undefined;
 
-      await db.users.create(newUser);
-
-      if (input.role === 'restaurant_owner' && restaurantId) {
-        await db.restaurants.create({
-          id: restaurantId,
-          name: `${input.name}'s Restaurant`,
-          description: '',
-          cuisineType: '',
-          address: input.address || '',
-          city: '',
-          phone: input.phone || '',
+        const newUser: User & { passwordHash: string } = {
+          id: userId,
+          name: input.name,
           email: input.email,
-          rating: 0,
-          reviewCount: 0,
-          images: [],
-          openingHours: '9:00 AM - 10:00 PM',
-          waitingTime: '15-20 min',
-          categories: [],
-          acceptsTableBooking: false,
-          ownerId: userId,
+          phone: input.phone || '',
+          address: input.address || '',
+          role: input.role as UserRole,
+          points: 0,
+          favorites: [],
+          restaurantId,
+          cuisinePreferences: input.cuisinePreferences,
+          passwordHash,
+        };
+
+        await db.users.create(newUser);
+
+        if (input.role === 'restaurant_owner' && restaurantId) {
+          await db.restaurants.create({
+            id: restaurantId,
+            name: `${input.name}'s Restaurant`,
+            description: '',
+            cuisineType: '',
+            address: input.address || '',
+            city: '',
+            phone: input.phone || '',
+            email: input.email,
+            rating: 0,
+            reviewCount: 0,
+            images: [],
+            openingHours: '9:00 AM - 10:00 PM',
+            waitingTime: '15-20 min',
+            categories: [],
+            acceptsTableBooking: false,
+            ownerId: userId,
+          });
+        }
+
+        const token = generateToken({
+          userId,
+          email: input.email,
+          role: input.role,
+        });
+
+        const { passwordHash: _, ...safeUser } = newUser;
+
+        console.log('Signup successful:', userId);
+        return { user: safeUser as User, token };
+      } catch (error) {
+        console.error('Signup error:', error);
+        if (error instanceof TRPCError) throw error;
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to create account. Please try again.",
         });
       }
-
-      const token = generateToken({
-        userId,
-        email: input.email,
-        role: input.role,
-      });
-
-      const { passwordHash: _, ...safeUser } = newUser;
-
-      console.log('Signup successful:', userId);
-      return { user: safeUser as User, token };
     }),
 
   getProfile: protectedProcedure.query(async ({ ctx }) => {

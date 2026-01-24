@@ -143,6 +143,8 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     role: UserRole;
     cuisinePreferences?: string[];
     restaurantId?: string;
+    verificationCode?: string;
+    skipVerification?: boolean;
   }) => {
     return signupMutation.mutateAsync(userData);
   }, [signupMutation]);
