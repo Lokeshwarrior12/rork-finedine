@@ -688,7 +688,7 @@ export default function ScheduleScreen() {
               <View style={styles.swapInfo}>
                 <AlertCircle size={20} color={colors.warning} />
                 <Text style={styles.swapInfoText}>
-                  Swap {editingShift.employeeName}'s shift on {editingShift.dayOfWeek}
+                  Swap {editingShift.employeeName}&apos;s shift on {editingShift.dayOfWeek}
                 </Text>
               </View>
             )}
