@@ -1,272 +1,220 @@
 import { z } from "zod";
-import { createTRPCRouter, publicProcedure, protectedProcedure } from "../create-context";
-import { SalesAnalytics, SalesRecommendation, OfferPerformance, PeakHour, Transaction } from "@/types";
-
-const generateRecommendations = (
-  transactions: Transaction[],
-  period: 'daily' | 'weekly' | 'monthly'
-): SalesRecommendation[] => {
-  const recommendations: SalesRecommendation[] = [];
-  
-  if (transactions.length === 0) {
-    recommendations.push({
-      id: 'rec_1',
-      type: 'promotion',
-      title: 'Launch Your First Offer',
-      description: 'Create an attractive 30-40% discount offer to attract new customers. First-time offers typically see 3x more engagement.',
-      impact: 'high',
-      basedOn: 'No transaction history',
-    });
-    return recommendations;
-  }
-
-  const totalRevenue = transactions.reduce((sum, t) => sum + t.finalAmount, 0);
-  const avgOrderValue = totalRevenue / transactions.length;
-  const totalDiscount = transactions.reduce((sum, t) => sum + t.discountAmount, 0);
-  const avgDiscount = totalDiscount / transactions.length;
-
-  const hourCounts: Record<number, { count: number; revenue: number }> = {};
-  transactions.forEach(t => {
-    const hour = new Date(t.createdAt).getHours();
-    if (!hourCounts[hour]) hourCounts[hour] = { count: 0, revenue: 0 };
-    hourCounts[hour].count++;
-    hourCounts[hour].revenue += t.finalAmount;
-  });
-
-  const sortedHours = Object.entries(hourCounts)
-    .sort((a, b) => b[1].count - a[1].count);
-  
-  const peakHour = sortedHours[0]?.[0];
-  const slowestHour = sortedHours[sortedHours.length - 1]?.[0];
-
-  if (peakHour && slowestHour && peakHour !== slowestHour) {
-    recommendations.push({
-      id: `rec_timing_${Date.now()}`,
-      type: 'timing',
-      title: 'Optimize Off-Peak Hours',
-      description: `Your peak sales are at ${peakHour}:00. Consider offering higher discounts (40-50%) during ${slowestHour}:00 to boost traffic during slow periods.`,
-      impact: 'high',
-      basedOn: `Analysis of ${transactions.length} transactions`,
-    });
-  }
-
-  if (avgOrderValue < 50) {
-    recommendations.push({
-      id: `rec_upsell_${Date.now()}`,
-      type: 'promotion',
-      title: 'Increase Average Order Value',
-      description: `Your average order is $${avgOrderValue.toFixed(2)}. Consider bundle deals or minimum order requirements of $60+ for discounts to increase ticket size.`,
-      impact: 'medium',
-      basedOn: `Average order value analysis`,
-    });
-  }
-
-  const cardPayments = transactions.filter(t => t.paymentMethod === 'card').length;
-  const cardPercentage = (cardPayments / transactions.length) * 100;
-  
-  if (cardPercentage < 50) {
-    recommendations.push({
-      id: `rec_payment_${Date.now()}`,
-      type: 'promotion',
-      title: 'Promote Digital Payments',
-      description: `Only ${cardPercentage.toFixed(0)}% of transactions use card/digital payment. Offer an extra 5% off for card payments to track customer data better.`,
-      impact: 'low',
-      basedOn: 'Payment method analysis',
-    });
-  }
-
-  const discountPercentage = (totalDiscount / (totalRevenue + totalDiscount)) * 100;
-  if (discountPercentage > 35) {
-    recommendations.push({
-      id: `rec_discount_${Date.now()}`,
-      type: 'discount',
-      title: 'Optimize Discount Strategy',
-      description: `You're giving ${discountPercentage.toFixed(1)}% in discounts on average. Consider tiered discounts: 30% for new customers, 35% for returning customers to balance acquisition and margin.`,
-      impact: 'high',
-      basedOn: 'Discount rate analysis',
-    });
-  }
-
-  const weekdayCount = transactions.filter(t => {
-    const day = new Date(t.createdAt).getDay();
-    return day >= 1 && day <= 5;
-  }).length;
-  const weekendCount = transactions.length - weekdayCount;
-  
-  if (weekendCount < weekdayCount * 0.5) {
-    recommendations.push({
-      id: `rec_weekend_${Date.now()}`,
-      type: 'timing',
-      title: 'Boost Weekend Traffic',
-      description: 'Your weekend transactions are significantly lower than weekdays. Launch a "Weekend Special" with exclusive 45% discounts to drive weekend visits.',
-      impact: 'medium',
-      basedOn: 'Day-of-week analysis',
-    });
-  }
-
-  recommendations.push({
-    id: `rec_loyalty_${Date.now()}`,
-    type: 'promotion',
-    title: 'Implement Loyalty Bonuses',
-    description: 'Offer double loyalty points on Tuesdays (typically slow day). This encourages repeat visits and builds customer database.',
-    impact: 'medium',
-    basedOn: 'Industry best practices',
-  });
-
-  if (transactions.length >= 10) {
-    recommendations.push({
-      id: `rec_happy_hour_${Date.now()}`,
-      type: 'timing',
-      title: 'Extended Happy Hour',
-      description: 'Based on your traffic patterns, consider extending happy hour discounts to 3-6 PM. Restaurants with longer discount windows see 25% more redemptions.',
-      impact: 'medium',
-      basedOn: 'Traffic pattern analysis',
-    });
-  }
-
-  return recommendations.slice(0, 5);
-};
-
-const mockTransactions: Transaction[] = [
-  { id: 'txn_1', restaurantId: '1', customerId: 'u1', customerName: 'John', originalAmount: 85, discountAmount: 25.5, finalAmount: 59.5, paymentMethod: 'card', status: 'completed', createdAt: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString() },
-  { id: 'txn_2', restaurantId: '1', customerId: 'u2', customerName: 'Sarah', originalAmount: 120, discountAmount: 48, finalAmount: 72, paymentMethod: 'cash', status: 'completed', createdAt: new Date(Date.now() - 1000 * 60 * 60 * 5).toISOString() },
-  { id: 'txn_3', restaurantId: '1', customerId: 'u3', customerName: 'Mike', originalAmount: 65, discountAmount: 19.5, finalAmount: 45.5, paymentMethod: 'upi', status: 'completed', createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString() },
-  { id: 'txn_4', restaurantId: '1', customerId: 'u4', customerName: 'Emily', originalAmount: 95, discountAmount: 38, finalAmount: 57, paymentMethod: 'card', status: 'completed', createdAt: new Date(Date.now() - 1000 * 60 * 60 * 48).toISOString() },
-  { id: 'txn_5', restaurantId: '1', customerId: 'u5', customerName: 'David', originalAmount: 150, discountAmount: 45, finalAmount: 105, paymentMethod: 'card', status: 'completed', createdAt: new Date(Date.now() - 1000 * 60 * 60 * 72).toISOString() },
-  { id: 'txn_6', restaurantId: '1', customerId: 'u6', customerName: 'Lisa', originalAmount: 78, discountAmount: 23.4, finalAmount: 54.6, paymentMethod: 'cash', status: 'completed', createdAt: new Date(Date.now() - 1000 * 60 * 60 * 96).toISOString() },
-  { id: 'txn_7', restaurantId: '1', customerId: 'u7', customerName: 'Tom', originalAmount: 110, discountAmount: 44, finalAmount: 66, paymentMethod: 'upi', status: 'completed', createdAt: new Date(Date.now() - 1000 * 60 * 60 * 120).toISOString() },
-  { id: 'txn_8', restaurantId: '1', customerId: 'u8', customerName: 'Anna', originalAmount: 88, discountAmount: 26.4, finalAmount: 61.6, paymentMethod: 'card', status: 'completed', createdAt: new Date(Date.now() - 1000 * 60 * 60 * 144).toISOString() },
-];
+import { createTRPCRouter, protectedProcedure } from "../create-context";
+import { db } from "@/backend/db";
+import { SalesAnalytics, SalesRecommendation, Transaction, Order, Deal } from "@/types";
 
 export const salesAnalyticsRouter = createTRPCRouter({
-  getAnalytics: protectedProcedure
+  getSalesAnalytics: protectedProcedure
     .input(z.object({
       restaurantId: z.string(),
       period: z.enum(['daily', 'weekly', 'monthly']),
     }))
-    .query(({ input }) => {
+    .query(async ({ input }) => {
+      const transactions = await db.transactions.getByRestaurantId(input.restaurantId);
+      const orders = await db.orders.getByRestaurantId(input.restaurantId);
+      const deals = await db.deals.getByRestaurantId(input.restaurantId);
+
+      const typedTransactions = transactions as Transaction[];
       const now = new Date();
       let startDate: Date;
-      
+
       switch (input.period) {
         case 'daily':
           startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
           break;
         case 'weekly':
-          startDate = new Date(now);
-          startDate.setDate(now.getDate() - 7);
+          startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
           break;
         case 'monthly':
-          startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+          startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
           break;
       }
-      
-      const filteredTxns = mockTransactions.filter(t => 
-        t.restaurantId === input.restaurantId && 
-        new Date(t.createdAt) >= startDate
-      );
-      
-      const totalSales = filteredTxns.reduce((sum, t) => sum + t.finalAmount, 0);
-      const avgOrderValue = filteredTxns.length > 0 ? totalSales / filteredTxns.length : 0;
 
-      const hourCounts: Record<string, { transactions: number; revenue: number }> = {};
-      for (let i = 9; i <= 22; i++) {
-        const hour = `${i}:00`;
-        hourCounts[hour] = { transactions: 0, revenue: 0 };
-      }
-      
-      filteredTxns.forEach(t => {
-        const hour = new Date(t.createdAt).getHours();
-        const hourKey = `${hour}:00`;
-        if (hourCounts[hourKey]) {
-          hourCounts[hourKey].transactions++;
-          hourCounts[hourKey].revenue += t.finalAmount;
+      const filteredTransactions = typedTransactions.filter(
+        t => new Date(t.createdAt) >= startDate && t.status === 'completed'
+      );
+
+      const totalSales = filteredTransactions.reduce((sum, t) => sum + t.finalAmount, 0);
+      const totalTransactionsCount = filteredTransactions.length;
+      const averageOrderValue = totalTransactionsCount > 0 ? totalSales / totalTransactionsCount : 0;
+
+      const offerPerformance: Record<string, { redemptions: number; revenue: number }> = {};
+      filteredTransactions.forEach(t => {
+        if (t.couponId) {
+          if (!offerPerformance[t.couponId]) {
+            offerPerformance[t.couponId] = { redemptions: 0, revenue: 0 };
+          }
+          offerPerformance[t.couponId].redemptions += 1;
+          offerPerformance[t.couponId].revenue += t.finalAmount;
         }
       });
-      
-      const peakHours: PeakHour[] = Object.entries(hourCounts)
-        .map(([hour, data]) => ({
-          hour,
-          transactions: data.transactions,
-          revenue: data.revenue,
+
+      const topOffers = deals
+        .filter(d => offerPerformance[d.id])
+        .map(d => ({
+          offerId: d.id,
+          offerTitle: d.title,
+          redemptions: offerPerformance[d.id]?.redemptions || 0,
+          revenue: offerPerformance[d.id]?.revenue || 0,
         }))
-        .sort((a, b) => b.transactions - a.transactions);
+        .sort((a, b) => b.revenue - a.revenue)
+        .slice(0, 5);
 
-      const offerPerformance: OfferPerformance[] = [
-        { offerId: '1', offerTitle: '30% Off Weekend Brunch', redemptions: 45, revenue: 2850 },
-        { offerId: '2', offerTitle: '40% Happy Hour Special', redemptions: 38, revenue: 1900 },
-        { offerId: '3', offerTitle: '35% Family Dinner Deal', redemptions: 28, revenue: 2240 },
-      ];
+      const hourlyData: Record<string, { transactions: number; revenue: number }> = {};
+      filteredTransactions.forEach(t => {
+        const hour = new Date(t.createdAt).getHours();
+        const hourKey = `${hour}:00`;
+        if (!hourlyData[hourKey]) {
+          hourlyData[hourKey] = { transactions: 0, revenue: 0 };
+        }
+        hourlyData[hourKey].transactions += 1;
+        hourlyData[hourKey].revenue += t.finalAmount;
+      });
 
-      const recommendations = generateRecommendations(filteredTxns, input.period);
+      const peakHours = Object.entries(hourlyData)
+        .map(([hour, data]) => ({ hour, ...data }))
+        .sort((a, b) => b.transactions - a.transactions)
+        .slice(0, 5);
+
+      const recommendations = generateSalesRecommendations(
+        filteredTransactions,
+        orders,
+        deals,
+        peakHours
+      );
 
       const analytics: SalesAnalytics = {
         restaurantId: input.restaurantId,
         period: input.period,
         totalSales,
-        totalTransactions: filteredTxns.length,
-        averageOrderValue: avgOrderValue,
-        topOffers: offerPerformance,
+        totalTransactions: totalTransactionsCount,
+        averageOrderValue: Math.round(averageOrderValue * 100) / 100,
+        topOffers,
         peakHours,
         recommendations,
       };
-      
+
       return analytics;
     }),
 
-  getRecommendations: protectedProcedure
-    .input(z.object({
-      restaurantId: z.string(),
-    }))
-    .query(({ input }) => {
-      const transactions = mockTransactions.filter(t => t.restaurantId === input.restaurantId);
-      return generateRecommendations(transactions, 'monthly');
-    }),
-
-  getDailyTrend: protectedProcedure
+  getRevenueChart: protectedProcedure
     .input(z.object({
       restaurantId: z.string(),
       days: z.number().default(7),
     }))
-    .query(({ input }) => {
-      const trend = [];
+    .query(async ({ input }) => {
+      const transactions = await db.transactions.getByRestaurantId(input.restaurantId);
       const now = new Date();
-      
-      for (let i = input.days - 1; i >= 0; i--) {
-        const date = new Date(now);
-        date.setDate(date.getDate() - i);
-        const dateStr = date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-        
-        const dayStart = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-        const dayEnd = new Date(dayStart);
-        dayEnd.setDate(dayEnd.getDate() + 1);
-        
-        const dayTxns = mockTransactions.filter(t => {
-          const txnDate = new Date(t.createdAt);
-          return txnDate >= dayStart && txnDate < dayEnd;
-        });
-        
-        trend.push({
-          date: dateStr,
-          transactions: dayTxns.length,
-          revenue: dayTxns.reduce((sum, t) => sum + t.finalAmount, 0),
-          discounts: dayTxns.reduce((sum, t) => sum + t.discountAmount, 0),
-        });
+      const startDate = new Date(now.getTime() - input.days * 24 * 60 * 60 * 1000);
+
+      const dailyRevenue: Record<string, number> = {};
+
+      for (let i = 0; i < input.days; i++) {
+        const date = new Date(startDate.getTime() + i * 24 * 60 * 60 * 1000);
+        const dateKey = date.toISOString().split('T')[0];
+        dailyRevenue[dateKey] = 0;
       }
-      
-      return trend;
+
+      const typedTrans = transactions as Transaction[];
+      typedTrans
+        .filter(t => new Date(t.createdAt) >= startDate && t.status === 'completed')
+        .forEach(t => {
+          const dateKey = t.createdAt.split('T')[0];
+          if (dailyRevenue[dateKey] !== undefined) {
+            dailyRevenue[dateKey] += t.finalAmount;
+          }
+        });
+
+      return Object.entries(dailyRevenue).map(([date, revenue]) => ({
+        date,
+        revenue: Math.round(revenue * 100) / 100,
+      }));
     }),
 
-  getOfferComparison: protectedProcedure
-    .input(z.object({
-      restaurantId: z.string(),
-    }))
-    .query(() => {
-      return [
-        { name: '30% Off', redemptions: 45, revenue: 2850, conversionRate: 68 },
-        { name: '35% Off', redemptions: 38, revenue: 2660, conversionRate: 72 },
-        { name: '40% Off', redemptions: 52, revenue: 2600, conversionRate: 85 },
-        { name: '45% Off', redemptions: 28, revenue: 1540, conversionRate: 91 },
-      ];
+  getOrderTypeBreakdown: protectedProcedure
+    .input(z.object({ restaurantId: z.string() }))
+    .query(async ({ input }) => {
+      const orders = await db.orders.getByRestaurantId(input.restaurantId);
+      const now = new Date();
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+      const monthlyOrders = orders.filter(o => new Date(o.createdAt) >= monthStart);
+
+      const dineinOrders = monthlyOrders.filter(o => o.orderType === 'dinein');
+      const pickupOrders = monthlyOrders.filter(o => o.orderType === 'pickup');
+
+      return {
+        dinein: {
+          count: dineinOrders.length,
+          revenue: dineinOrders.reduce((sum, o) => sum + o.total, 0),
+        },
+        pickup: {
+          count: pickupOrders.length,
+          revenue: pickupOrders.reduce((sum, o) => sum + o.total, 0),
+        },
+        total: {
+          count: monthlyOrders.length,
+          revenue: monthlyOrders.reduce((sum, o) => sum + o.total, 0),
+        },
+      };
     }),
 });
+
+function generateSalesRecommendations(
+  transactions: any[],
+  orders: any[],
+  deals: any[],
+  peakHours: any[]
+): SalesRecommendation[] {
+  const recommendations: SalesRecommendation[] = [];
+
+  if (peakHours.length > 0) {
+    const topPeak = peakHours[0];
+    recommendations.push({
+      id: 'rec_timing_1',
+      type: 'timing',
+      title: 'Capitalize on Peak Hours',
+      description: `Your busiest time is around ${topPeak.hour}. Consider adding flash deals during this period to maximize revenue.`,
+      impact: 'high',
+      basedOn: `${topPeak.transactions} transactions during ${topPeak.hour}`,
+    });
+  }
+
+  const activeDeals = deals.filter(d => d.isActive);
+  if (activeDeals.length < 3) {
+    recommendations.push({
+      id: 'rec_promo_1',
+      type: 'promotion',
+      title: 'Increase Active Promotions',
+      description: 'Running more concurrent deals can increase customer engagement and order volume.',
+      impact: 'medium',
+      basedOn: `Currently only ${activeDeals.length} active deals`,
+    });
+  }
+
+  const highDiscountDeals = deals.filter(d => d.discountPercent > 40);
+  if (highDiscountDeals.length > deals.length * 0.5) {
+    recommendations.push({
+      id: 'rec_discount_1',
+      type: 'discount',
+      title: 'Optimize Discount Strategy',
+      description: 'Consider reducing discount percentages on popular items to improve profit margins while maintaining volume.',
+      impact: 'high',
+      basedOn: `${highDiscountDeals.length} deals with >40% discount`,
+    });
+  }
+
+  const cancelledOrders = orders.filter(o => o.status === 'cancelled' || o.status === 'rejected');
+  if (cancelledOrders.length > orders.length * 0.1) {
+    recommendations.push({
+      id: 'rec_inventory_1',
+      type: 'inventory',
+      title: 'Reduce Order Cancellations',
+      description: 'High cancellation rate detected. Review inventory management and order acceptance criteria.',
+      impact: 'high',
+      basedOn: `${cancelledOrders.length} cancelled orders (${Math.round(cancelledOrders.length / orders.length * 100)}%)`,
+    });
+  }
+
+  return recommendations;
+}

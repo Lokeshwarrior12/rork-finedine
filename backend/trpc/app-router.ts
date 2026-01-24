@@ -11,6 +11,10 @@ import { verificationRouter } from "./routes/verification";
 import { transactionsRouter } from "./routes/transactions";
 import { scheduleRouter } from "./routes/schedule";
 import { salesAnalyticsRouter } from "./routes/sales-analytics";
+import { ordersRouter } from "./routes/orders";
+import { menuRouter } from "./routes/menu";
+import { inventoryRouter } from "./routes/inventory";
+import { foodWasteRouter } from "./routes/food-waste";
 
 export const appRouter = createTRPCRouter({
   auth: authRouter,
@@ -25,6 +29,10 @@ export const appRouter = createTRPCRouter({
   transactions: transactionsRouter,
   schedule: scheduleRouter,
   salesAnalytics: salesAnalyticsRouter,
+  orders: ordersRouter,
+  menu: menuRouter,
+  inventory: inventoryRouter,
+  foodWaste: foodWasteRouter,
 });
 
 export type AppRouter = typeof appRouter;

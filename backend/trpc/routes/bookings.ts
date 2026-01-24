@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { TRPCError } from "@trpc/server";
 import { createTRPCRouter, publicProcedure, protectedProcedure } from "../create-context";
 import { db } from "@/backend/db";
 import { TableBooking, ServiceBooking, Service, BookingSlot } from "@/types";
@@ -6,13 +7,13 @@ import { TableBooking, ServiceBooking, Service, BookingSlot } from "@/types";
 export const bookingsRouter = createTRPCRouter({
   getSlotsByRestaurant: publicProcedure
     .input(z.object({ restaurantId: z.string() }))
-    .query(({ input }) => {
+    .query(async ({ input }) => {
       return db.bookingSlots.getByRestaurantId(input.restaurantId);
     }),
 
   getServicesByRestaurant: publicProcedure
     .input(z.object({ restaurantId: z.string() }))
-    .query(({ input }) => {
+    .query(async ({ input }) => {
       return db.services.getByRestaurantId(input.restaurantId);
     }),
 
@@ -25,11 +26,21 @@ export const bookingsRouter = createTRPCRouter({
       tableType: z.string(),
       specialRequests: z.string().optional(),
     }))
-    .mutation(({ ctx, input }) => {
-      const booking: TableBooking = {
+    .mutation(async ({ ctx, input }) => {
+      const user = await db.users.getById(ctx.userId);
+      if (!user) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "User not found",
+        });
+      }
+
+      const booking: TableBooking & { customerName?: string; customerPhone?: string } = {
         id: `tb_${Date.now()}`,
         restaurantId: input.restaurantId,
         userId: ctx.userId,
+        customerName: user.name,
+        customerPhone: user.phone,
         date: input.date,
         time: input.time,
         guests: input.guests,
@@ -37,8 +48,23 @@ export const bookingsRouter = createTRPCRouter({
         specialRequests: input.specialRequests,
         status: 'pending',
       };
-      
-      return db.tableBookings.create(booking);
+
+      const created = await db.tableBookings.create(booking);
+
+      const restaurant = await db.restaurants.getById(input.restaurantId);
+      await db.notifications.create({
+        id: `notif_${Date.now()}`,
+        userId: ctx.userId,
+        restaurantId: input.restaurantId,
+        restaurantName: restaurant?.name || '',
+        title: 'Booking Request Sent',
+        message: `Your table booking request for ${input.date} at ${input.time} has been sent. Waiting for confirmation.`,
+        type: 'booking',
+        read: false,
+        createdAt: new Date().toISOString(),
+      });
+
+      return created;
     }),
 
   createServiceBooking: protectedProcedure
@@ -49,14 +75,22 @@ export const bookingsRouter = createTRPCRouter({
       timeSlot: z.string(),
       guests: z.number(),
     }))
-    .mutation(({ ctx, input }) => {
-      const service = db.services.getById(input.serviceId);
-      if (!service) throw new Error('Service not found');
-      
-      if (input.guests < service.minGuests || input.guests > service.maxGuests) {
-        throw new Error(`Guest count must be between ${service.minGuests} and ${service.maxGuests}`);
+    .mutation(async ({ ctx, input }) => {
+      const service = await db.services.getById(input.serviceId);
+      if (!service) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Service not found",
+        });
       }
-      
+
+      if (input.guests < service.minGuests || input.guests > service.maxGuests) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: `Guest count must be between ${service.minGuests} and ${service.maxGuests}`,
+        });
+      }
+
       const booking: ServiceBooking = {
         id: `sb_${Date.now()}`,
         serviceId: input.serviceId,
@@ -69,27 +103,27 @@ export const bookingsRouter = createTRPCRouter({
         totalPrice: service.pricePerPerson * input.guests,
         status: 'pending',
       };
-      
+
       return db.serviceBookings.create(booking);
     }),
 
-  getMyTableBookings: protectedProcedure.query(({ ctx }) => {
+  getMyTableBookings: protectedProcedure.query(async ({ ctx }) => {
     return db.tableBookings.getByUserId(ctx.userId);
   }),
 
-  getMyServiceBookings: protectedProcedure.query(({ ctx }) => {
+  getMyServiceBookings: protectedProcedure.query(async ({ ctx }) => {
     return db.serviceBookings.getByUserId(ctx.userId);
   }),
 
   getRestaurantTableBookings: protectedProcedure
     .input(z.object({ restaurantId: z.string() }))
-    .query(({ input }) => {
+    .query(async ({ input }) => {
       return db.tableBookings.getByRestaurantId(input.restaurantId);
     }),
 
   getRestaurantServiceBookings: protectedProcedure
     .input(z.object({ restaurantId: z.string() }))
-    .query(({ input }) => {
+    .query(async ({ input }) => {
       return db.serviceBookings.getByRestaurantId(input.restaurantId);
     }),
 
@@ -97,9 +131,44 @@ export const bookingsRouter = createTRPCRouter({
     .input(z.object({
       id: z.string(),
       status: z.enum(['pending', 'confirmed', 'cancelled']),
+      tableNumber: z.string().optional(),
     }))
-    .mutation(({ input }) => {
-      return db.tableBookings.update(input.id, { status: input.status });
+    .mutation(async ({ input }) => {
+      const booking = await db.tableBookings.getById(input.id);
+      if (!booking) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Booking not found",
+        });
+      }
+
+      const updates: Partial<TableBooking> & { tableNumber?: string } = { status: input.status };
+      if (input.tableNumber) {
+        updates.tableNumber = input.tableNumber;
+      }
+
+      const updated = await db.tableBookings.update(input.id, updates);
+
+      const statusMessages: Record<string, string> = {
+        confirmed: `Your table booking has been confirmed${input.tableNumber ? `. Table: ${input.tableNumber}` : ''}`,
+        cancelled: 'Your table booking has been cancelled',
+      };
+
+      if (statusMessages[input.status]) {
+        await db.notifications.create({
+          id: `notif_${Date.now()}`,
+          userId: booking.userId,
+          restaurantId: booking.restaurantId,
+          restaurantName: '',
+          title: input.status === 'confirmed' ? 'Booking Confirmed' : 'Booking Cancelled',
+          message: statusMessages[input.status],
+          type: 'booking',
+          read: false,
+          createdAt: new Date().toISOString(),
+        });
+      }
+
+      return updated;
     }),
 
   updateServiceBookingStatus: protectedProcedure
@@ -107,7 +176,7 @@ export const bookingsRouter = createTRPCRouter({
       id: z.string(),
       status: z.enum(['pending', 'confirmed', 'cancelled']),
     }))
-    .mutation(({ input }) => {
+    .mutation(async ({ input }) => {
       return db.serviceBookings.update(input.id, { status: input.status });
     }),
 
@@ -120,7 +189,7 @@ export const bookingsRouter = createTRPCRouter({
       maxGuests: z.number(),
       description: z.string().optional(),
     }))
-    .mutation(({ input }) => {
+    .mutation(async ({ input }) => {
       const service: Service = {
         id: `service_${Date.now()}`,
         restaurantId: input.restaurantId,
@@ -131,7 +200,7 @@ export const bookingsRouter = createTRPCRouter({
         isActive: true,
         description: input.description,
       };
-      
+
       return db.services.create(service);
     }),
 
@@ -145,15 +214,15 @@ export const bookingsRouter = createTRPCRouter({
       isActive: z.boolean().optional(),
       description: z.string().optional(),
     }))
-    .mutation(({ input }) => {
+    .mutation(async ({ input }) => {
       const { id, ...data } = input;
       return db.services.update(id, data);
     }),
 
   deleteService: protectedProcedure
     .input(z.object({ id: z.string() }))
-    .mutation(({ input }) => {
-      db.services.delete(input.id);
+    .mutation(async ({ input }) => {
+      await db.services.delete(input.id);
       return { success: true };
     }),
 
@@ -165,7 +234,7 @@ export const bookingsRouter = createTRPCRouter({
       endTime: z.string(),
       maxGuests: z.number(),
     }))
-    .mutation(({ input }) => {
+    .mutation(async ({ input }) => {
       const slot: BookingSlot = {
         id: `slot_${Date.now()}`,
         restaurantId: input.restaurantId,
@@ -174,7 +243,7 @@ export const bookingsRouter = createTRPCRouter({
         endTime: input.endTime,
         maxGuests: input.maxGuests,
       };
-      
+
       return db.bookingSlots.create(slot);
     }),
 
@@ -186,15 +255,15 @@ export const bookingsRouter = createTRPCRouter({
       endTime: z.string().optional(),
       maxGuests: z.number().optional(),
     }))
-    .mutation(({ input }) => {
+    .mutation(async ({ input }) => {
       const { id, ...data } = input;
       return db.bookingSlots.update(id, data);
     }),
 
   deleteSlot: protectedProcedure
     .input(z.object({ id: z.string() }))
-    .mutation(({ input }) => {
-      db.bookingSlots.delete(input.id);
+    .mutation(async ({ input }) => {
+      await db.bookingSlots.delete(input.id);
       return { success: true };
     }),
 });

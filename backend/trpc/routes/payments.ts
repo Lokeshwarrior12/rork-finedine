@@ -1,43 +1,27 @@
 import { z } from "zod";
+import { TRPCError } from "@trpc/server";
 import { createTRPCRouter, protectedProcedure } from "../create-context";
 import { db } from "@/backend/db";
 import { Payment } from "@/backend/db/schema";
 
 export const paymentsRouter = createTRPCRouter({
-  createSubscription: protectedProcedure
-    .input(z.object({
-      amount: z.number(),
-      currency: z.string().default('usd'),
-    }))
-    .mutation(async ({ ctx, input }) => {
-      console.log('Creating subscription payment:', input.amount, input.currency);
-      
-      const payment: Payment = {
-        id: `pay_${Date.now()}`,
-        userId: ctx.userId,
-        amount: input.amount,
-        currency: input.currency,
-        type: 'subscription',
-        status: 'pending',
-        createdAt: new Date().toISOString(),
-      };
-      
-      db.payments.create(payment);
-      
-      return {
-        paymentId: payment.id,
-        clientSecret: `mock_secret_${payment.id}`,
-        amount: input.amount,
-        currency: input.currency,
-      };
+  getByUser: protectedProcedure.query(async ({ ctx }) => {
+    return db.payments.getByUserId(ctx.userId);
+  }),
+
+  getById: protectedProcedure
+    .input(z.object({ id: z.string() }))
+    .query(async ({ input }) => {
+      const payments = await db.payments.getAll();
+      return payments.find(p => p.id === input.id) || null;
     }),
 
-  createBookingPayment: protectedProcedure
+  create: protectedProcedure
     .input(z.object({
-      bookingId: z.string(),
       amount: z.number(),
-      currency: z.string().default('usd'),
-      type: z.enum(['booking', 'service']),
+      currency: z.string().default('USD'),
+      type: z.enum(['subscription', 'booking', 'service']),
+      metadata: z.record(z.string(), z.string()).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       const payment: Payment = {
@@ -47,53 +31,47 @@ export const paymentsRouter = createTRPCRouter({
         currency: input.currency,
         type: input.type,
         status: 'pending',
-        metadata: { bookingId: input.bookingId },
+        metadata: input.metadata,
         createdAt: new Date().toISOString(),
       };
-      
-      db.payments.create(payment);
-      
-      return {
-        paymentId: payment.id,
-        clientSecret: `mock_secret_${payment.id}`,
-        amount: input.amount,
-        currency: input.currency,
-      };
+
+      return db.payments.create(payment);
     }),
 
-  confirmPayment: protectedProcedure
+  processPayment: protectedProcedure
     .input(z.object({
       paymentId: z.string(),
-      stripePaymentIntentId: z.string().optional(),
+      paymentMethodId: z.string().optional(),
     }))
-    .mutation(({ input }) => {
-      const payment = db.payments.update(input.paymentId, {
+    .mutation(async ({ input }) => {
+      const payments = await db.payments.getAll();
+      const foundPayment = payments.find(p => p.id === input.paymentId);
+      
+      if (!foundPayment) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Payment not found",
+        });
+      }
+
+      const updated = await db.payments.update(input.paymentId, {
         status: 'completed',
-        stripePaymentIntentId: input.stripePaymentIntentId,
+        stripePaymentIntentId: `pi_${Date.now()}`,
       });
-      
-      if (!payment) throw new Error('Payment not found');
-      
-      return payment;
-    }),
 
-  getPaymentHistory: protectedProcedure.query(({ ctx }) => {
-    return db.payments.getByUserId(ctx.userId);
-  }),
-
-  getPaymentById: protectedProcedure
-    .input(z.object({ id: z.string() }))
-    .query(({ input }) => {
-      const payment = db.payments.getById(input.id);
-      if (!payment) throw new Error('Payment not found');
-      return payment;
+      return updated;
     }),
 
   refund: protectedProcedure
     .input(z.object({ paymentId: z.string() }))
-    .mutation(({ input }) => {
-      const payment = db.payments.update(input.paymentId, { status: 'refunded' });
-      if (!payment) throw new Error('Payment not found');
-      return payment;
+    .mutation(async ({ input }) => {
+      return db.payments.update(input.paymentId, { status: 'refunded' });
     }),
+
+  getPaymentHistory: protectedProcedure.query(async ({ ctx }) => {
+    const payments = await db.payments.getByUserId(ctx.userId);
+    return payments.sort((a, b) => 
+      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+  }),
 });

@@ -3,29 +3,28 @@ import { createTRPCRouter, protectedProcedure } from "../create-context";
 import { db } from "@/backend/db";
 
 export const notificationsRouter = createTRPCRouter({
-  getAll: protectedProcedure.query(({ ctx }) => {
+  getByUser: protectedProcedure.query(async ({ ctx }) => {
     return db.notifications.getByUserId(ctx.userId);
   }),
 
-  getUnread: protectedProcedure.query(({ ctx }) => {
-    return db.notifications.getByUserId(ctx.userId).filter(n => !n.read);
-  }),
-
-  getUnreadCount: protectedProcedure.query(({ ctx }) => {
-    return db.notifications.getByUserId(ctx.userId).filter(n => !n.read).length;
-  }),
-
   markAsRead: protectedProcedure
-    .input(z.object({ notificationId: z.string() }))
-    .mutation(({ ctx, input }) => {
-      return db.notifications.markAsRead(ctx.userId, input.notificationId);
+    .input(z.object({ id: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      return db.notifications.markAsRead(ctx.userId, input.id);
     }),
 
-  markAllAsRead: protectedProcedure.mutation(({ ctx }) => {
-    const notifications = db.notifications.getByUserId(ctx.userId);
-    notifications.forEach(n => {
-      db.notifications.markAsRead(ctx.userId, n.id);
-    });
+  markAllAsRead: protectedProcedure.mutation(async ({ ctx }) => {
+    const notifications = await db.notifications.getByUserId(ctx.userId);
+    for (const notif of notifications) {
+      if (!notif.read) {
+        await db.notifications.markAsRead(ctx.userId, notif.id);
+      }
+    }
     return { success: true };
+  }),
+
+  getUnreadCount: protectedProcedure.query(async ({ ctx }) => {
+    const notifications = await db.notifications.getByUserId(ctx.userId);
+    return notifications.filter(n => !n.read).length;
   }),
 });

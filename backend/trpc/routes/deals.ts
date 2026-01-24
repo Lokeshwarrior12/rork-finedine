@@ -1,33 +1,40 @@
 import { z } from "zod";
+import { TRPCError } from "@trpc/server";
 import { createTRPCRouter, publicProcedure, protectedProcedure } from "../create-context";
 import { db } from "@/backend/db";
 import { Deal } from "@/types";
 
 export const dealsRouter = createTRPCRouter({
-  getAll: publicProcedure.query(() => {
+  getAll: publicProcedure.query(async () => {
     return db.deals.getAll();
   }),
 
-  getActive: publicProcedure.query(() => {
+  getActive: publicProcedure.query(async () => {
     return db.deals.getActive();
   }),
 
   getById: publicProcedure
     .input(z.object({ id: z.string() }))
-    .query(({ input }) => {
-      const deal = db.deals.getById(input.id);
-      if (!deal) throw new Error('Deal not found');
+    .query(async ({ input }) => {
+      const deal = await db.deals.getById(input.id);
+      if (!deal) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Deal not found",
+        });
+      }
       return deal;
     }),
 
   getByRestaurant: publicProcedure
     .input(z.object({ restaurantId: z.string() }))
-    .query(({ input }) => {
+    .query(async ({ input }) => {
       return db.deals.getByRestaurantId(input.restaurantId);
     }),
 
-  getHotDeals: publicProcedure.query(() => {
-    return db.deals.getActive()
+  getHotDeals: publicProcedure.query(async () => {
+    const activeDeals = await db.deals.getActive();
+    return activeDeals
       .filter(d => d.discountPercent >= 30)
       .sort((a, b) => b.discountPercent - a.discountPercent)
       .slice(0, 10);
@@ -40,30 +47,30 @@ export const dealsRouter = createTRPCRouter({
       minDiscount: z.number().optional(),
       maxDiscount: z.number().optional(),
     }))
-    .query(({ input }) => {
-      let results = db.deals.getActive();
-      
+    .query(async ({ input }) => {
+      let results = await db.deals.getActive();
+
       if (input.query) {
         const q = input.query.toLowerCase();
-        results = results.filter(d => 
-          d.title.toLowerCase().includes(q) || 
+        results = results.filter(d =>
+          d.title.toLowerCase().includes(q) ||
           d.description.toLowerCase().includes(q) ||
           d.restaurantName.toLowerCase().includes(q)
         );
       }
-      
+
       if (input.offerType) {
         results = results.filter(d => d.offerType === input.offerType || d.offerType === 'both');
       }
-      
+
       if (input.minDiscount !== undefined) {
         results = results.filter(d => d.discountPercent >= input.minDiscount!);
       }
-      
+
       if (input.maxDiscount !== undefined) {
         results = results.filter(d => d.discountPercent <= input.maxDiscount!);
       }
-      
+
       return results;
     }),
 
@@ -83,10 +90,15 @@ export const dealsRouter = createTRPCRouter({
       isActive: z.boolean(),
       termsConditions: z.string(),
     }))
-    .mutation(({ input }) => {
-      const restaurant = db.restaurants.getById(input.restaurantId);
-      if (!restaurant) throw new Error('Restaurant not found');
-      
+    .mutation(async ({ input }) => {
+      const restaurant = await db.restaurants.getById(input.restaurantId);
+      if (!restaurant) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Restaurant not found",
+        });
+      }
+
       const deal: Deal = {
         id: `deal_${Date.now()}`,
         restaurantId: input.restaurantId,
@@ -106,13 +118,13 @@ export const dealsRouter = createTRPCRouter({
         isActive: input.isActive,
         termsConditions: input.termsConditions,
       };
-      
-      const created = db.deals.create(deal);
-      
+
+      const created = await db.deals.create(deal);
+
       if (input.isActive) {
-        db.notifications.notifyFavorites(input.restaurantId, input.title);
+        await db.notifications.notifyFavorites(input.restaurantId, input.title);
       }
-      
+
       return created;
     }),
 
@@ -132,32 +144,42 @@ export const dealsRouter = createTRPCRouter({
       isActive: z.boolean().optional(),
       termsConditions: z.string().optional(),
     }))
-    .mutation(({ input }) => {
+    .mutation(async ({ input }) => {
       const { id, ...data } = input;
-      const deal = db.deals.update(id, data);
-      if (!deal) throw new Error('Deal not found');
+      const deal = await db.deals.update(id, data);
+      if (!deal) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Deal not found",
+        });
+      }
       return deal;
     }),
 
   delete: protectedProcedure
     .input(z.object({ id: z.string() }))
-    .mutation(({ input }) => {
-      db.deals.delete(input.id);
+    .mutation(async ({ input }) => {
+      await db.deals.delete(input.id);
       return { success: true };
     }),
 
   toggleActive: protectedProcedure
     .input(z.object({ id: z.string() }))
-    .mutation(({ input }) => {
-      const deal = db.deals.getById(input.id);
-      if (!deal) throw new Error('Deal not found');
-      
-      const updated = db.deals.update(input.id, { isActive: !deal.isActive });
-      
-      if (updated?.isActive) {
-        db.notifications.notifyFavorites(deal.restaurantId, deal.title);
+    .mutation(async ({ input }) => {
+      const deal = await db.deals.getById(input.id);
+      if (!deal) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Deal not found",
+        });
       }
-      
+
+      const updated = await db.deals.update(input.id, { isActive: !deal.isActive });
+
+      if (updated?.isActive) {
+        await db.notifications.notifyFavorites(deal.restaurantId, deal.title);
+      }
+
       return updated;
     }),
 });

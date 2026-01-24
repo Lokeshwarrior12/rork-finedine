@@ -91,6 +91,7 @@ export default function SignupScreen() {
         email,
         phone,
         address,
+        password,
         role: (role as UserRole) || 'customer',
         cuisinePreferences: selectedCuisines,
       });

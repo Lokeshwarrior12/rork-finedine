@@ -1,8 +1,9 @@
 import createContextHook from '@nkzw/create-context-hook';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useState, useEffect } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useState, useEffect, useCallback } from 'react';
 import { User, UserRole } from '@/types';
+import { trpc } from '@/lib/trpc';
 
 const STORAGE_KEY = 'auth_user';
 const TOKEN_KEY = 'auth_token';
@@ -14,131 +15,158 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
   const [isLoading, setIsLoading] = useState(true);
 
   const authQuery = useQuery({
-    queryKey: ['auth'],
+    queryKey: ['auth', 'stored'],
     queryFn: async () => {
-      const stored = await AsyncStorage.getItem(STORAGE_KEY);
-      const storedToken = await AsyncStorage.getItem(TOKEN_KEY);
-      if (storedToken) setToken(storedToken);
-      return stored ? JSON.parse(stored) : null;
+      try {
+        const storedUser = await AsyncStorage.getItem(STORAGE_KEY);
+        const storedToken = await AsyncStorage.getItem(TOKEN_KEY);
+        
+        if (storedToken) {
+          setToken(storedToken);
+        }
+        
+        return storedUser ? JSON.parse(storedUser) : null;
+      } catch (error) {
+        console.error('Error loading auth state:', error);
+        return null;
+      }
     },
   });
 
-  const loginMutation = useMutation({
-    mutationFn: async ({ email, password, role }: { email: string; password: string; role: UserRole }) => {
-      console.log('Logging in:', email, role);
-      
-      const defaultCustomer: User = {
-        id: 'user1',
-        name: 'John Doe',
-        email: email,
-        phone: '+1 234 567 8900',
-        address: '123 Main St, New York, NY 10001',
-        photo: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200',
-        role: 'customer',
-        points: 1250,
-        favorites: ['1', '3'],
-        cardDetails: {
-          lastFour: '4242',
-          expiryDate: '12/27',
-          cardType: 'Visa',
-        },
-      };
-
-      const defaultRestaurantOwner: User = {
-        id: 'owner1',
-        name: 'Marco Rossi',
-        email: email,
-        phone: '+1 234 567 8900',
-        address: '123 Main Street, New York',
-        photo: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=200',
-        role: 'restaurant_owner',
-        points: 0,
-        favorites: [],
-        restaurantId: '1',
-      };
-
-      const mockUser = role === 'customer' ? defaultCustomer : defaultRestaurantOwner;
-      const mockToken = mockUser.id;
-      
-      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(mockUser));
-      await AsyncStorage.setItem(TOKEN_KEY, mockToken);
-      
-      return { user: mockUser, token: mockToken };
-    },
-    onSuccess: (data) => {
-      setUser(data.user);
-      setToken(data.token);
-      queryClient.invalidateQueries({ queryKey: ['auth'] });
-    },
+  const verifyTokenQuery = trpc.auth.verifyToken.useQuery(undefined, {
+    enabled: !!token,
+    retry: false,
   });
 
-  const signupMutation = useMutation({
-    mutationFn: async (userData: Partial<User> & { role: UserRole; password?: string }) => {
-      console.log('Signing up:', userData);
-      
-      const newUser: User = {
-        id: `user_${Date.now()}`,
-        name: userData.name || '',
-        email: userData.email || '',
-        phone: userData.phone || '',
-        address: userData.address || '',
-        role: userData.role,
-        points: 0,
-        favorites: [],
-        restaurantId: userData.role === 'restaurant_owner' ? `rest_${Date.now()}` : undefined,
-      };
-      
-      const newToken = newUser.id;
-      
-      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(newUser));
-      await AsyncStorage.setItem(TOKEN_KEY, newToken);
-      
-      return { user: newUser, token: newToken };
-    },
-    onSuccess: (data) => {
-      setUser(data.user);
-      setToken(data.token);
-      queryClient.invalidateQueries({ queryKey: ['auth'] });
-    },
-  });
+  useEffect(() => {
+    if (verifyTokenQuery.data?.valid && verifyTokenQuery.data?.user) {
+      setUser(verifyTokenQuery.data.user);
+      AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(verifyTokenQuery.data.user));
+    }
+  }, [verifyTokenQuery.data]);
 
-  const logoutMutation = useMutation({
-    mutationFn: async () => {
-      await AsyncStorage.removeItem(STORAGE_KEY);
-      await AsyncStorage.removeItem(TOKEN_KEY);
-    },
-    onSuccess: () => {
+  useEffect(() => {
+    if (verifyTokenQuery.error) {
+      AsyncStorage.removeItem(STORAGE_KEY);
+      AsyncStorage.removeItem(TOKEN_KEY);
       setUser(null);
       setToken(null);
+      queryClient.clear();
+    }
+  }, [verifyTokenQuery.error, queryClient]);
+
+  const loginMutation = trpc.auth.login.useMutation({
+    onSuccess: async (data) => {
+      console.log('Login successful:', data.user.id);
+      setUser(data.user);
+      setToken(data.token);
+      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(data.user));
+      await AsyncStorage.setItem(TOKEN_KEY, data.token);
       queryClient.invalidateQueries({ queryKey: ['auth'] });
+    },
+    onError: (error) => {
+      console.error('Login error:', error.message);
     },
   });
 
-  const updateUserMutation = useMutation({
-    mutationFn: async (updates: Partial<User>) => {
-      if (!user) throw new Error('No user logged in');
-      const updatedUser = { ...user, ...updates };
-      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updatedUser));
-      return updatedUser;
+  const signupMutation = trpc.auth.signup.useMutation({
+    onSuccess: async (data) => {
+      console.log('Signup successful:', data.user.id);
+      setUser(data.user);
+      setToken(data.token);
+      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(data.user));
+      await AsyncStorage.setItem(TOKEN_KEY, data.token);
+      queryClient.invalidateQueries({ queryKey: ['auth'] });
     },
-    onSuccess: (data) => {
+    onError: (error) => {
+      console.error('Signup error:', error.message);
+    },
+  });
+
+  const updateProfileMutation = trpc.auth.updateProfile.useMutation({
+    onSuccess: async (data) => {
       setUser(data);
+      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(data));
       queryClient.invalidateQueries({ queryKey: ['auth'] });
     },
   });
 
-  const toggleFavorite = (restaurantId: string) => {
+  const toggleFavoriteMutation = trpc.auth.toggleFavorite.useMutation({
+    onSuccess: async (data) => {
+      if (data) {
+        setUser(data);
+        await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      }
+    },
+  });
+
+  const addPointsMutation = trpc.auth.addPoints.useMutation({
+    onSuccess: async (data) => {
+      if (data) {
+        setUser(data);
+        await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      }
+    },
+  });
+
+  const logout = useCallback(async () => {
+    try {
+      await AsyncStorage.removeItem(STORAGE_KEY);
+      await AsyncStorage.removeItem(TOKEN_KEY);
+      setUser(null);
+      setToken(null);
+      queryClient.clear();
+      console.log('Logged out successfully');
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
+  }, [queryClient]);
+
+  const login = useCallback(async ({ 
+    email, 
+    password, 
+    role 
+  }: { 
+    email: string; 
+    password: string; 
+    role: UserRole 
+  }) => {
+    return loginMutation.mutateAsync({ email, password, role });
+  }, [loginMutation]);
+
+  const signup = useCallback(async (userData: {
+    name: string;
+    email: string;
+    phone?: string;
+    address?: string;
+    password: string;
+    role: UserRole;
+    cuisinePreferences?: string[];
+    restaurantId?: string;
+  }) => {
+    return signupMutation.mutateAsync(userData);
+  }, [signupMutation]);
+
+  const updateUser = useCallback((updates: Partial<User>) => {
+    updateProfileMutation.mutate(updates);
+  }, [updateProfileMutation]);
+
+  const toggleFavorite = useCallback((restaurantId: string) => {
     if (!user) return;
+    
     const newFavorites = user.favorites.includes(restaurantId)
       ? user.favorites.filter(id => id !== restaurantId)
       : [...user.favorites, restaurantId];
-    updateUserMutation.mutate({ favorites: newFavorites });
-  };
+    
+    setUser({ ...user, favorites: newFavorites });
+    toggleFavoriteMutation.mutate({ restaurantId });
+  }, [user, toggleFavoriteMutation]);
 
-  const addPoints = (points: number) => {
+  const addPoints = useCallback((points: number) => {
     if (!user) return;
-    updateUserMutation.mutate({ points: user.points + points });
-  };
+    setUser({ ...user, points: user.points + points });
+    addPointsMutation.mutate({ points });
+  }, [user, addPointsMutation]);
 
   useEffect(() => {
     if (authQuery.data !== undefined) {
@@ -153,14 +181,26 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     user,
     token,
     isLoading,
-    isAuthenticated: !!user,
-    login: loginMutation.mutateAsync,
-    signup: signupMutation.mutateAsync,
-    logout: logoutMutation.mutate,
-    updateUser: updateUserMutation.mutate,
+    isAuthenticated: !!user && !!token,
+    login,
+    signup,
+    logout,
+    updateUser,
     toggleFavorite,
     addPoints,
     loginPending: loginMutation.isPending,
     signupPending: signupMutation.isPending,
+    loginError: loginMutation.error?.message,
+    signupError: signupMutation.error?.message,
   };
 });
+
+export function useCurrentUser() {
+  const { user } = useAuth();
+  return user;
+}
+
+export function useIsAuthenticated() {
+  const { isAuthenticated } = useAuth();
+  return isAuthenticated;
+}

@@ -43,6 +43,7 @@ export default function PartnerScreen() {
         email,
         phone: '',
         address: '',
+        password,
         role: 'restaurant_owner',
         restaurantId,
       });

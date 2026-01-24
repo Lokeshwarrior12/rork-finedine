@@ -1,139 +1,89 @@
 import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "../create-context";
 import { db } from "@/backend/db";
-import { Analytics } from "@/types";
+import { Transaction } from "@/types";
 
 export const analyticsRouter = createTRPCRouter({
   getRestaurantAnalytics: protectedProcedure
     .input(z.object({ restaurantId: z.string() }))
-    .query(({ input }) => {
-      const deals = db.deals.getByRestaurantId(input.restaurantId);
-      const allCoupons = db.coupons.getAll();
-      
-      const totalCoupons = deals.reduce((sum, d) => sum + d.claimedCoupons, 0);
-      const activeCoupons = deals.filter(d => d.isActive).reduce((sum, d) => sum + d.claimedCoupons, 0);
-      const usedCoupons = allCoupons.filter(c => c.status === 'used').length;
-      
-      const redemptionRate = totalCoupons > 0 ? Math.round((usedCoupons / totalCoupons) * 100) : 0;
-      
-      const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-      const dailyActivity = days.map(day => ({
-        day,
-        count: Math.floor(Math.random() * 50) + 10,
-      }));
-      
-      const dineinDeals = deals.filter(d => d.offerType === 'dinein').length;
-      const pickupDeals = deals.filter(d => d.offerType === 'pickup').length;
-      const bothDeals = deals.filter(d => d.offerType === 'both').length;
-      const totalDeals = dineinDeals + pickupDeals + bothDeals;
-      
+    .query(async ({ input }) => {
+      const deals = await db.deals.getByRestaurantId(input.restaurantId);
+      const coupons = await db.coupons.getAll();
+      const restaurantCoupons = coupons.filter(c => {
+        const deal = deals.find(d => d.id === c.dealId);
+        return deal !== undefined;
+      });
+
+      const totalCoupons = restaurantCoupons.length;
+      const usedCoupons = restaurantCoupons.filter(c => c.status === 'used').length;
+      const activeCoupons = restaurantCoupons.filter(c => c.status === 'active').length;
+      const redemptionRate = totalCoupons > 0 ? (usedCoupons / totalCoupons) * 100 : 0;
+
+      const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      const dailyActivity = dayNames.map(day => {
+        const count = restaurantCoupons.filter(c => {
+          const claimedDay = new Date(c.claimedAt).getDay();
+          return dayNames[claimedDay] === day;
+        }).length;
+        return { day, count };
+      });
+
       const offerTypeDistribution = {
-        dinein: totalDeals > 0 ? Math.round((dineinDeals / totalDeals) * 100) : 0,
-        takeout: totalDeals > 0 ? Math.round((pickupDeals / totalDeals) * 100) : 0,
-        both: totalDeals > 0 ? Math.round((bothDeals / totalDeals) * 100) : 0,
+        dinein: deals.filter(d => d.offerType === 'dinein').length,
+        takeout: deals.filter(d => d.offerType === 'pickup').length,
+        both: deals.filter(d => d.offerType === 'both').length,
       };
-      
-      const discountRanges = [
-        { range: '10-20%', min: 10, max: 20 },
-        { range: '21-30%', min: 21, max: 30 },
-        { range: '31-40%', min: 31, max: 40 },
-        { range: '41-50%', min: 41, max: 50 },
+
+      const discountRangeDistribution = [
+        { range: '0-20%', count: deals.filter(d => d.discountPercent <= 20).length },
+        { range: '21-40%', count: deals.filter(d => d.discountPercent > 20 && d.discountPercent <= 40).length },
+        { range: '41-60%', count: deals.filter(d => d.discountPercent > 40 && d.discountPercent <= 60).length },
+        { range: '60%+', count: deals.filter(d => d.discountPercent > 60).length },
       ];
-      
-      const discountRangeDistribution = discountRanges.map(({ range, min, max }) => ({
-        range,
-        count: deals.filter(d => d.discountPercent >= min && d.discountPercent <= max).length,
-      }));
-      
-      const analytics: Analytics = {
+
+      return {
         totalCoupons,
-        redemptionRate,
+        redemptionRate: Math.round(redemptionRate * 10) / 10,
         activeCoupons,
         usedCoupons,
         dailyActivity,
         offerTypeDistribution,
         discountRangeDistribution,
       };
-      
-      return analytics;
-    }),
-
-  exportToPdf: protectedProcedure
-    .input(z.object({ restaurantId: z.string() }))
-    .mutation(({ input }) => {
-      const deals = db.deals.getByRestaurantId(input.restaurantId);
-      const restaurant = db.restaurants.getById(input.restaurantId);
-      
-      const totalCoupons = deals.reduce((sum, d) => sum + d.claimedCoupons, 0);
-      const activeDeals = deals.filter(d => d.isActive).length;
-      
-      const csvContent = [
-        'FineDine Analytics Report',
-        `Restaurant: ${restaurant?.name || 'Unknown'}`,
-        `Generated: ${new Date().toISOString()}`,
-        '',
-        'Deal Title,Discount %,Type,Claimed,Max Coupons,Status',
-        ...deals.map(d => 
-          `${d.title},${d.discountPercent}%,${d.offerType},${d.claimedCoupons},${d.maxCoupons},${d.isActive ? 'Active' : 'Inactive'}`
-        ),
-        '',
-        'Summary',
-        `Total Deals: ${deals.length}`,
-        `Active Deals: ${activeDeals}`,
-        `Total Coupons Claimed: ${totalCoupons}`,
-      ].join('\n');
-      
-      const base64Data = Buffer.from(csvContent).toString('base64');
-      
-      return {
-        filename: `analytics_${input.restaurantId}_${Date.now()}.csv`,
-        data: base64Data,
-        mimeType: 'text/csv',
-      };
     }),
 
   getDashboardStats: protectedProcedure
     .input(z.object({ restaurantId: z.string() }))
-    .query(({ input }) => {
-      const deals = db.deals.getByRestaurantId(input.restaurantId);
-      
-      const activeOffers = deals.filter(d => d.isActive).length;
-      const todayCoupons = deals.reduce((sum, d) => sum + d.claimedCoupons, 0);
-      const totalClaimed = deals.reduce((sum, d) => sum + d.claimedCoupons, 0);
-      const favoritesCount = db.users.getAll().filter(u => u.favorites.includes(input.restaurantId)).length;
-      
-      return {
-        activeOffers,
-        todayCoupons,
-        totalClaimed,
-        favoritesCount,
-      };
-    }),
+    .query(async ({ input }) => {
+      const deals = await db.deals.getByRestaurantId(input.restaurantId);
+      const tableBookings = await db.tableBookings.getByRestaurantId(input.restaurantId);
+      const orders = await db.orders.getByRestaurantId(input.restaurantId);
+      const transactions = await db.transactions.getByRestaurantId(input.restaurantId);
 
-  getRecentActivity: protectedProcedure
-    .input(z.object({ restaurantId: z.string() }))
-    .query(({ input }) => {
-      const tableBookings = db.tableBookings.getByRestaurantId(input.restaurantId);
-      const serviceBookings = db.serviceBookings.getByRestaurantId(input.restaurantId);
-      
-      const activities = [
-        ...tableBookings.map(b => ({
-          id: b.id,
-          type: 'table_booking' as const,
-          description: `Table booking for ${b.guests} guests`,
-          date: b.date,
-          status: b.status,
-        })),
-        ...serviceBookings.map(b => ({
-          id: b.id,
-          type: 'service_booking' as const,
-          description: `${b.serviceName} booking for ${b.guests} guests`,
-          date: b.date,
-          status: b.status,
-        })),
-      ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-        .slice(0, 10);
-      
-      return activities;
+      const today = new Date().toISOString().split('T')[0];
+      const todayOrders = orders.filter(o => o.createdAt.startsWith(today));
+      const todayBookings = tableBookings.filter(b => b.date === today);
+
+      const typedTransactions = transactions as Transaction[];
+      const totalRevenue = typedTransactions
+        .filter(t => t.status === 'completed')
+        .reduce((sum, t) => sum + t.finalAmount, 0);
+
+      const todayRevenue = typedTransactions
+        .filter(t => t.status === 'completed' && t.createdAt.startsWith(today))
+        .reduce((sum, t) => sum + t.finalAmount, 0);
+
+      return {
+        activeDeals: deals.filter(d => d.isActive).length,
+        totalDeals: deals.length,
+        pendingBookings: tableBookings.filter(b => b.status === 'pending').length,
+        confirmedBookings: tableBookings.filter(b => b.status === 'confirmed').length,
+        todayBookings: todayBookings.length,
+        pendingOrders: orders.filter(o => o.status === 'pending').length,
+        todayOrders: todayOrders.length,
+        totalRevenue,
+        todayRevenue,
+        totalTransactions: transactions.length,
+      };
     }),
 });

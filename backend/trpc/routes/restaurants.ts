@@ -1,28 +1,34 @@
 import { z } from "zod";
+import { TRPCError } from "@trpc/server";
 import { createTRPCRouter, publicProcedure, protectedProcedure } from "../create-context";
 import { db } from "@/backend/db";
 
 export const restaurantsRouter = createTRPCRouter({
-  getAll: publicProcedure.query(() => {
+  getAll: publicProcedure.query(async () => {
     return db.restaurants.getAll();
   }),
 
   getById: publicProcedure
     .input(z.object({ id: z.string() }))
-    .query(({ input }) => {
-      const restaurant = db.restaurants.getById(input.id);
-      if (!restaurant) throw new Error('Restaurant not found');
+    .query(async ({ input }) => {
+      const restaurant = await db.restaurants.getById(input.id);
+      if (!restaurant) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Restaurant not found",
+        });
+      }
       return restaurant;
     }),
 
-  getByOwner: protectedProcedure.query(({ ctx }) => {
+  getByOwner: protectedProcedure.query(async ({ ctx }) => {
     return db.restaurants.getByOwnerId(ctx.userId);
   }),
 
   getNearby: publicProcedure
     .input(z.object({ city: z.string().optional() }))
-    .query(({ input }) => {
-      const all = db.restaurants.getAll();
+    .query(async ({ input }) => {
+      const all = await db.restaurants.getAll();
       if (input.city) {
         return all.filter(r => r.city.toLowerCase().includes(input.city!.toLowerCase()));
       }
@@ -35,27 +41,8 @@ export const restaurantsRouter = createTRPCRouter({
       cuisineType: z.string().optional(),
       category: z.string().optional(),
     }))
-    .query(({ input }) => {
-      let results = db.restaurants.getAll();
-      
-      if (input.query) {
-        const q = input.query.toLowerCase();
-        results = results.filter(r => 
-          r.name.toLowerCase().includes(q) || 
-          r.description.toLowerCase().includes(q) ||
-          r.cuisineType.toLowerCase().includes(q)
-        );
-      }
-      
-      if (input.cuisineType) {
-        results = results.filter(r => r.cuisineType === input.cuisineType);
-      }
-      
-      if (input.category) {
-        results = results.filter(r => r.categories.includes(input.category!));
-      }
-      
-      return results;
+    .query(async ({ input }) => {
+      return db.restaurants.search(input.query, input.cuisineType, input.category);
     }),
 
   update: protectedProcedure
@@ -74,11 +61,22 @@ export const restaurantsRouter = createTRPCRouter({
       bookingTerms: z.string().optional(),
       logo: z.string().optional(),
       images: z.array(z.string()).optional(),
+      tables: z.array(z.object({
+        id: z.string(),
+        number: z.string(),
+        capacity: z.number(),
+        type: z.string(),
+      })).optional(),
     }))
-    .mutation(({ input }) => {
+    .mutation(async ({ input }) => {
       const { id, ...data } = input;
-      const restaurant = db.restaurants.update(id, data);
-      if (!restaurant) throw new Error('Restaurant not found');
+      const restaurant = await db.restaurants.update(id, data);
+      if (!restaurant) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Restaurant not found",
+        });
+      }
       return restaurant;
     }),
 
@@ -87,9 +85,14 @@ export const restaurantsRouter = createTRPCRouter({
       id: z.string(),
       images: z.array(z.string()),
     }))
-    .mutation(({ input }) => {
-      const restaurant = db.restaurants.update(input.id, { images: input.images });
-      if (!restaurant) throw new Error('Restaurant not found');
+    .mutation(async ({ input }) => {
+      const restaurant = await db.restaurants.update(input.id, { images: input.images });
+      if (!restaurant) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Restaurant not found",
+        });
+      }
       return restaurant;
     }),
 
@@ -98,9 +101,14 @@ export const restaurantsRouter = createTRPCRouter({
       id: z.string(),
       logo: z.string(),
     }))
-    .mutation(({ input }) => {
-      const restaurant = db.restaurants.update(input.id, { logo: input.logo });
-      if (!restaurant) throw new Error('Restaurant not found');
+    .mutation(async ({ input }) => {
+      const restaurant = await db.restaurants.update(input.id, { logo: input.logo });
+      if (!restaurant) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Restaurant not found",
+        });
+      }
       return restaurant;
     }),
 
@@ -109,16 +117,69 @@ export const restaurantsRouter = createTRPCRouter({
       id: z.string(),
       rating: z.number().min(1).max(5),
     }))
-    .mutation(({ input }) => {
-      const restaurant = db.restaurants.getById(input.id);
-      if (!restaurant) throw new Error('Restaurant not found');
-      
+    .mutation(async ({ input }) => {
+      const restaurant = await db.restaurants.getById(input.id);
+      if (!restaurant) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Restaurant not found",
+        });
+      }
+
       const newReviewCount = restaurant.reviewCount + 1;
       const newRating = ((restaurant.rating * restaurant.reviewCount) + input.rating) / newReviewCount;
-      
-      return db.restaurants.update(input.id, { 
+
+      return db.restaurants.update(input.id, {
         rating: Math.round(newRating * 10) / 10,
         reviewCount: newReviewCount,
       });
+    }),
+
+  addTable: protectedProcedure
+    .input(z.object({
+      restaurantId: z.string(),
+      number: z.string(),
+      capacity: z.number(),
+      type: z.string(),
+    }))
+    .mutation(async ({ input }) => {
+      const restaurant = await db.restaurants.getById(input.restaurantId);
+      if (!restaurant) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Restaurant not found",
+        });
+      }
+
+      const tables = (restaurant as any).tables || [];
+      const newTable = {
+        id: `table_${Date.now()}`,
+        number: input.number,
+        capacity: input.capacity,
+        type: input.type,
+      };
+
+      return db.restaurants.update(input.restaurantId, {
+        tables: [...tables, newTable],
+      } as any);
+    }),
+
+  removeTable: protectedProcedure
+    .input(z.object({
+      restaurantId: z.string(),
+      tableId: z.string(),
+    }))
+    .mutation(async ({ input }) => {
+      const restaurant = await db.restaurants.getById(input.restaurantId);
+      if (!restaurant) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Restaurant not found",
+        });
+      }
+
+      const tables = ((restaurant as any).tables || []).filter((t: any) => t.id !== input.tableId);
+
+      return db.restaurants.update(input.restaurantId, { tables } as any);
     }),
 });

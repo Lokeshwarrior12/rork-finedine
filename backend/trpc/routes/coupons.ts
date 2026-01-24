@@ -1,109 +1,146 @@
 import { z } from "zod";
-import { createTRPCRouter, protectedProcedure } from "../create-context";
+import { TRPCError } from "@trpc/server";
+import { createTRPCRouter, publicProcedure, protectedProcedure } from "../create-context";
 import { db } from "@/backend/db";
 import { Coupon } from "@/types";
-
-function generateCouponCode(): string {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-  let code = '';
-  for (let i = 0; i < 10; i++) {
-    code += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return code;
-}
+import { generateCouponCode } from "@/backend/auth/jwt";
 
 export const couponsRouter = createTRPCRouter({
-  getMyСoupons: protectedProcedure.query(({ ctx }) => {
+  getByUser: protectedProcedure.query(async ({ ctx }) => {
     return db.coupons.getByUserId(ctx.userId);
   }),
 
-  getActive: protectedProcedure.query(({ ctx }) => {
-    return db.coupons.getByUserId(ctx.userId).filter(c => c.status === 'active');
-  }),
+  getById: protectedProcedure
+    .input(z.object({ id: z.string() }))
+    .query(async ({ input }) => {
+      const coupon = await db.coupons.getById(input.id);
+      if (!coupon) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Coupon not found",
+        });
+      }
+      return coupon;
+    }),
 
-  getUsed: protectedProcedure.query(({ ctx }) => {
-    return db.coupons.getByUserId(ctx.userId).filter(c => c.status === 'used');
-  }),
-
-  getExpired: protectedProcedure.query(({ ctx }) => {
-    return db.coupons.getByUserId(ctx.userId).filter(c => c.status === 'expired');
-  }),
+  getByCode: publicProcedure
+    .input(z.object({ code: z.string() }))
+    .query(async ({ input }) => {
+      const coupon = await db.coupons.getByCode(input.code);
+      if (!coupon) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Coupon not found",
+        });
+      }
+      return coupon;
+    }),
 
   claim: protectedProcedure
     .input(z.object({ dealId: z.string() }))
-    .mutation(({ ctx, input }) => {
-      const deal = db.deals.getById(input.dealId);
-      if (!deal) throw new Error('Deal not found');
-      
-      if (!deal.isActive) throw new Error('Deal is no longer active');
-      if (deal.claimedCoupons >= deal.maxCoupons) throw new Error('No more coupons available');
-      
-      const coupon: Coupon = {
+    .mutation(async ({ ctx, input }) => {
+      const deal = await db.deals.getById(input.dealId);
+      if (!deal) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Deal not found",
+        });
+      }
+
+      if (!deal.isActive) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "This deal is no longer active",
+        });
+      }
+
+      if (deal.claimedCoupons >= deal.maxCoupons) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "All coupons for this deal have been claimed",
+        });
+      }
+
+      const expiresAt = new Date(deal.validTill);
+
+      const coupon: Coupon & { userId: string } = {
         id: `coupon_${Date.now()}`,
-        dealId: deal.id,
+        dealId: input.dealId,
+        userId: ctx.userId,
         dealTitle: deal.title,
         restaurantName: deal.restaurantName,
         restaurantImage: deal.restaurantImage,
         discountPercent: deal.discountPercent,
         status: 'active',
         claimedAt: new Date().toISOString(),
-        expiresAt: deal.validTill,
+        expiresAt: expiresAt.toISOString(),
         code: generateCouponCode(),
       };
-      
-      db.coupons.create(coupon);
-      db.deals.update(deal.id, { claimedCoupons: deal.claimedCoupons + 1 });
-      
-      return coupon;
-    }),
 
-  use: protectedProcedure
-    .input(z.object({ couponId: z.string() }))
-    .mutation(({ input }) => {
-      const coupon = db.coupons.getById(input.couponId);
-      if (!coupon) throw new Error('Coupon not found');
-      if (coupon.status !== 'active') throw new Error('Coupon is not active');
-      
-      return db.coupons.update(input.couponId, {
-        status: 'used',
-        usedAt: new Date().toISOString(),
+      await db.deals.update(input.dealId, {
+        claimedCoupons: deal.claimedCoupons + 1,
       });
+
+      const user = await db.users.getById(ctx.userId);
+      if (user) {
+        await db.users.update(ctx.userId, { points: user.points + 10 });
+      }
+
+      return db.coupons.create(coupon);
     }),
 
-  verify: protectedProcedure
+  redeem: protectedProcedure
     .input(z.object({ code: z.string() }))
-    .mutation(({ input }) => {
-      const coupon = db.coupons.getByCode(input.code);
-      if (!coupon) throw new Error('Invalid coupon code');
-      if (coupon.status !== 'active') throw new Error('Coupon is not active');
-      
-      const updated = db.coupons.update(coupon.id, {
+    .mutation(async ({ input }) => {
+      const coupon = await db.coupons.getByCode(input.code);
+      if (!coupon) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Coupon not found",
+        });
+      }
+
+      if (coupon.status !== 'active') {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: `This coupon has already been ${coupon.status}`,
+        });
+      }
+
+      if (new Date() > new Date(coupon.expiresAt)) {
+        await db.coupons.update(coupon.id, { status: 'expired' });
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "This coupon has expired",
+        });
+      }
+
+      return db.coupons.update(coupon.id, {
         status: 'used',
         usedAt: new Date().toISOString(),
       });
-      
-      return { coupon: updated, discount: coupon.discountPercent };
     }),
 
-  scratch: protectedProcedure
-    .input(z.object({ couponId: z.string() }))
-    .query(({ input }) => {
-      const coupon = db.coupons.getById(input.couponId);
-      if (!coupon) throw new Error('Coupon not found');
-      return { code: coupon.code };
-    }),
+  validateCode: publicProcedure
+    .input(z.object({ code: z.string() }))
+    .query(async ({ input }) => {
+      const coupon = await db.coupons.getByCode(input.code);
+      if (!coupon) {
+        return { valid: false, message: "Coupon not found" };
+      }
 
-  getQRData: protectedProcedure
-    .input(z.object({ couponId: z.string() }))
-    .query(({ input }) => {
-      const coupon = db.coupons.getById(input.couponId);
-      if (!coupon) throw new Error('Coupon not found');
+      if (coupon.status !== 'active') {
+        return { valid: false, message: `Coupon has already been ${coupon.status}` };
+      }
+
+      if (new Date() > new Date(coupon.expiresAt)) {
+        return { valid: false, message: "Coupon has expired" };
+      }
+
       return {
-        code: coupon.code,
-        dealTitle: coupon.dealTitle,
-        restaurantName: coupon.restaurantName,
-        discountPercent: coupon.discountPercent,
-        expiresAt: coupon.expiresAt,
+        valid: true,
+        coupon,
+        message: `${coupon.discountPercent}% discount available`,
       };
     }),
 });
