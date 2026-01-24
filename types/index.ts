@@ -12,6 +12,7 @@ export interface User {
   favorites: string[];
   cardDetails?: CardDetails;
   restaurantId?: string;
+  cuisinePreferences?: string[];
 }
 
 export interface CardDetails {

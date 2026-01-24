@@ -214,7 +214,7 @@ export default function ScheduleScreen() {
       if (scheduleRef.current) {
         const uri = await captureRef(scheduleRef, { format: 'png', quality: 1 });
         
-        if (Platform.OS !== 'web') {
+        if (Platform.OS === 'ios' || Platform.OS === 'android') {
           const Sharing = await import('expo-sharing');
           const isAvailable = await Sharing.isAvailableAsync();
           if (isAvailable) {
