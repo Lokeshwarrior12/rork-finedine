@@ -8,7 +8,6 @@ import {
   TextInput,
   Switch,
   Alert,
-  Platform,
 } from 'react-native';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
@@ -17,7 +16,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { 
   LogOut, 
   Save, 
-  Image as ImageIcon, 
   Camera, 
   Phone, 
   ChevronRight,

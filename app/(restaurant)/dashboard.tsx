@@ -20,7 +20,6 @@ import {
   BarChart3,
   ChevronRight,
   Package,
-  Phone,
   Bell,
   ArrowUpRight,
   ArrowDownRight,

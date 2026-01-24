@@ -8,25 +8,21 @@ import {
   TextInput,
   Modal,
   Alert,
-  Dimensions,
   Platform,
   Share,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { captureRef } from 'react-native-view-shot';
-import * as FileSystem from 'expo-file-system';
 import {
   Plus,
   Users,
   Calendar,
-  Clock,
   X,
   Check,
   ChevronLeft,
   ChevronRight,
   Download,
   Share2,
-  Edit2,
   Trash2,
   RefreshCw,
   AlertCircle,
@@ -35,7 +31,7 @@ import {
 import { useTheme } from '@/contexts/ThemeContext';
 import { Employee, Shift, WeeklyAvailability, DayAvailability } from '@/types';
 
-const { width } = Dimensions.get('window');
+
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 const SHORT_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const ROLES = ['Server', 'Chef', 'Host', 'Bartender', 'Manager', 'Busser', 'Dishwasher'];
@@ -177,7 +173,6 @@ export default function ScheduleScreen() {
   };
 
   const handleAddShift = (dayIndex: number) => {
-    const date = weekDates[dayIndex];
     setSelectedDay(DAYS[dayIndex]);
     setEditingShift(null);
     setShiftForm({ employeeId: '', startTime: '09:00', endTime: '17:00' });

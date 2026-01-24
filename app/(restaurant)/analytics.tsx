@@ -7,7 +7,6 @@ import {
   Pressable,
   Dimensions,
   Share,
-  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -24,7 +23,6 @@ import {
   ChevronRight,
   Zap,
   Target,
-  Calendar,
   Share2,
 } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -91,7 +89,6 @@ export default function AnalyticsScreen() {
   const insets = useSafeAreaInsets();
   const { colors, isDark } = useTheme();
   const [selectedPeriod, setSelectedPeriod] = useState<'daily' | 'weekly' | 'monthly'>('weekly');
-  const maxDailyCount = Math.max(...mockAnalytics.dailyActivity.map(d => d.count));
   const maxRevenue = Math.max(...mockDailyTrend.map(d => d.revenue));
   const maxPeakTransactions = Math.max(...mockPeakHours.map(h => h.transactions));
 

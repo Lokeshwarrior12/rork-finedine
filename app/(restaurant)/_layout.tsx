@@ -1,5 +1,5 @@
 import { Tabs } from 'expo-router';
-import { LayoutDashboard, Tag, Package, BarChart3, Settings, CalendarDays, ScanLine, Trash2 } from 'lucide-react-native';
+import { LayoutDashboard, Tag, Package, BarChart3, Settings, ScanLine, Trash2 } from 'lucide-react-native';
 import React from 'react';
 import { Platform, View, StyleSheet } from 'react-native';
 import { useTheme } from '@/contexts/ThemeContext';
