@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   Dimensions,
   Animated,
   RefreshControl,
+  Modal,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
@@ -33,13 +34,34 @@ import {
   PartyPopper,
   TreePine,
   Wallet,
+  X,
+  SlidersHorizontal,
+  Truck,
+  User,
+  DoorClosed,
+  Music,
+  Trees,
+  Car,
+  Wifi,
+  Key,
+  CircleDot,
+  Zap,
+  Flame,
+  TrendingUp,
+  Check,
 } from 'lucide-react-native';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
-import { restaurants, deals, cuisineTypes, serviceCategories } from '@/mocks/data';
+import { restaurants, deals, cuisineTypes, serviceCategories, serviceFilters, diningCategories } from '@/mocks/data';
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = width * 0.75;
+
+interface FilterState {
+  cuisines: string[];
+  services: string[];
+  categories: string[];
+}
 
 export default function CustomerHomeScreen() {
   const router = useRouter();
@@ -48,8 +70,15 @@ export default function CustomerHomeScreen() {
   const { colors, isDark } = useTheme();
   const [searchQuery, setSearchQuery] = useState('');
   const [refreshing, setRefreshing] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
+  const [filters, setFilters] = useState<FilterState>({
+    cuisines: [],
+    services: [],
+    categories: [],
+  });
   
   const fadeAnim = useRef(new Animated.Value(0)).current;
+  const filterAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     Animated.timing(fadeAnim, {
@@ -59,13 +88,72 @@ export default function CustomerHomeScreen() {
     }).start();
   }, [fadeAnim]);
 
+  useEffect(() => {
+    Animated.timing(filterAnim, {
+      toValue: showFilters ? 1 : 0,
+      duration: 300,
+      useNativeDriver: true,
+    }).start();
+  }, [showFilters, filterAnim]);
+
   const onRefresh = useCallback(() => {
     setRefreshing(true);
     setTimeout(() => setRefreshing(false), 1500);
   }, []);
 
+  const toggleFilter = useCallback((type: keyof FilterState, id: string) => {
+    setFilters(prev => ({
+      ...prev,
+      [type]: prev[type].includes(id)
+        ? prev[type].filter(item => item !== id)
+        : [...prev[type], id]
+    }));
+  }, []);
+
+  const clearAllFilters = useCallback(() => {
+    setFilters({ cuisines: [], services: [], categories: [] });
+  }, []);
+
+  const activeFilterCount = useMemo(() => 
+    filters.cuisines.length + filters.services.length + filters.categories.length,
+  [filters]);
+
+  const filteredRestaurants = useMemo(() => {
+    let result = [...restaurants];
+    
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      result = result.filter(r => 
+        r.name.toLowerCase().includes(query) ||
+        r.cuisineType.toLowerCase().includes(query) ||
+        r.city.toLowerCase().includes(query)
+      );
+    }
+    
+    if (filters.cuisines.length > 0) {
+      result = result.filter(r => 
+        filters.cuisines.some(c => 
+          cuisineTypes.find(ct => ct.id === c)?.name.toLowerCase() === r.cuisineType.toLowerCase()
+        )
+      );
+    }
+    
+    if (filters.categories.length > 0) {
+      result = result.filter(r =>
+        r.categories.some(cat => 
+          filters.categories.some(fc => {
+            const category = diningCategories.find(dc => dc.id === fc);
+            return category && cat.toLowerCase().includes(category.name.toLowerCase().split(' ')[0]);
+          })
+        )
+      );
+    }
+    
+    return result;
+  }, [searchQuery, filters]);
+
   const hotDeals = deals.filter(d => d.isActive).slice(0, 5);
-  const nearbyRestaurants = restaurants.slice(0, 6);
+  const nearbyRestaurants = filteredRestaurants.slice(0, 6);
   const spotlightRestaurants = restaurants.slice(0, 3);
 
   const categoryIcons: Record<string, React.ReactNode> = {
@@ -79,14 +167,148 @@ export default function CustomerHomeScreen() {
     'Luxury Dining': <Crown size={24} color={colors.secondary} />,
   };
 
+  const serviceIcons: Record<string, React.ReactNode> = {
+    'building-2': <Building2 size={16} color={colors.text} />,
+    'truck': <Truck size={16} color={colors.text} />,
+    'user': <User size={16} color={colors.text} />,
+    'door-closed': <DoorClosed size={16} color={colors.text} />,
+    'music': <Music size={16} color={colors.text} />,
+    'trees': <Trees size={16} color={colors.text} />,
+    'car': <Car size={16} color={colors.text} />,
+    'wifi': <Wifi size={16} color={colors.text} />,
+    'key': <Key size={16} color={colors.text} />,
+  };
+
+  const diningIcons: Record<string, React.ReactNode> = {
+    'utensils-crossed': <UtensilsCrossed size={16} color={colors.text} />,
+    'circle-dot': <CircleDot size={16} color={colors.text} />,
+    'zap': <Zap size={16} color={colors.text} />,
+    'flame': <Flame size={16} color={colors.text} />,
+    'map-pin': <MapPin size={16} color={colors.text} />,
+    'users': <Users size={16} color={colors.text} />,
+    'heart': <Heart size={16} color={colors.text} />,
+    'wallet': <Wallet size={16} color={colors.text} />,
+    'crown': <Crown size={16} color={colors.text} />,
+    'sparkles': <Sparkles size={16} color={colors.text} />,
+    'trending-up': <TrendingUp size={16} color={colors.text} />,
+    'star': <Star size={16} color={colors.text} />,
+  };
+
   const navigateToRestaurant = (id: string) => {
     router.push(`/restaurant/${id}` as any);
   };
 
   const styles = createStyles(colors, isDark);
 
+  const renderFilterModal = () => (
+    <Modal
+      visible={showFilters}
+      animationType="slide"
+      presentationStyle="pageSheet"
+      onRequestClose={() => setShowFilters(false)}
+    >
+      <View style={[styles.modalContainer, { paddingTop: insets.top }]}>
+        <View style={styles.modalHeader}>
+          <Text style={styles.modalTitle}>Filters</Text>
+          <Pressable onPress={() => setShowFilters(false)} style={styles.modalCloseBtn}>
+            <X size={24} color={colors.text} />
+          </Pressable>
+        </View>
+
+        <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
+          <View style={styles.filterSection}>
+            <Text style={styles.filterSectionTitle}>Cuisine Type</Text>
+            <View style={styles.filterChipsContainer}>
+              {cuisineTypes.map(cuisine => {
+                const isSelected = filters.cuisines.includes(cuisine.id);
+                return (
+                  <Pressable
+                    key={cuisine.id}
+                    style={[styles.filterChip, isSelected && styles.filterChipSelected]}
+                    onPress={() => toggleFilter('cuisines', cuisine.id)}
+                  >
+                    <Image source={{ uri: cuisine.image }} style={styles.cuisineChipImage} />
+                    <Text style={[styles.filterChipText, isSelected && styles.filterChipTextSelected]}>
+                      {cuisine.name}
+                    </Text>
+                    {isSelected && <Check size={14} color="#fff" />}
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+
+          <View style={styles.filterSection}>
+            <Text style={styles.filterSectionTitle}>Services & Amenities</Text>
+            <View style={styles.filterChipsContainer}>
+              {serviceFilters.map(service => {
+                const isSelected = filters.services.includes(service.id);
+                return (
+                  <Pressable
+                    key={service.id}
+                    style={[styles.filterChip, isSelected && styles.filterChipSelected]}
+                    onPress={() => toggleFilter('services', service.id)}
+                  >
+                    <View style={[styles.serviceIconWrap, isSelected && styles.serviceIconWrapSelected]}>
+                      {serviceIcons[service.icon] || <Building2 size={16} color={isSelected ? '#fff' : colors.text} />}
+                    </View>
+                    <Text style={[styles.filterChipText, isSelected && styles.filterChipTextSelected]}>
+                      {service.name}
+                    </Text>
+                    {isSelected && <Check size={14} color="#fff" />}
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+
+          <View style={styles.filterSection}>
+            <Text style={styles.filterSectionTitle}>Dining Categories</Text>
+            <View style={styles.filterChipsContainer}>
+              {diningCategories.map(category => {
+                const isSelected = filters.categories.includes(category.id);
+                return (
+                  <Pressable
+                    key={category.id}
+                    style={[styles.filterChip, isSelected && styles.filterChipSelected]}
+                    onPress={() => toggleFilter('categories', category.id)}
+                  >
+                    <View style={[styles.serviceIconWrap, isSelected && styles.serviceIconWrapSelected]}>
+                      {diningIcons[category.icon] || <UtensilsCrossed size={16} color={isSelected ? '#fff' : colors.text} />}
+                    </View>
+                    <Text style={[styles.filterChipText, isSelected && styles.filterChipTextSelected]}>
+                      {category.name}
+                    </Text>
+                    {isSelected && <Check size={14} color="#fff" />}
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+
+          <View style={{ height: 100 }} />
+        </ScrollView>
+
+        <View style={[styles.modalFooter, { paddingBottom: insets.bottom + 16 }]}>
+          <Pressable style={styles.clearFiltersBtn} onPress={clearAllFilters}>
+            <Text style={styles.clearFiltersBtnText}>Clear All</Text>
+          </Pressable>
+          <Pressable 
+            style={styles.applyFiltersBtn} 
+            onPress={() => setShowFilters(false)}
+          >
+            <Text style={styles.applyFiltersBtnText}>
+              Show Results {activeFilterCount > 0 ? `(${nearbyRestaurants.length})` : ''}
+            </Text>
+          </Pressable>
+        </View>
+      </View>
+    </Modal>
+  );
+
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
+      {renderFilterModal()}
       <ScrollView
         showsVerticalScrollIndicator={false}
         refreshControl={
@@ -123,16 +345,85 @@ export default function CustomerHomeScreen() {
             </View>
           </View>
 
-          <Pressable style={styles.searchContainer}>
-            <Search size={20} color={colors.textMuted} />
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Search restaurant, area, vibe..."
-              placeholderTextColor={colors.placeholder}
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-            />
-          </Pressable>
+          <View style={styles.searchRow}>
+            <Pressable style={styles.searchContainer}>
+              <Search size={20} color={colors.textMuted} />
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Search restaurant, cuisine, area..."
+                placeholderTextColor={colors.placeholder}
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+              />
+              {searchQuery.length > 0 && (
+                <Pressable onPress={() => setSearchQuery('')}>
+                  <X size={18} color={colors.textMuted} />
+                </Pressable>
+              )}
+            </Pressable>
+            <Pressable 
+              style={[styles.filterBtn, activeFilterCount > 0 && styles.filterBtnActive]}
+              onPress={() => setShowFilters(true)}
+            >
+              <SlidersHorizontal size={20} color={activeFilterCount > 0 ? '#fff' : colors.text} />
+              {activeFilterCount > 0 && (
+                <View style={styles.filterBadge}>
+                  <Text style={styles.filterBadgeText}>{activeFilterCount}</Text>
+                </View>
+              )}
+            </Pressable>
+          </View>
+
+          {activeFilterCount > 0 && (
+            <ScrollView 
+              horizontal 
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.activeFiltersScroll}
+            >
+              {filters.cuisines.map(id => {
+                const cuisine = cuisineTypes.find(c => c.id === id);
+                return cuisine ? (
+                  <Pressable 
+                    key={`cuisine-${id}`}
+                    style={styles.activeFilterChip}
+                    onPress={() => toggleFilter('cuisines', id)}
+                  >
+                    <Text style={styles.activeFilterText}>{cuisine.name}</Text>
+                    <X size={14} color={colors.primary} />
+                  </Pressable>
+                ) : null;
+              })}
+              {filters.services.map(id => {
+                const service = serviceFilters.find(s => s.id === id);
+                return service ? (
+                  <Pressable 
+                    key={`service-${id}`}
+                    style={styles.activeFilterChip}
+                    onPress={() => toggleFilter('services', id)}
+                  >
+                    <Text style={styles.activeFilterText}>{service.name}</Text>
+                    <X size={14} color={colors.primary} />
+                  </Pressable>
+                ) : null;
+              })}
+              {filters.categories.map(id => {
+                const category = diningCategories.find(c => c.id === id);
+                return category ? (
+                  <Pressable 
+                    key={`category-${id}`}
+                    style={styles.activeFilterChip}
+                    onPress={() => toggleFilter('categories', id)}
+                  >
+                    <Text style={styles.activeFilterText}>{category.name}</Text>
+                    <X size={14} color={colors.primary} />
+                  </Pressable>
+                ) : null;
+              })}
+              <Pressable style={styles.clearAllBtn} onPress={clearAllFilters}>
+                <Text style={styles.clearAllText}>Clear all</Text>
+              </Pressable>
+            </ScrollView>
+          )}
         </View>
 
         <View style={styles.cashbackBanner}>
@@ -447,7 +738,13 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     borderWidth: 2,
     borderColor: colors.surface,
   },
+  searchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
   searchContainer: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.inputBackground,
@@ -462,6 +759,185 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     flex: 1,
     fontSize: 16,
     color: colors.text,
+  },
+  filterBtn: {
+    width: 52,
+    height: 52,
+    borderRadius: 16,
+    backgroundColor: colors.backgroundSecondary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  filterBtnActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  filterBadge: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: colors.secondary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  filterBadgeText: {
+    fontSize: 10,
+    fontWeight: '700' as const,
+    color: '#fff',
+  },
+  activeFiltersScroll: {
+    paddingTop: 12,
+    gap: 8,
+  },
+  activeFilterChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.primaryLight,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    gap: 6,
+    borderWidth: 1,
+    borderColor: colors.primary,
+  },
+  activeFilterText: {
+    fontSize: 13,
+    fontWeight: '500' as const,
+    color: colors.primary,
+  },
+  clearAllBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  clearAllText: {
+    fontSize: 13,
+    fontWeight: '600' as const,
+    color: colors.error,
+  },
+  modalContainer: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700' as const,
+    color: colors.text,
+  },
+  modalCloseBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.backgroundSecondary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalContent: {
+    flex: 1,
+    paddingHorizontal: 20,
+  },
+  filterSection: {
+    paddingVertical: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  filterSectionTitle: {
+    fontSize: 16,
+    fontWeight: '700' as const,
+    color: colors.text,
+    marginBottom: 16,
+  },
+  filterChipsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  filterChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.backgroundSecondary,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 24,
+    gap: 8,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+  },
+  filterChipSelected: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  filterChipText: {
+    fontSize: 14,
+    fontWeight: '500' as const,
+    color: colors.text,
+  },
+  filterChipTextSelected: {
+    color: '#fff',
+  },
+  cuisineChipImage: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+  },
+  serviceIconWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  serviceIconWrapSelected: {
+    backgroundColor: 'rgba(255,255,255,0.2)',
+  },
+  modalFooter: {
+    flexDirection: 'row',
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    gap: 12,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  clearFiltersBtn: {
+    flex: 1,
+    paddingVertical: 16,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    alignItems: 'center',
+  },
+  clearFiltersBtnText: {
+    fontSize: 15,
+    fontWeight: '600' as const,
+    color: colors.text,
+  },
+  applyFiltersBtn: {
+    flex: 2,
+    paddingVertical: 16,
+    borderRadius: 14,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+  },
+  applyFiltersBtnText: {
+    fontSize: 15,
+    fontWeight: '700' as const,
+    color: '#fff',
   },
   cashbackBanner: {
     paddingHorizontal: 20,

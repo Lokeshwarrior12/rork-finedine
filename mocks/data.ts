@@ -11,6 +11,34 @@ export const serviceCategories: ServiceCategory[] = [
   { id: '8', name: 'Luxury Dining', icon: 'crown' },
 ];
 
+export const serviceFilters = [
+  { id: 'banquet', name: 'Banquet Hall', icon: 'building-2' },
+  { id: 'catering', name: 'Catering', icon: 'truck' },
+  { id: 'male-servers', name: 'Male Servers', icon: 'user' },
+  { id: 'female-servers', name: 'Female Servers', icon: 'user' },
+  { id: 'private-dining', name: 'Private Dining', icon: 'door-closed' },
+  { id: 'live-music', name: 'Live Music', icon: 'music' },
+  { id: 'outdoor-seating', name: 'Outdoor Seating', icon: 'trees' },
+  { id: 'parking', name: 'Free Parking', icon: 'car' },
+  { id: 'wifi', name: 'Free WiFi', icon: 'wifi' },
+  { id: 'valet', name: 'Valet Parking', icon: 'key' },
+];
+
+export const diningCategories = [
+  { id: 'buffet', name: 'Buffet', icon: 'utensils-crossed' },
+  { id: 'thali', name: 'Thali', icon: 'circle-dot' },
+  { id: 'quick-order', name: 'Quick Order', icon: 'zap' },
+  { id: 'famous', name: 'Famous', icon: 'flame' },
+  { id: 'near-me', name: 'Near Me', icon: 'map-pin' },
+  { id: 'family', name: 'Family Friendly', icon: 'users' },
+  { id: 'romantic', name: 'Romantic', icon: 'heart' },
+  { id: 'budget', name: 'Budget Friendly', icon: 'wallet' },
+  { id: 'premium', name: 'Premium', icon: 'crown' },
+  { id: 'new', name: 'Newly Opened', icon: 'sparkles' },
+  { id: 'trending', name: 'Trending', icon: 'trending-up' },
+  { id: 'top-rated', name: 'Top Rated', icon: 'star' },
+];
+
 export const cuisineTypes: CuisineType[] = [
   { id: '1', name: 'Indian', image: 'https://images.unsplash.com/photo-1585937421612-70a008356fbe?w=400' },
   { id: '2', name: 'American', image: 'https://images.unsplash.com/photo-1550547660-d9450f859349?w=400' },
