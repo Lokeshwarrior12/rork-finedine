@@ -60,26 +60,63 @@ export const trpcClient = trpc.createClient({
         }
         
         try {
+          const existingSignal = options?.signal;
+          
+          if (existingSignal?.aborted) {
+            throw new Error('Request was cancelled');
+          }
+          
           const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 30000);
+          const timeoutId = setTimeout(() => {
+            controller.abort(new Error('Request timeout'));
+          }, 30000);
           
-          const response = await fetch(url, {
-            ...options,
-            signal: controller.signal,
-          });
+          const abortHandler = () => {
+            clearTimeout(timeoutId);
+            controller.abort();
+          };
           
-          clearTimeout(timeoutId);
-          return response;
+          if (existingSignal) {
+            existingSignal.addEventListener('abort', abortHandler);
+          }
+          
+          try {
+            const response = await fetch(url, {
+              ...options,
+              signal: controller.signal,
+            });
+            
+            clearTimeout(timeoutId);
+            if (existingSignal) {
+              existingSignal.removeEventListener('abort', abortHandler);
+            }
+            
+            return response;
+          } catch (fetchError) {
+            clearTimeout(timeoutId);
+            if (existingSignal) {
+              existingSignal.removeEventListener('abort', abortHandler);
+            }
+            throw fetchError;
+          }
         } catch (error) {
-          console.error('API fetch error:', error);
           if (error instanceof Error) {
-            if (error.name === 'AbortError' || error.name === 'TimeoutError') {
+            if (error.name === 'AbortError') {
+              if (error.message === 'Request timeout') {
+                console.warn('Request timed out');
+                throw new Error('Request timed out. Please check your connection and try again.');
+              }
+              throw new Error('Request was cancelled');
+            }
+            if (error.name === 'TimeoutError') {
               throw new Error('Request timed out. Please check your connection and try again.');
             }
             if (error.message === 'Failed to fetch' || error.message.includes('Network')) {
-              throw new Error('Unable to connect to server. Please check your internet connection or try again later.');
+              console.warn('Network error:', error.message);
+              throw new Error('Unable to connect to server. Please check your internet connection.');
             }
           }
+          console.error('API fetch error:', error);
           throw error;
         }
       },
@@ -98,37 +135,6 @@ export const createTRPCClient = () => {
           return {
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
           };
-        },
-        fetch: async (url, options) => {
-          const baseUrl = getBaseUrl();
-          if (!baseUrl) {
-            console.log('No API URL configured, using offline mode');
-            throw new Error('Backend not configured. Running in offline mode.');
-          }
-          
-          try {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 30000);
-            
-            const response = await fetch(url, {
-              ...options,
-              signal: controller.signal,
-            });
-            
-            clearTimeout(timeoutId);
-            return response;
-          } catch (error) {
-            console.error('API fetch error:', error);
-            if (error instanceof Error) {
-              if (error.name === 'AbortError' || error.name === 'TimeoutError') {
-                throw new Error('Request timed out. Please check your connection and try again.');
-              }
-              if (error.message === 'Failed to fetch' || error.message.includes('Network')) {
-                throw new Error('Unable to connect to server. Please check your internet connection or try again later.');
-              }
-            }
-            throw error;
-          }
         },
       }),
     ],

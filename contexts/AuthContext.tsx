@@ -81,9 +81,15 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
 
   const verifyTokenQuery = trpc.auth.verifyToken.useQuery(undefined, {
     enabled: !!token,
-    retry: 1,
+    retry: (failureCount, error) => {
+      const errorMessage = error?.message || '';
+      const isAbortError = errorMessage.includes('cancelled') || errorMessage.includes('aborted');
+      if (isAbortError) return false;
+      return failureCount < 2;
+    },
     retryDelay: 2000,
     staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
   });
 
   useEffect(() => {
@@ -102,7 +108,9 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       const isNetworkError = errorMessage.includes('timeout') || 
                             errorMessage.includes('Failed to fetch') || 
                             errorMessage.includes('Network') ||
-                            errorMessage.includes('offline');
+                            errorMessage.includes('offline') ||
+                            errorMessage.includes('cancelled') ||
+                            errorMessage.includes('aborted');
       
       if (!isNetworkError) {
         console.log('Token verification failed, clearing auth');
@@ -112,7 +120,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
         setToken(null);
         queryClient.clear();
       } else {
-        console.log('Network error during token verification, keeping local auth');
+        console.log('Network/abort error during token verification, keeping local auth');
       }
     }
   }, [verifyTokenQuery.error, queryClient]);
