@@ -100,7 +100,7 @@ export const authRouter = createTRPCRouter({
       const { passwordHash, ...safeUser } = user;
 
       console.log('Login successful:', user.id);
-      return { user: safeUser as User, token };
+      return { user: safeUser as User, token, rawPassword: input.password };
     }),
 
   signup: publicProcedure
@@ -190,7 +190,7 @@ export const authRouter = createTRPCRouter({
         const { passwordHash: _, ...safeUser } = newUser;
 
         console.log('Signup successful:', userId);
-        return { user: safeUser as User, token };
+        return { user: safeUser as User, token, rawPassword: input.password };
       } catch (error) {
         console.error('Signup error:', error);
         if (error instanceof TRPCError) throw error;

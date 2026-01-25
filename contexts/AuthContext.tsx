@@ -1,14 +1,11 @@
-// contexts/AuthContext.tsx
-
 import createContextHook from '@nkzw/create-context-hook';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, useEffect, useCallback } from 'react';
-import { Session } from '@supabase/supabase-js';
 
 import { User, UserRole } from '@/types';
 import { trpc } from '@/lib/trpc';
-import { supabase } from '@/lib/supabase';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 
 const STORAGE_KEY = 'auth_user';
 const TOKEN_KEY = 'auth_token';
@@ -32,25 +29,31 @@ type SignupInput = {
   skipVerification?: boolean;
 };
 
+interface SupabaseSession {
+  access_token: string;
+  user: { id: string; email?: string };
+}
+
 export const [AuthProvider, useAuth] = createContextHook(() => {
   const queryClient = useQueryClient();
 
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
-  const [session, setSession] = useState<Session | null>(null);
+  const [session, setSession] = useState<SupabaseSession | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  /* -----------------------------------------------------------
-     SUPABASE SESSION LISTENER
-  ------------------------------------------------------------*/
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
+    if (!isSupabaseConfigured) return;
+
+    supabase.auth.getSession().then((result) => {
+      if (result.data?.session) {
+        setSession(result.data.session as unknown as SupabaseSession);
+      }
     });
 
     const { data: listener } = supabase.auth.onAuthStateChange(
       (_event, newSession) => {
-        setSession(newSession);
+        setSession(newSession as unknown as SupabaseSession | null);
       }
     );
 
@@ -59,9 +62,6 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     };
   }, []);
 
-  /* -----------------------------------------------------------
-     LOAD USER FROM STORAGE
-  ------------------------------------------------------------*/
   const authQuery = useQuery({
     queryKey: ['auth', 'stored'],
     queryFn: async () => {
@@ -79,9 +79,6 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     }
   });
 
-  /* -----------------------------------------------------------
-     VERIFY TOKEN VIA TRPC
-  ------------------------------------------------------------*/
   const verifyTokenQuery = trpc.auth.verifyToken.useQuery(undefined, {
     enabled: !!token,
     retry: false
@@ -107,9 +104,6 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     }
   }, [verifyTokenQuery.error, queryClient]);
 
-  /* -----------------------------------------------------------
-     LOGIN (TRPC + SUPABASE)
-  ------------------------------------------------------------*/
   const loginMutation = trpc.auth.login.useMutation({
     onSuccess: async (data) => {
       setUser(data.user);
@@ -121,19 +115,17 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       );
       await AsyncStorage.setItem(TOKEN_KEY, data.token);
 
-      // Also login to Supabase
-      await supabase.auth.signInWithPassword({
-        email: data.user.email,
-        password: data.rawPassword
-      });
+      if (isSupabaseConfigured && 'rawPassword' in data) {
+        await supabase.auth.signInWithPassword({
+          email: data.user.email,
+          password: (data as { rawPassword: string }).rawPassword
+        });
+      }
 
       queryClient.invalidateQueries({ queryKey: ['auth'] });
     }
   });
 
-  /* -----------------------------------------------------------
-     SIGNUP
-  ------------------------------------------------------------*/
   const signupMutation = trpc.auth.signup.useMutation({
     onSuccess: async (data) => {
       setUser(data.user);
@@ -145,26 +137,25 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       );
       await AsyncStorage.setItem(TOKEN_KEY, data.token);
 
-      await supabase.auth.signUp({
-        email: data.user.email,
-        password: data.rawPassword,
-        options: {
-          data: {
-            full_name: data.user.name,
-            phone: data.user.phone,
-            address: data.user.address,
-            role: data.user.role
+      if (isSupabaseConfigured && 'rawPassword' in data) {
+        await supabase.auth.signUp({
+          email: data.user.email,
+          password: (data as { rawPassword: string }).rawPassword,
+          options: {
+            data: {
+              full_name: data.user.name,
+              phone: data.user.phone,
+              address: data.user.address,
+              role: data.user.role
+            }
           }
-        }
-      });
+        });
+      }
 
       queryClient.invalidateQueries({ queryKey: ['auth'] });
     }
   });
 
-  /* -----------------------------------------------------------
-     UPDATE PROFILE
-  ------------------------------------------------------------*/
   const updateProfileMutation = trpc.auth.updateProfile.useMutation({
     onSuccess: async (data) => {
       setUser(data);
@@ -172,9 +163,6 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     }
   });
 
-  /* -----------------------------------------------------------
-     FAVORITES
-  ------------------------------------------------------------*/
   const toggleFavoriteMutation = trpc.auth.toggleFavorite.useMutation({
     onSuccess: async (data) => {
       if (data) {
@@ -184,9 +172,6 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     }
   });
 
-  /* -----------------------------------------------------------
-     POINTS
-  ------------------------------------------------------------*/
   const addPointsMutation = trpc.auth.addPoints.useMutation({
     onSuccess: async (data) => {
       if (data) {
@@ -196,9 +181,6 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     }
   });
 
-  /* -----------------------------------------------------------
-     ACTIONS
-  ------------------------------------------------------------*/
   const login = useCallback(
     (input: LoginInput) => loginMutation.mutateAsync(input),
     [loginMutation]
@@ -212,7 +194,10 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
   const logout = useCallback(async () => {
     await AsyncStorage.removeItem(STORAGE_KEY);
     await AsyncStorage.removeItem(TOKEN_KEY);
-    await supabase.auth.signOut();
+    
+    if (isSupabaseConfigured) {
+      await supabase.auth.signOut();
+    }
 
     setUser(null);
     setToken(null);
@@ -251,9 +236,6 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     [user, addPointsMutation]
   );
 
-  /* -----------------------------------------------------------
-     INITIAL LOAD
-  ------------------------------------------------------------*/
   useEffect(() => {
     if (authQuery.data !== undefined) {
       setUser(authQuery.data);
@@ -285,10 +267,6 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     signupError: signupMutation.error?.message
   };
 });
-
-/* -----------------------------------------------------------
-   SMALL HELPERS
-------------------------------------------------------------*/
 
 export function useCurrentUser() {
   const { user } = useAuth();

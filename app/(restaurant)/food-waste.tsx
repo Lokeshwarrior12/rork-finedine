@@ -24,7 +24,7 @@ import {
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 
-const { width } = Dimensions.get('window');
+const { width: _screenWidth } = Dimensions.get('window');
 
 interface WasteEntry {
   id: string;
@@ -76,7 +76,7 @@ export default function FoodWasteScreen() {
   const [selectedMonth, setSelectedMonth] = useState(new Date());
   const [newItemName, setNewItemName] = useState('');
   const [newQuantity, setNewQuantity] = useState('');
-  const [editingId, setEditingId] = useState<string | null>(null);
+  const [_editingId, _setEditingId] = useState<string | null>(null);
 
   const styles = createStyles(colors, isDark);
 
@@ -212,7 +212,7 @@ export default function FoodWasteScreen() {
                   {entry.date.slice(5)}
                 </Text>
                 <Pressable 
-                  style={[styles.spreadsheetCell, styles.cellAction]}
+                  style={styles.cellAction}
                   onPress={() => handleDeleteEntry(entry.id)}
                 >
                   <Trash2 size={16} color={colors.error} />
