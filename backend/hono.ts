@@ -1,12 +1,15 @@
 import { trpcServer } from "@hono/trpc-server";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import { logger } from "hono/logger";
 
 import { appRouter } from "./trpc/app-router";
 import { createContext } from "./trpc/create-context";
 import { db } from "./db";
 
 const app = new Hono();
+
+app.use("*", logger());
 
 app.use("*", cors({
   origin: '*',
@@ -18,12 +21,34 @@ app.use("*", cors({
 }));
 
 app.use(async (c, next) => {
+  const startTime = Date.now();
   try {
     await db.init();
   } catch (error) {
     console.error('Database initialization error:', error);
   }
+  
   await next();
+  
+  const duration = Date.now() - startTime;
+  console.log(`[${c.req.method}] ${c.req.url} - ${duration}ms`);
+});
+
+app.onError((err, c) => {
+  console.error('Server error:', err);
+  return c.json({
+    error: 'Internal Server Error',
+    message: process.env.NODE_ENV === 'development' ? err.message : 'Something went wrong',
+    timestamp: new Date().toISOString(),
+  }, 500);
+});
+
+app.notFound((c) => {
+  return c.json({
+    error: 'Not Found',
+    message: `Route ${c.req.method} ${c.req.url} not found`,
+    timestamp: new Date().toISOString(),
+  }, 404);
 });
 
 app.use(
@@ -41,16 +66,28 @@ app.get("/", (c) => {
     message: "FineDine API is running",
     version: "1.0.0",
     timestamp: new Date().toISOString(),
+    endpoints: {
+      health: "/health",
+      trpc: "/api/trpc",
+    }
   });
 });
 
-app.get("/health", (c) => {
+app.get("/health", async (c) => {
+  let dbStatus = "operational";
+  try {
+    await db.init();
+  } catch {
+    dbStatus = "degraded";
+  }
+  
   return c.json({ 
-    status: "healthy", 
+    status: dbStatus === "operational" ? "healthy" : "degraded", 
     timestamp: new Date().toISOString(),
+    uptime: process.uptime ? process.uptime() : undefined,
     services: {
       api: "operational",
-      database: "operational",
+      database: dbStatus,
     }
   });
 });

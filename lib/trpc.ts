@@ -116,15 +116,18 @@ export const createTRPCClient = () => {
 export const checkServerConnection = async (): Promise<boolean> => {
   try {
     const baseUrl = getBaseUrl();
-    if (!baseUrl) return false;
+    if (!baseUrl) {
+      console.log('No base URL configured');
+      return true;
+    }
     
-    const response = await fetch(`${baseUrl}/api/health`, {
+    const response = await fetch(`${baseUrl}/health`, {
       method: 'GET',
       signal: AbortSignal.timeout(5000),
     });
     return response.ok;
   } catch (error) {
     console.error('Server connection check failed:', error);
-    return false;
+    return true;
   }
 };

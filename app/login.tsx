@@ -17,7 +17,7 @@ import { Mail, Lock, X, Eye, EyeOff } from 'lucide-react-native';
 import { useAuth } from '@/contexts/AuthContext';
 import Colors from '@/constants/colors';
 import { UserRole } from '@/types';
-import { trpc, checkServerConnection } from '@/lib/trpc';
+import { checkServerConnection } from '@/lib/trpc';
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -29,19 +29,7 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
-  const [seedMessage, setSeedMessage] = useState('');
   const [isCheckingConnection, setIsCheckingConnection] = useState(false);
-
-  const seedMutation = trpc.auth.seedDatabase.useMutation({
-    onSuccess: () => {
-      setSeedMessage('Sample users created! You can now login.');
-      console.log('Database seeded successfully');
-    },
-    onError: (err) => {
-      console.error('Seed error:', err);
-      setSeedMessage('Seeding complete (users may already exist)');
-    },
-  });
 
   const isRestaurant = role === 'restaurant_owner';
 
@@ -175,39 +163,25 @@ export default function LoginScreen() {
 
             <View style={styles.signupRow}>
               <Text style={styles.signupText}>Don&apos;t have an account? </Text>
-              <Pressable onPress={() => router.push(`/signup?role=${role}`)}>
+              <Pressable onPress={() => {
+                if (isRestaurant) {
+                  router.push('/partner');
+                } else {
+                  router.push(`/signup?role=${role}`);
+                }
+              }}>
                 <Text style={styles.signupLink}>Sign Up</Text>
               </Pressable>
             </View>
 
-            <View style={styles.testAccountsSection}>
-              <Text style={styles.testAccountsTitle}>Test Accounts</Text>
-              <Text style={styles.testAccountInfo}>
-                Customer: b14175705@gmail.com
-              </Text>
-              <Text style={styles.testAccountInfo}>
-                Restaurant: lokeshwarrior12@gmail.com
-              </Text>
-              <Text style={styles.testAccountInfo}>
-                Password: Daddy@2502
-              </Text>
-              
-              {seedMessage ? (
-                <Text style={styles.seedMessage}>{seedMessage}</Text>
-              ) : null}
-              
-              <Pressable
-                style={[styles.seedButton, seedMutation.isPending && styles.seedButtonDisabled]}
-                onPress={() => seedMutation.mutate()}
-                disabled={seedMutation.isPending}
+            {!isRestaurant && (
+              <Pressable 
+                style={styles.partnerButton}
+                onPress={() => router.push('/partner')}
               >
-                {seedMutation.isPending ? (
-                  <ActivityIndicator color={Colors.primary} size="small" />
-                ) : (
-                  <Text style={styles.seedButtonText}>Initialize Test Users</Text>
-                )}
+                <Text style={styles.partnerButtonText}>Become a Partner Restaurant</Text>
               </Pressable>
-            </View>
+            )}
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -317,48 +291,19 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600' as const,
   },
-  testAccountsSection: {
-    marginTop: 32,
-    padding: 16,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 16,
+  partnerButton: {
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
-  },
-  testAccountsTitle: {
-    color: Colors.surface,
-    fontSize: 14,
-    fontWeight: '600' as const,
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  testAccountInfo: {
-    color: 'rgba(255, 255, 255, 0.7)',
-    fontSize: 12,
-    textAlign: 'center',
-    marginBottom: 2,
-  },
-  seedMessage: {
-    color: Colors.success,
-    fontSize: 12,
-    textAlign: 'center',
-    marginTop: 8,
-  },
-  seedButton: {
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    marginTop: 12,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+    height: 48,
+    borderRadius: 12,
     alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 16,
   },
-  seedButtonDisabled: {
-    opacity: 0.6,
-  },
-  seedButtonText: {
-    color: Colors.surface,
-    fontSize: 13,
+  partnerButtonText: {
+    fontSize: 15,
     fontWeight: '500' as const,
+    color: Colors.surface,
   },
   loadingContainer: {
     flexDirection: 'row',

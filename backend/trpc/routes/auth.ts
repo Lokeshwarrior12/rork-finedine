@@ -4,7 +4,6 @@ import { createTRPCRouter, publicProcedure, protectedProcedure } from "../create
 import { db } from "@/backend/db";
 import { generateToken, hashPassword, verifyPassword } from "@/backend/auth/jwt";
 import { User, UserRole } from "@/types";
-import { seedSampleUsers } from "@/backend/db/seed";
 
 export const authRouter = createTRPCRouter({
   sendVerificationCode: publicProcedure
@@ -319,16 +318,5 @@ export const authRouter = createTRPCRouter({
     return { valid: true, user: safeUser as User };
   }),
 
-  seedDatabase: publicProcedure.mutation(async () => {
-    try {
-      const result = await seedSampleUsers();
-      return result;
-    } catch (error) {
-      console.error('Seed error:', error);
-      throw new TRPCError({
-        code: "INTERNAL_SERVER_ERROR",
-        message: "Failed to seed database",
-      });
-    }
-  }),
+
 });

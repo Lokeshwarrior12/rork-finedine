@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,9 @@ import {
   Modal,
   TextInput,
   Animated,
+  FlatList,
+  NativeSyntheticEvent,
+  NativeScrollEvent,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter, useLocalSearchParams, Stack } from 'expo-router';
@@ -113,10 +116,27 @@ export default function RestaurantDetailScreen() {
   const [claimingDealId, setClaimingDealId] = useState<string | null>(null);
   const [showClaimSuccess, setShowClaimSuccess] = useState(false);
   const [claimedDeal, setClaimedDeal] = useState<Deal | null>(null);
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const imageSliderRef = useRef<FlatList>(null);
 
   const restaurant = restaurants.find(r => r.id === id);
   const restaurantDeals = deals.filter(d => d.restaurantId === id && d.isActive);
   const restaurantServices = services.filter(s => s.restaurantId === id);
+
+  const handleImageScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const slideIndex = Math.round(event.nativeEvent.contentOffset.x / width);
+    setCurrentImageIndex(slideIndex);
+  }, []);
+
+  const renderImageItem = useCallback(({ item }: { item: string }) => (
+    <View style={styles.imageSlide}>
+      <Image
+        source={{ uri: item }}
+        style={styles.heroImage}
+        contentFit="cover"
+      />
+    </View>
+  ), []);
 
   if (!restaurant) {
     return (
@@ -172,14 +192,22 @@ export default function RestaurantDetailScreen() {
       <View style={styles.container}>
         <ScrollView showsVerticalScrollIndicator={false}>
           <View style={styles.imageContainer}>
-            <Image
-              source={{ uri: restaurant.images[0] }}
-              style={styles.heroImage}
-              contentFit="cover"
+            <FlatList
+              ref={imageSliderRef}
+              data={restaurant.images.length > 0 ? restaurant.images : ['https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800']}
+              renderItem={renderImageItem}
+              keyExtractor={(item, index) => `image-${index}`}
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              onScroll={handleImageScroll}
+              scrollEventThrottle={16}
+              bounces={false}
             />
             <LinearGradient
               colors={['rgba(0,0,0,0.4)', 'transparent', 'rgba(0,0,0,0.6)']}
               style={styles.imageGradient}
+              pointerEvents="none"
             />
             <View style={[styles.headerButtons, { top: insets.top + 10 }]}>
               <Pressable style={styles.headerButton} onPress={() => router.back()}>
@@ -193,6 +221,19 @@ export default function RestaurantDetailScreen() {
                 />
               </Pressable>
             </View>
+            {restaurant.images.length > 1 && (
+              <View style={styles.paginationContainer}>
+                {restaurant.images.map((_, index) => (
+                  <View
+                    key={index}
+                    style={[
+                      styles.paginationDot,
+                      currentImageIndex === index && styles.paginationDotActive,
+                    ]}
+                  />
+                ))}
+              </View>
+            )}
           </View>
 
           <View style={styles.content}>
@@ -487,9 +528,33 @@ const styles = StyleSheet.create({
     height: 280,
     position: 'relative',
   },
+  imageSlide: {
+    width: width,
+    height: 280,
+  },
   heroImage: {
     width: '100%',
     height: '100%',
+  },
+  paginationContainer: {
+    position: 'absolute',
+    bottom: 16,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+  },
+  paginationDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: 'rgba(255, 255, 255, 0.5)',
+  },
+  paginationDotActive: {
+    backgroundColor: Colors.surface,
+    width: 24,
   },
   imageGradient: {
     ...StyleSheet.absoluteFillObject,

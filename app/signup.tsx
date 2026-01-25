@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -45,6 +45,14 @@ export default function SignupScreen() {
   const { role } = useLocalSearchParams<{ role: string }>();
   const { signup, signupPending } = useAuth();
 
+  const isRestaurant = role === 'restaurant_owner';
+
+  useEffect(() => {
+    if (isRestaurant) {
+      router.replace('/partner');
+    }
+  }, [isRestaurant, router]);
+
   const [step, setStep] = useState<'preferences' | 'details' | 'verify' | 'password'>('preferences');
   const [selectedCuisines, setSelectedCuisines] = useState<string[]>([]);
   const [name, setName] = useState('');
@@ -54,8 +62,6 @@ export default function SignupScreen() {
   const [password, setPassword] = useState('');
   const [verificationCode, setVerificationCode] = useState('');
   const [error, setError] = useState('');
-
-  const isRestaurant = role === 'restaurant_owner';
 
   const sendCodeMutation = trpc.auth.sendVerificationCode.useMutation({
     onSuccess: (data) => {
