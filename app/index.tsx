@@ -132,6 +132,17 @@ export default function WelcomeScreen() {
             </LinearGradient>
           </Pressable>
         </View>
+        // ... existing imports ...
+
+        <Tabs.Screen
+          name="test"
+          options={{
+            title: 'Test DB',
+            tabBarIcon: ({ color, size }) => (
+              <Icon size={size} color={color} name="database" /> // or any lucide icon
+              ),
+          }}
+          />
 
         <Pressable 
           style={styles.partnerLink}
