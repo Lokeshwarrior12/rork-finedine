@@ -8,28 +8,31 @@
     "scheme": "rork-app",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+
     "splash": {
       "image": "./assets/images/splash-icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
+
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "app.rork.foodiepartner-app"
     },
+
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
       "package": "app.rork.foodiepartner_app",
-      "permissions": [
-        "android.permission.VIBRATE"
-      ]
+      "permissions": ["android.permission.VIBRATE"]
     },
+
     "web": {
       "favicon": "./assets/images/favicon.png"
     },
+
     "plugins": [
       [
         "expo-router",
@@ -40,8 +43,17 @@
       "expo-font",
       "expo-web-browser"
     ],
+
     "experiments": {
       "typedRoutes": true
+    },
+
+    "extra": {
+      "eas": {
+        "projectId": "70eb24db"
+      },
+      "supabaseUrl": "https://ibyyhjwrhaehhmznyadz.supabase.co",
+      "supabaseAnonKey": "PASTE_YOUR_FULL_SUPABASE_ANON_KEY_HERE"
     }
   }
 }
