@@ -17,7 +17,7 @@ import { Mail, Lock, X, Eye, EyeOff } from 'lucide-react-native';
 import { useAuth } from '@/contexts/AuthContext';
 import Colors from '@/constants/colors';
 import { UserRole } from '@/types';
-import { trpc } from '@/lib/trpc';
+import { trpc, checkServerConnection } from '@/lib/trpc';
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -30,6 +30,7 @@ export default function LoginScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [seedMessage, setSeedMessage] = useState('');
+  const [isCheckingConnection, setIsCheckingConnection] = useState(false);
 
   const seedMutation = trpc.auth.seedDatabase.useMutation({
     onSuccess: () => {
@@ -50,6 +51,16 @@ export default function LoginScreen() {
       return;
     }
     setError('');
+    
+    setIsCheckingConnection(true);
+    const isConnected = await checkServerConnection();
+    setIsCheckingConnection(false);
+    
+    if (!isConnected) {
+      setError('Unable to connect to server. Please check your internet connection or try again later.');
+      return;
+    }
+    
     try {
       await login({ email, password, role: (role as UserRole) || 'customer' });
       if (isRestaurant) {
@@ -57,8 +68,23 @@ export default function LoginScreen() {
       } else {
         router.replace('/(customer)/home' as any);
       }
-    } catch {
-      setError('Login failed. Please try again.');
+    } catch (err) {
+      console.error('Login error:', err);
+      if (err instanceof Error) {
+        if (err.message.includes('Unable to connect') || err.message.includes('Failed to fetch')) {
+          setError('Server connection failed. Please try again later.');
+        } else if (err.message.includes('not found') || err.message.includes('NOT_FOUND')) {
+          setError('User not found. Please sign up first.');
+        } else if (err.message.includes('password') || err.message.includes('UNAUTHORIZED')) {
+          setError('Invalid email or password.');
+        } else if (err.message.includes('role')) {
+          setError('Account exists with different role. Please select correct role.');
+        } else {
+          setError(err.message || 'Login failed. Please try again.');
+        }
+      } else {
+        setError('Login failed. Please try again.');
+      }
     }
   };
 
@@ -131,12 +157,17 @@ export default function LoginScreen() {
             </Pressable>
 
             <Pressable
-              style={[styles.loginButton, loginPending && styles.loginButtonDisabled]}
+              style={[styles.loginButton, (loginPending || isCheckingConnection) && styles.loginButtonDisabled]}
               onPress={handleLogin}
-              disabled={loginPending}
+              disabled={loginPending || isCheckingConnection}
             >
-              {loginPending ? (
-                <ActivityIndicator color={Colors.surface} />
+              {loginPending || isCheckingConnection ? (
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator color={Colors.primary} />
+                  <Text style={styles.loadingText}>
+                    {isCheckingConnection ? 'Connecting...' : 'Signing in...'}
+                  </Text>
+                </View>
               ) : (
                 <Text style={styles.loginButtonText}>Sign In</Text>
               )}
@@ -327,6 +358,16 @@ const styles = StyleSheet.create({
   seedButtonText: {
     color: Colors.surface,
     fontSize: 13,
+    fontWeight: '500' as const,
+  },
+  loadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  loadingText: {
+    color: Colors.primary,
+    fontSize: 16,
     fontWeight: '500' as const,
   },
 });
