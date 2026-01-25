@@ -1,22 +1,23 @@
 // lib/storage.ts
-
-import { supabase } from '@/lib/supabase';
+import { supabase } from './supabase';
 
 export async function uploadImage(
-  fileUri: string,
   bucket: string,
-  path: string
+  path: string,
+  file: any
 ) {
-  const response = await fetch(fileUri);
-  const blob = await response.blob();
-
-  const { data, error } = await supabase.storage
+  const { error } = await supabase.storage
     .from(bucket)
-    .upload(path, blob, {
-      contentType: 'image/jpeg',
-      upsert: true,
+    .upload(path, file, {
+      upsert: true
     });
 
   if (error) throw error;
-  return data.path;
+
+  return path;
+}
+
+export function getPublicImageUrl(bucket: string, path: string) {
+  const { data } = supabase.storage.from(bucket).getPublicUrl(path);
+  return data.publicUrl;
 }
