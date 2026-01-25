@@ -8,18 +8,15 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  ActivityIndicator,
   Dimensions,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { User, Mail, Lock, Phone, MapPin, X, ChevronRight, Star, Check, Shield } from 'lucide-react-native';
+import { User, Mail, Lock, Phone, MapPin, X, ChevronRight, Star, Check } from 'lucide-react-native';
 import { Image } from 'expo-image';
-import { useAuth } from '@/contexts/AuthContext';
-import { trpc } from '@/lib/trpc';
 import Colors from '@/constants/colors';
-import { UserRole } from '@/types';
+import { supabase } from '@/lib/supabase';
 import { restaurants } from '@/mocks/data';
 
 const { width } = Dimensions.get('window');
@@ -43,7 +40,6 @@ export default function SignupScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { role } = useLocalSearchParams<{ role: string }>();
-  const { signup, signupPending } = useAuth();
 
   const isRestaurant = role === 'restaurant_owner';
 
@@ -53,36 +49,15 @@ export default function SignupScreen() {
     }
   }, [isRestaurant, router]);
 
-  const [step, setStep] = useState<'preferences' | 'details' | 'verify' | 'password'>('preferences');
+  const [step, setStep] = useState<'preferences' | 'details' | 'confirm'>('preferences');
   const [selectedCuisines, setSelectedCuisines] = useState<string[]>([]);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
-  const [address, setAddress] = useState('');
+  the [address, setAddress] = useState('');
   const [password, setPassword] = useState('');
-  const [verificationCode, setVerificationCode] = useState('');
   const [error, setError] = useState('');
-
-  const sendCodeMutation = trpc.auth.sendVerificationCode.useMutation({
-    onSuccess: (data) => {
-      console.log('Verification code sent:', data.code);
-      setStep('verify');
-      setError('');
-    },
-    onError: (err) => {
-      setError(err.message || 'Failed to send verification code');
-    },
-  });
-
-  const verifyCodeMutation = trpc.auth.verifyCode.useMutation({
-    onSuccess: () => {
-      setStep('password');
-      setError('');
-    },
-    onError: (err) => {
-      setError(err.message || 'Invalid verification code');
-    },
-  });
+  const [loading, setLoading] = useState(false);
 
   const toggleCuisine = (cuisineId: string) => {
     if (selectedCuisines.includes(cuisineId)) {
@@ -108,8 +83,8 @@ export default function SignupScreen() {
     setStep('details');
   };
 
-  const handleContinueFromDetails = () => {
-    if (!name || !email || !phone || !address) {
+  const handleContinueFromDetails = async () => {
+    if (!name || !email || !phone || !address || !password) {
       setError('Please fill in all fields');
       return;
     }
@@ -117,46 +92,53 @@ export default function SignupScreen() {
       setError('Please enter a valid email');
       return;
     }
-    setError('');
-    sendCodeMutation.mutate({ email });
-  };
-
-  const handleVerifyCode = () => {
-    if (verificationCode.length !== 6) {
-      setError('Please enter the 6-digit code');
-      return;
-    }
-    verifyCodeMutation.mutate({ email, code: verificationCode });
-  };
-
-  const handleSignup = async () => {
-    if (!password || password.length < 6) {
+    if (password.length < 6) {
       setError('Password must be at least 6 characters');
       return;
     }
     setError('');
+    setLoading(true);
+
     try {
-      await signup({
-        name,
+      const { data, error } = await supabase.auth.signUp({
         email,
-        phone,
-        address,
         password,
-        role: (role as UserRole) || 'customer',
-        cuisinePreferences: selectedCuisines,
-        skipVerification: true,
+        options: {
+          data: {
+            name,
+            role: 'customer',
+            phone,
+            address,
+            cuisinePreferences: selectedCuisines,
+          }
+        }
       });
-      if (isRestaurant) {
-        router.replace('/(restaurant)/dashboard' as any);
-      } else {
-        router.replace('/(customer)/home' as any);
+      if (error) throw error;
+
+      if (data.user) {
+        await supabase.from('profiles').insert({
+          id: data.user.id,
+          name,
+          role: 'customer',
+          phone,
+          address,
+          cuisinePreferences: selectedCuisines,
+        });
       }
-    } catch {
-      setError('Signup failed. Please try again.');
+
+      if (data.session) {
+        router.replace('/(customer)/home');
+      } else {
+        setStep('confirm');
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to create account');
+    } finally {
+      setLoading(false);
     }
   };
 
-  if (!isRestaurant && step === 'preferences') {
+  if (step === 'preferences') {
     return (
       <View style={styles.container}>
         <LinearGradient
@@ -177,7 +159,7 @@ export default function SignupScreen() {
           <View style={styles.header}>
             <Text style={styles.title}>What do you love?</Text>
             <Text style={styles.subtitle}>
-              Select your 3 favorite cuisines and we&apos;ll suggest the best restaurants for you
+              Select your 3 favorite cuisines and we'll suggest the best restaurants for you
             </Text>
           </View>
 
@@ -252,7 +234,7 @@ export default function SignupScreen() {
     );
   }
 
-  if (!isRestaurant && step === 'details') {
+  if (step === 'details') {
     return (
       <View style={styles.container}>
         <LinearGradient
@@ -344,17 +326,29 @@ export default function SignupScreen() {
                 />
               </View>
 
+              <View style={styles.inputContainer}>
+                <Lock size={20} color={Colors.textLight} style={styles.inputIcon} />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Password"
+                  placeholderTextColor={Colors.textLight}
+                  value={password}
+                  onChangeText={setPassword}
+                  secureTextEntry
+                />
+              </View>
+
               {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
               <Pressable
-                style={[styles.signupButton, sendCodeMutation.isPending && styles.signupButtonDisabled]}
+                style={[styles.signupButton, loading && styles.signupButtonDisabled]}
                 onPress={handleContinueFromDetails}
-                disabled={sendCodeMutation.isPending}
+                disabled={loading}
               >
-                {sendCodeMutation.isPending ? (
+                {loading ? (
                   <ActivityIndicator color={Colors.primary} />
                 ) : (
-                  <Text style={styles.signupButtonText}>Continue</Text>
+                  <Text style={styles.signupButtonText}>Create Account</Text>
                 )}
               </Pressable>
 
@@ -368,7 +362,7 @@ export default function SignupScreen() {
     );
   }
 
-  if (!isRestaurant && step === 'verify') {
+  if (step === 'confirm') {
     return (
       <View style={styles.container}>
         <LinearGradient
@@ -376,273 +370,51 @@ export default function SignupScreen() {
           style={StyleSheet.absoluteFill}
         />
         
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={styles.keyboardView}
-        >
-          <ScrollView
-            contentContainerStyle={[
-              styles.scrollContent,
-              { paddingTop: insets.top + 20, paddingBottom: insets.bottom + 20 },
-            ]}
-            keyboardShouldPersistTaps="handled"
-          >
-            <Pressable style={styles.closeButton} onPress={() => router.back()}>
-              <X size={24} color={Colors.surface} />
-            </Pressable>
-
-            <View style={styles.verifyContainer}>
-              <View style={styles.verifyIconWrap}>
-                <Mail size={48} color={Colors.surface} />
-              </View>
-              <Text style={styles.verifyTitle}>Verify Your Email</Text>
-              <Text style={styles.verifySubtitle}>
-                We&apos;ve sent a 6-digit code to{'\n'}
-                <Text style={styles.verifyEmail}>{email}</Text>
-              </Text>
-
-              <View style={styles.codeInputContainer}>
-                <TextInput
-                  style={styles.codeInput}
-                  placeholder="000000"
-                  placeholderTextColor="rgba(255,255,255,0.3)"
-                  value={verificationCode}
-                  onChangeText={setVerificationCode}
-                  keyboardType="number-pad"
-                  maxLength={6}
-                />
-              </View>
-
-              {error ? <Text style={styles.errorText}>{error}</Text> : null}
-
-              <Pressable
-                style={[styles.signupButton, verifyCodeMutation.isPending && styles.signupButtonDisabled]}
-                onPress={handleVerifyCode}
-                disabled={verifyCodeMutation.isPending}
-              >
-                {verifyCodeMutation.isPending ? (
-                  <ActivityIndicator color={Colors.primary} />
-                ) : (
-                  <Text style={styles.signupButtonText}>Verify Email</Text>
-                )}
-              </Pressable>
-
-              <Pressable 
-                style={styles.resendButton}
-                onPress={() => sendCodeMutation.mutate({ email })}
-                disabled={sendCodeMutation.isPending}
-              >
-                <Text style={styles.resendText}>
-                  {sendCodeMutation.isPending ? 'Sending...' : 'Resend Code'}
-                </Text>
-              </Pressable>
-
-              <Pressable style={styles.backLink} onPress={() => setStep('details')}>
-                <Text style={styles.backLinkText}>← Back</Text>
-              </Pressable>
-            </View>
-          </ScrollView>
-        </KeyboardAvoidingView>
-      </View>
-    );
-  }
-
-  if (!isRestaurant && step === 'password') {
-    return (
-      <View style={styles.container}>
-        <LinearGradient
-          colors={[Colors.primary, Colors.primaryDark]}
-          style={StyleSheet.absoluteFill}
-        />
-        
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={styles.keyboardView}
-        >
-          <ScrollView
-            contentContainerStyle={[
-              styles.scrollContent,
-              { paddingTop: insets.top + 20, paddingBottom: insets.bottom + 20 },
-            ]}
-            keyboardShouldPersistTaps="handled"
-          >
-            <Pressable style={styles.closeButton} onPress={() => router.back()}>
-              <X size={24} color={Colors.surface} />
-            </Pressable>
-
-            <View style={styles.verifyContainer}>
-              <View style={[styles.verifyIconWrap, { backgroundColor: 'rgba(76, 175, 80, 0.2)' }]}>
-                <Shield size={48} color="#4CAF50" />
-              </View>
-              <Text style={styles.verifyTitle}>Almost Done!</Text>
-              <Text style={styles.verifySubtitle}>
-                Create a secure password to protect your account
-              </Text>
-
-              <View style={[styles.inputContainer, { width: '100%', marginTop: 20 }]}>
-                <Lock size={20} color={Colors.textLight} style={styles.inputIcon} />
-                <TextInput
-                  style={styles.input}
-                  placeholder="Create Password (min 6 chars)"
-                  placeholderTextColor={Colors.textLight}
-                  value={password}
-                  onChangeText={setPassword}
-                  secureTextEntry
-                />
-              </View>
-
-              {error ? <Text style={styles.errorText}>{error}</Text> : null}
-
-              <Pressable
-                style={[styles.signupButton, { width: '100%' }, signupPending && styles.signupButtonDisabled]}
-                onPress={handleSignup}
-                disabled={signupPending}
-              >
-                {signupPending ? (
-                  <ActivityIndicator color={Colors.primary} />
-                ) : (
-                  <Text style={styles.signupButtonText}>Create Account</Text>
-                )}
-              </Pressable>
-
-              <Pressable style={styles.backLink} onPress={() => setStep('verify')}>
-                <Text style={styles.backLinkText}>← Back</Text>
-              </Pressable>
-            </View>
-          </ScrollView>
-        </KeyboardAvoidingView>
-      </View>
-    );
-  }
-
-  return (
-    <View style={styles.container}>
-      <LinearGradient
-        colors={isRestaurant ? ['#1A1A2E', '#16213E'] : [Colors.primary, Colors.primaryDark]}
-        style={StyleSheet.absoluteFill}
-      />
-      
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.keyboardView}
-      >
         <ScrollView
           contentContainerStyle={[
             styles.scrollContent,
             { paddingTop: insets.top + 20, paddingBottom: insets.bottom + 20 },
           ]}
-          keyboardShouldPersistTaps="handled"
         >
           <Pressable style={styles.closeButton} onPress={() => router.back()}>
             <X size={24} color={Colors.surface} />
           </Pressable>
 
-          <View style={styles.header}>
-            <Text style={styles.title}>Create Account</Text>
-            <Text style={styles.subtitle}>
-              {isRestaurant ? 'Set up your restaurant account' : 'Join us and start saving'}
+          <View style={styles.verifyContainer}>
+            <View style={styles.verifyIconWrap}>
+              <Mail size={48} color={Colors.surface} />
+            </View>
+            <Text style={styles.verifyTitle}>Check Your Email</Text>
+            <Text style={styles.verifySubtitle}>
+              We've sent a confirmation link to{'\n'}
+              <Text style={styles.verifyEmail}>{email}</Text>.{'\n\n'}
+              Click the link to activate your account, then you can sign in.
             </Text>
-          </View>
-
-          <View style={styles.form}>
-            <View style={styles.inputContainer}>
-              <User size={20} color={Colors.textLight} style={styles.inputIcon} />
-              <TextInput
-                style={styles.input}
-                placeholder="Full Name"
-                placeholderTextColor={Colors.textLight}
-                value={name}
-                onChangeText={setName}
-              />
-            </View>
-
-            <View style={styles.inputContainer}>
-              <Mail size={20} color={Colors.textLight} style={styles.inputIcon} />
-              <TextInput
-                style={styles.input}
-                placeholder="Email"
-                placeholderTextColor={Colors.textLight}
-                value={email}
-                onChangeText={setEmail}
-                keyboardType="email-address"
-                autoCapitalize="none"
-              />
-            </View>
-
-            <View style={styles.inputContainer}>
-              <Phone size={20} color={Colors.textLight} style={styles.inputIcon} />
-              <TextInput
-                style={styles.input}
-                placeholder="Phone Number"
-                placeholderTextColor={Colors.textLight}
-                value={phone}
-                onChangeText={setPhone}
-                keyboardType="phone-pad"
-              />
-            </View>
-
-            <View style={styles.inputContainer}>
-              <MapPin size={20} color={Colors.textLight} style={styles.inputIcon} />
-              <TextInput
-                style={styles.input}
-                placeholder="Address"
-                placeholderTextColor={Colors.textLight}
-                value={address}
-                onChangeText={setAddress}
-              />
-            </View>
-
-            <View style={styles.inputContainer}>
-              <Lock size={20} color={Colors.textLight} style={styles.inputIcon} />
-              <TextInput
-                style={styles.input}
-                placeholder="Password"
-                placeholderTextColor={Colors.textLight}
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry
-              />
-            </View>
-
-            {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
             <Pressable
-              style={[styles.signupButton, signupPending && styles.signupButtonDisabled]}
-              onPress={handleSignup}
-              disabled={signupPending}
+              style={styles.signupButton}
+              onPress={() => router.push(`/login?role=${role}`)}
             >
-              {signupPending ? (
-                <ActivityIndicator color={isRestaurant ? Colors.surface : Colors.primary} />
-              ) : (
-                <Text style={[styles.signupButtonText, isRestaurant && { color: Colors.surface }]}>
-                  Create Account
-                </Text>
-              )}
+              <Text style={styles.signupButtonText}>Go to Sign In</Text>
             </Pressable>
 
-            <View style={styles.loginRow}>
-              <Text style={styles.loginText}>Already have an account? </Text>
-              <Pressable onPress={() => router.push(`/login?role=${role}`)}>
-                <Text style={styles.loginLink}>Sign In</Text>
-              </Pressable>
-            </View>
-
-            {!isRestaurant && (
-              <Pressable 
-                style={styles.partnerButton}
-                onPress={() => router.push('/partner')}
-              >
-                <Text style={styles.partnerButtonText}>Become a Partner Restaurant</Text>
-              </Pressable>
-            )}
+            <Pressable 
+              style={styles.resendButton}
+              onPress={handleContinueFromDetails}
+            >
+              <Text style={styles.resendText}>Resend Confirmation Email</Text>
+            </Pressable>
           </View>
         </ScrollView>
-      </KeyboardAvoidingView>
-    </View>
-  );
+      </View>
+    );
+  }
+
+  return null;
 }
 
 const styles = StyleSheet.create({
+  // ... all styles remain the same, but remove those for verify code input, password step, etc. But to keep, since not used, ok. But for complete, copy the original styles.
   container: {
     flex: 1,
   },
@@ -668,7 +440,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 32,
-    fontWeight: '700' as const,
+    fontWeight: '700',
     color: Colors.surface,
     marginBottom: 8,
   },
@@ -702,7 +474,7 @@ const styles = StyleSheet.create({
   },
   cuisineName: {
     fontSize: 12,
-    fontWeight: '600' as const,
+    fontWeight: '600',
     color: Colors.surface,
   },
   cuisineNameSelected: {
@@ -733,7 +505,7 @@ const styles = StyleSheet.create({
   },
   suggestionsTitle: {
     fontSize: 16,
-    fontWeight: '600' as const,
+    fontWeight: '600',
     color: Colors.surface,
     marginBottom: 12,
   },
@@ -756,7 +528,7 @@ const styles = StyleSheet.create({
   },
   suggestionName: {
     fontSize: 14,
-    fontWeight: '600' as const,
+    fontWeight: '600',
     color: Colors.surface,
   },
   suggestionCuisine: {
@@ -772,7 +544,7 @@ const styles = StyleSheet.create({
   },
   suggestionRatingText: {
     fontSize: 12,
-    fontWeight: '600' as const,
+    fontWeight: '600',
     color: Colors.surface,
   },
   continueButton: {
@@ -790,7 +562,7 @@ const styles = StyleSheet.create({
   },
   continueButtonText: {
     fontSize: 18,
-    fontWeight: '600' as const,
+    fontWeight: '600',
     color: Colors.primary,
   },
   preferencesPreview: {
@@ -863,36 +635,8 @@ const styles = StyleSheet.create({
   },
   signupButtonText: {
     fontSize: 18,
-    fontWeight: '600' as const,
+    fontWeight: '600',
     color: Colors.primary,
-  },
-  loginRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    marginTop: 16,
-  },
-  loginText: {
-    color: 'rgba(255, 255, 255, 0.7)',
-    fontSize: 15,
-  },
-  loginLink: {
-    color: Colors.surface,
-    fontSize: 15,
-    fontWeight: '600' as const,
-  },
-  partnerButton: {
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
-    height: 48,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 8,
-  },
-  partnerButtonText: {
-    fontSize: 15,
-    fontWeight: '500' as const,
-    color: Colors.surface,
   },
   backLink: {
     alignItems: 'center',
@@ -918,7 +662,7 @@ const styles = StyleSheet.create({
   },
   verifyTitle: {
     fontSize: 26,
-    fontWeight: '700' as const,
+    fontWeight: '700',
     color: Colors.surface,
     marginBottom: 8,
   },
@@ -931,23 +675,7 @@ const styles = StyleSheet.create({
   },
   verifyEmail: {
     color: Colors.surface,
-    fontWeight: '600' as const,
-  },
-  codeInputContainer: {
-    width: '100%',
-    marginBottom: 16,
-  },
-  codeInput: {
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 16,
-    height: 64,
-    fontSize: 32,
-    fontWeight: '600' as const,
-    color: Colors.surface,
-    textAlign: 'center',
-    letterSpacing: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
+    fontWeight: '600',
   },
   resendButton: {
     marginTop: 16,
@@ -956,6 +684,6 @@ const styles = StyleSheet.create({
   resendText: {
     color: Colors.surface,
     fontSize: 14,
-    fontWeight: '600' as const,
+    fontWeight: '600',
   },
 });
