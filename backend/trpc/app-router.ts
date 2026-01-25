@@ -15,6 +15,7 @@ import { ordersRouter } from "./routes/orders";
 import { menuRouter } from "./routes/menu";
 import { inventoryRouter } from "./routes/inventory";
 import { foodWasteRouter } from "./routes/food-waste";
+import { supabaseRouter } from "./routes/supabase";
 
 export const appRouter = createTRPCRouter({
   auth: authRouter,
@@ -33,6 +34,7 @@ export const appRouter = createTRPCRouter({
   menu: menuRouter,
   inventory: inventoryRouter,
   foodWaste: foodWasteRouter,
+  supabase: supabaseRouter,
 });
 
 export type AppRouter = typeof appRouter;
