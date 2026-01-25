@@ -8,11 +8,9 @@ import Constants from 'expo-constants';
    READ CONFIG (ENV FIRST, FALLBACK TO app.json)
 ---------------------------------------------------- */
 
-// Expo env vars (recommended)
 const envSupabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const envSupabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
 
-// app.json / app.config.ts fallback
 const extraSupabaseUrl =
   Constants.expoConfig?.extra?.supabaseUrl ??
   Constants.manifest?.extra?.supabaseUrl;
@@ -21,12 +19,11 @@ const extraSupabaseAnonKey =
   Constants.expoConfig?.extra?.supabaseAnonKey ??
   Constants.manifest?.extra?.supabaseAnonKey;
 
-// Final resolved values
 const supabaseUrl = envSupabaseUrl || extraSupabaseUrl;
 const supabaseAnonKey = envSupabaseAnonKey || extraSupabaseAnonKey;
 
 /* ----------------------------------------------------
-   CREATE CLIENT SAFELY
+   CREATE CLIENT
 ---------------------------------------------------- */
 
 let supabaseClient: SupabaseClient | null = null;
@@ -37,65 +34,41 @@ if (supabaseUrl && supabaseAnonKey) {
       storage: AsyncStorage,
       autoRefreshToken: true,
       persistSession: true,
-      detectSessionInUrl: false // REQUIRED for React Native
-    }
+      detectSessionInUrl: false,
+    },
+    realtime: {
+      params: {
+        eventsPerSecond: 10,
+      },
+    },
   });
 } else {
-  console.warn(
-    '⚠️ Supabase not configured. Missing URL or Anon Key.'
-  );
+  console.warn('⚠️ Supabase not configured');
 }
 
 /* ----------------------------------------------------
-   FALLBACK NO-OP CLIENT (PREVENTS APP CRASHES)
+   FALLBACK CLIENT (NO-OP)
 ---------------------------------------------------- */
 
 const noopSupabase = {
   auth: {
-    getSession: async () => ({
-      data: { session: null },
-      error: null
-    }),
-
+    getSession: async () => ({ data: { session: null }, error: null }),
     onAuthStateChange: () => ({
-      data: {
-        subscription: { unsubscribe: () => {} }
-      }
+      data: { subscription: { unsubscribe: () => {} } },
     }),
-
-    signInWithPassword: async () => ({
-      data: null,
-      error: null
-    }),
-
-    signUp: async () => ({
-      data: null,
-      error: null
-    }),
-
-    signOut: async () => ({
-      error: null
-    })
+    signInWithPassword: async () => ({ data: null, error: null }),
+    signUp: async () => ({ data: null, error: null }),
+    signOut: async () => ({ error: null }),
   },
-
   from: () => ({
-    select: async () => ({
-      data: null,
-      error: { message: 'Supabase not configured' }
-    }),
-    insert: async () => ({
-      data: null,
-      error: { message: 'Supabase not configured' }
-    }),
-    update: async () => ({
-      data: null,
-      error: { message: 'Supabase not configured' }
-    }),
-    delete: async () => ({
-      data: null,
-      error: { message: 'Supabase not configured' }
-    })
-  })
+    select: async () => ({ data: null, error: null }),
+    insert: async () => ({ data: null, error: null }),
+    update: async () => ({ data: null, error: null }),
+    delete: async () => ({ data: null, error: null }),
+  }),
+  channel: () => ({
+    on: () => ({ subscribe: () => ({ unsubscribe: () => {} }) }),
+  }),
 } as unknown as SupabaseClient;
 
 /* ----------------------------------------------------
