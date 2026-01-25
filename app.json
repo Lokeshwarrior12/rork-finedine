@@ -53,7 +53,7 @@
         "projectId": "70eb24db"
       },
       "supabaseUrl": "https://ibyyhjwrhaehhmznyadz.supabase.co",
-      "supabaseAnonKey": "PASTE_YOUR_FULL_SUPABASE_ANON_KEY_HERE"
+      "supabaseAnonKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlieXloandyaGFlaGhtem55YWR6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjgxMTIyNzEsImV4cCI6MjA4MzY4ODI3MX0.yTOtqjeKEIuRdZ-8BgWK3x2zVbT8XgaAlCqj1EbsYvs"
     }
   }
 }
