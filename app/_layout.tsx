@@ -1,21 +1,24 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Stack } from "expo-router";
-import * as SplashScreen from "expo-splash-screen";
-import React, { useEffect } from "react";
-import { GestureHandlerRootView } from "react-native-gesture-handler";
-import { StatusBar } from "expo-status-bar";
+import React, { useEffect } from 'react';
+import { Stack } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
+import * as SplashScreen from 'expo-splash-screen';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
-import { AuthProvider } from "@/contexts/AuthContext";
-import { ThemeProvider, useTheme } from "@/contexts/ThemeContext";
-import { trpc, trpcClient } from "@/lib/trpc";
+import { trpc, trpcClient } from '@/lib/trpc';
+import { AuthProvider } from '@/contexts/AuthContext';
+import { ThemeProvider, useTheme } from '@/contexts/ThemeContext';
 
-// Prevent splash screen from auto hiding
+/* -----------------------------------------------------
+   SPLASH SCREEN
+----------------------------------------------------- */
+
 SplashScreen.preventAutoHideAsync();
 
 const queryClient = new QueryClient();
 
 /* -----------------------------------------------------
-   NAVIGATION STACK
+   NAV STACK
 ----------------------------------------------------- */
 
 function RootLayoutNav() {
@@ -23,15 +26,15 @@ function RootLayoutNav() {
 
   return (
     <>
-      <StatusBar style={isDark ? "light" : "dark"} />
+      <StatusBar style={isDark ? 'light' : 'dark'} />
 
       <Stack
         screenOptions={{
-          headerBackTitle: "Back",
+          headerBackTitle: 'Back',
           headerStyle: { backgroundColor: colors.surface },
           headerTintColor: colors.primary,
           contentStyle: { backgroundColor: colors.background },
-          headerShadowVisible: false
+          headerShadowVisible: false,
         }}
       >
         <Stack.Screen name="index" options={{ headerShown: false }} />
@@ -40,17 +43,17 @@ function RootLayoutNav() {
 
         <Stack.Screen
           name="login"
-          options={{ headerShown: false, presentation: "modal" }}
+          options={{ headerShown: false, presentation: 'modal' }}
         />
 
         <Stack.Screen
           name="signup"
-          options={{ headerShown: false, presentation: "modal" }}
+          options={{ headerShown: false, presentation: 'modal' }}
         />
 
         <Stack.Screen
           name="partner"
-          options={{ headerShown: false, presentation: "modal" }}
+          options={{ headerShown: false, presentation: 'modal' }}
         />
 
         <Stack.Screen
@@ -60,12 +63,12 @@ function RootLayoutNav() {
 
         <Stack.Screen
           name="booking/[id]"
-          options={{ title: "Book a Table", presentation: "modal" }}
+          options={{ title: 'Book a Table', presentation: 'modal' }}
         />
 
         <Stack.Screen
           name="service-booking/[id]"
-          options={{ title: "Book Service", presentation: "modal" }}
+          options={{ title: 'Book Service', presentation: 'modal' }}
         />
 
         <Stack.Screen name="+not-found" />
@@ -79,22 +82,21 @@ function RootLayoutNav() {
 ----------------------------------------------------- */
 
 export default function RootLayout() {
-
   useEffect(() => {
     SplashScreen.hideAsync();
   }, []);
 
   return (
-    <trpc.Provider client={trpcClient} queryClient={queryClient}>
-      <QueryClientProvider client={queryClient}>
-        <GestureHandlerRootView style={{ flex: 1 }}>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <trpc.Provider client={trpcClient} queryClient={queryClient}>
+        <QueryClientProvider client={queryClient}>
           <ThemeProvider>
             <AuthProvider>
               <RootLayoutNav />
             </AuthProvider>
           </ThemeProvider>
-        </GestureHandlerRootView>
-      </QueryClientProvider>
-    </trpc.Provider>
+        </QueryClientProvider>
+      </trpc.Provider>
+    </GestureHandlerRootView>
   );
 }
