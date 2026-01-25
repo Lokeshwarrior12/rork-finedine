@@ -14,43 +14,66 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Mail, Lock, X, Eye, EyeOff } from 'lucide-react-native';
-import { useAuth } from '@/contexts/AuthContext';
+
 import Colors from '@/constants/colors';
 import { UserRole } from '@/types';
-import { checkServerConnection } from '@/lib/trpc';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 
 export default function LoginScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { role } = useLocalSearchParams<{ role: string }>();
-  const { login, loginPending } = useAuth();
+  const { role } = useLocalSearchParams<{ role?: string }>();
+
+  const isRestaurant = role === 'restaurant_owner';
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
-  const [isCheckingConnection, setIsCheckingConnection] = useState(false);
-
-  const isRestaurant = role === 'restaurant_owner';
+  const [loading, setLoading] = useState(false);
 
   const handleLogin = async () => {
     if (!email || !password) {
       setError('Please fill in all fields');
       return;
     }
-    setError('');
-    
-    setIsCheckingConnection(true);
-    const isConnected = await checkServerConnection();
-    setIsCheckingConnection(false);
-    
-    if (!isConnected) {
-      setError('Unable to connect to server. Please check your internet connection or try again later.');
+
+    if (!isSupabaseConfigured) {
+      setError('Authentication service not configured.');
       return;
     }
-    
+
+    setError('');
+    setLoading(true);
+
     try {
-      await login({ email, password, role: (role as UserRole) || 'customer' });
+      const { data, error: authError } =
+        await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+
+      if (authError) {
+        const message = authError.message.toLowerCase();
+
+        if (message.includes('invalid') || message.includes('credentials')) {
+          setError('Invalid email or password.');
+        } else if (message.includes('not confirmed')) {
+          setError('Please verify your email before logging in.');
+        } else if (message.includes('timeout') || message.includes('fetch')) {
+          setError('Network error. Please try again.');
+        } else {
+          setError(authError.message);
+        }
+        return;
+      }
+
+      if (!data.session || !data.user) {
+        setError('Login failed. Please try again.');
+        return;
+      }
+
+      // 🔁 Navigate by role
       if (isRestaurant) {
         router.replace('/(restaurant)/dashboard' as any);
       } else {
@@ -58,31 +81,23 @@ export default function LoginScreen() {
       }
     } catch (err) {
       console.error('Login error:', err);
-      if (err instanceof Error) {
-        if (err.message.includes('Unable to connect') || err.message.includes('Failed to fetch')) {
-          setError('Server connection failed. Please try again later.');
-        } else if (err.message.includes('not found') || err.message.includes('NOT_FOUND')) {
-          setError('User not found. Please sign up first.');
-        } else if (err.message.includes('password') || err.message.includes('UNAUTHORIZED')) {
-          setError('Invalid email or password.');
-        } else if (err.message.includes('role')) {
-          setError('Account exists with different role. Please select correct role.');
-        } else {
-          setError(err.message || 'Login failed. Please try again.');
-        }
-      } else {
-        setError('Login failed. Please try again.');
-      }
+      setError('Something went wrong. Please try again.');
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
     <View style={styles.container}>
       <LinearGradient
-        colors={isRestaurant ? ['#1A1A2E', '#16213E'] : [Colors.primary, Colors.primaryDark]}
+        colors={
+          isRestaurant
+            ? ['#1A1A2E', '#16213E']
+            : [Colors.primary, Colors.primaryDark]
+        }
         style={StyleSheet.absoluteFill}
       />
-      
+
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.keyboardView}
@@ -101,7 +116,9 @@ export default function LoginScreen() {
           <View style={styles.header}>
             <Text style={styles.title}>Welcome Back</Text>
             <Text style={styles.subtitle}>
-              {isRestaurant ? 'Sign in to manage your restaurant' : 'Sign in to discover amazing deals'}
+              {isRestaurant
+                ? 'Sign in to manage your restaurant'
+                : 'Sign in to discover amazing deals'}
             </Text>
           </View>
 
@@ -110,7 +127,7 @@ export default function LoginScreen() {
               <Mail size={20} color={Colors.textLight} style={styles.inputIcon} />
               <TextInput
                 style={styles.input}
-                placeholder={isRestaurant ? "Restaurant Email" : "Email"}
+                placeholder={isRestaurant ? 'Restaurant Email' : 'Email'}
                 placeholderTextColor={Colors.textLight}
                 value={email}
                 onChangeText={setEmail}
@@ -145,16 +162,14 @@ export default function LoginScreen() {
             </Pressable>
 
             <Pressable
-              style={[styles.loginButton, (loginPending || isCheckingConnection) && styles.loginButtonDisabled]}
+              style={[styles.loginButton, loading && styles.loginButtonDisabled]}
               onPress={handleLogin}
-              disabled={loginPending || isCheckingConnection}
+              disabled={loading}
             >
-              {loginPending || isCheckingConnection ? (
+              {loading ? (
                 <View style={styles.loadingContainer}>
                   <ActivityIndicator color={Colors.primary} />
-                  <Text style={styles.loadingText}>
-                    {isCheckingConnection ? 'Connecting...' : 'Signing in...'}
-                  </Text>
+                  <Text style={styles.loadingText}>Signing in…</Text>
                 </View>
               ) : (
                 <Text style={styles.loginButtonText}>Sign In</Text>
@@ -163,23 +178,27 @@ export default function LoginScreen() {
 
             <View style={styles.signupRow}>
               <Text style={styles.signupText}>Don&apos;t have an account? </Text>
-              <Pressable onPress={() => {
-                if (isRestaurant) {
-                  router.push('/partner');
-                } else {
-                  router.push(`/signup?role=${role}`);
-                }
-              }}>
+              <Pressable
+                onPress={() => {
+                  if (isRestaurant) {
+                    router.push('/partner');
+                  } else {
+                    router.push(`/signup?role=${role}`);
+                  }
+                }}
+              >
                 <Text style={styles.signupLink}>Sign Up</Text>
               </Pressable>
             </View>
 
             {!isRestaurant && (
-              <Pressable 
+              <Pressable
                 style={styles.partnerButton}
                 onPress={() => router.push('/partner')}
               >
-                <Text style={styles.partnerButtonText}>Become a Partner Restaurant</Text>
+                <Text style={styles.partnerButtonText}>
+                  Become a Partner Restaurant
+                </Text>
               </Pressable>
             )}
           </View>
@@ -189,71 +208,53 @@ export default function LoginScreen() {
   );
 }
 
+/* ---------------- STYLES (UNCHANGED) ---------------- */
+
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  keyboardView: {
-    flex: 1,
-  },
-  scrollContent: {
-    flexGrow: 1,
-    paddingHorizontal: 24,
-  },
+  container: { flex: 1 },
+  keyboardView: { flex: 1 },
+  scrollContent: { flexGrow: 1, paddingHorizontal: 24 },
   closeButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    backgroundColor: 'rgba(255,255,255,0.2)',
     alignItems: 'center',
     justifyContent: 'center',
     alignSelf: 'flex-end',
   },
-  header: {
-    marginTop: 40,
-    marginBottom: 40,
-  },
+  header: { marginTop: 40, marginBottom: 40 },
   title: {
     fontSize: 32,
-    fontWeight: '700' as const,
+    fontWeight: '700',
     color: Colors.surface,
     marginBottom: 8,
   },
   subtitle: {
     fontSize: 16,
-    color: 'rgba(255, 255, 255, 0.7)',
+    color: 'rgba(255,255,255,0.7)',
   },
-  form: {
-    gap: 16,
-  },
+  form: { gap: 16 },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    backgroundColor: 'rgba(255,255,255,0.1)',
     borderRadius: 16,
     paddingHorizontal: 16,
     height: 56,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
+    borderColor: 'rgba(255,255,255,0.2)',
   },
-  inputIcon: {
-    marginRight: 12,
-  },
-  input: {
-    flex: 1,
-    fontSize: 16,
-    color: Colors.surface,
-  },
+  inputIcon: { marginRight: 12 },
+  input: { flex: 1, fontSize: 16, color: Colors.surface },
   errorText: {
     color: Colors.error,
     fontSize: 14,
     textAlign: 'center',
   },
-  forgotPassword: {
-    alignSelf: 'flex-end',
-  },
+  forgotPassword: { alignSelf: 'flex-end' },
   forgotPasswordText: {
-    color: 'rgba(255, 255, 255, 0.7)',
+    color: 'rgba(255,255,255,0.7)',
     fontSize: 14,
   },
   loginButton: {
@@ -263,18 +264,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 4,
   },
-  loginButtonDisabled: {
-    opacity: 0.7,
-  },
+  loginButtonDisabled: { opacity: 0.7 },
   loginButtonText: {
     fontSize: 18,
-    fontWeight: '600' as const,
+    fontWeight: '600',
     color: Colors.primary,
   },
   signupRow: {
@@ -283,17 +277,17 @@ const styles = StyleSheet.create({
     marginTop: 24,
   },
   signupText: {
-    color: 'rgba(255, 255, 255, 0.7)',
+    color: 'rgba(255,255,255,0.7)',
     fontSize: 15,
   },
   signupLink: {
     color: Colors.surface,
     fontSize: 15,
-    fontWeight: '600' as const,
+    fontWeight: '600',
   },
   partnerButton: {
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
+    borderColor: 'rgba(255,255,255,0.3)',
     height: 48,
     borderRadius: 12,
     alignItems: 'center',
@@ -302,7 +296,7 @@ const styles = StyleSheet.create({
   },
   partnerButtonText: {
     fontSize: 15,
-    fontWeight: '500' as const,
+    fontWeight: '500',
     color: Colors.surface,
   },
   loadingContainer: {
@@ -313,6 +307,6 @@ const styles = StyleSheet.create({
   loadingText: {
     color: Colors.primary,
     fontSize: 16,
-    fontWeight: '500' as const,
+    fontWeight: '500',
   },
 });
