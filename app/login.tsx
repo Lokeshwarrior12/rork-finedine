@@ -14,22 +14,19 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Mail, Lock, X, Eye, EyeOff } from 'lucide-react-native';
-import { useAuth } from '@/contexts/AuthContext';
 import Colors from '@/constants/colors';
-import { UserRole } from '@/types';
-import { checkServerConnection } from '@/lib/trpc';
+import { supabase } from '@/lib/supabase';
 
 export default function LoginScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { role } = useLocalSearchParams<{ role: string }>();
-  const { login, loginPending } = useAuth();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
-  const [isCheckingConnection, setIsCheckingConnection] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   const isRestaurant = role === 'restaurant_owner';
 
@@ -40,38 +37,33 @@ export default function LoginScreen() {
     }
     setError('');
     
-    setIsCheckingConnection(true);
-    const isConnected = await checkServerConnection();
-    setIsCheckingConnection(false);
-    
-    if (!isConnected) {
-      setError('Unable to connect to server. Please check your internet connection or try again later.');
-      return;
-    }
+    setLoading(true);
     
     try {
-      await login({ email, password, role: (role as UserRole) || 'customer' });
-      if (isRestaurant) {
-        router.replace('/(restaurant)/dashboard' as any);
-      } else {
-        router.replace('/(customer)/home' as any);
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+
+      const userRole = data.user?.user_metadata?.role;
+      if (userRole !== role) {
+        throw new Error('Account exists with different role. Please select correct role.');
       }
-    } catch (err) {
-      console.error('Login error:', err);
-      if (err instanceof Error) {
-        if (err.message.includes('Unable to connect') || err.message.includes('Failed to fetch')) {
-          setError('Server connection failed. Please try again later.');
-        } else if (err.message.includes('not found') || err.message.includes('NOT_FOUND')) {
-          setError('User not found. Please sign up first.');
-        } else if (err.message.includes('password') || err.message.includes('UNAUTHORIZED')) {
-          setError('Invalid email or password.');
-        } else if (err.message.includes('role')) {
-          setError('Account exists with different role. Please select correct role.');
-        } else {
-          setError(err.message || 'Login failed. Please try again.');
-        }
+
+      if (isRestaurant) {
+        router.replace('/(restaurant)/dashboard');
       } else {
-        setError('Login failed. Please try again.');
+        router.replace('/(customer)/home');
+      }
+    } catch (err: any) {
+      setLoading(false);
+      console.error('Login error:', err);
+      if (err.message.includes('Unable to connect') || err.message.includes('Failed to fetch')) {
+        setError('Server connection failed. Please try again later.');
+      } else if (err.message.includes('not confirmed')) {
+        setError('Please confirm your email first.');
+      } else if (err.message.includes('Invalid login credentials')) {
+        setError('Invalid email or password.');
+      } else {
+        setError(err.message || 'Login failed. Please try again.');
       }
     }
   };
@@ -145,16 +137,14 @@ export default function LoginScreen() {
             </Pressable>
 
             <Pressable
-              style={[styles.loginButton, (loginPending || isCheckingConnection) && styles.loginButtonDisabled]}
+              style={[styles.loginButton, loading && styles.loginButtonDisabled]}
               onPress={handleLogin}
-              disabled={loginPending || isCheckingConnection}
+              disabled={loading}
             >
-              {loginPending || isCheckingConnection ? (
+              {loading ? (
                 <View style={styles.loadingContainer}>
                   <ActivityIndicator color={Colors.primary} />
-                  <Text style={styles.loadingText}>
-                    {isCheckingConnection ? 'Connecting...' : 'Signing in...'}
-                  </Text>
+                  <Text style={styles.loadingText}>Signing in...</Text>
                 </View>
               ) : (
                 <Text style={styles.loginButtonText}>Sign In</Text>
