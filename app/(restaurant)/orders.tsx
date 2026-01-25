@@ -36,6 +36,7 @@ import {
 } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { Order, OrderMessage, OrderStatus } from '@/types';
+import { useOrderSubscription } from '@/hooks/useOrderSubscription';
 
 const { width } = Dimensions.get('window');
 
@@ -237,6 +238,14 @@ export default function OrdersScreen() {
   const [filterType, setFilterType] = useState<'all' | 'dinein' | 'pickup'>('all');
 
   const tabIndicator = useRef(new Animated.Value(0)).current;
+    useOrderSubscription((order) => {
+    setOrders((prev) => {
+      const exists = prev.find((o) => o.id === order.id);
+      return exists
+        ? prev.map((o) => (o.id === order.id ? order : o))
+        : [order, ...prev];
+    });
+  });
   const flatListRef = useRef<FlatList>(null);
 
   const tabs: { key: TabType; label: string; count: number }[] = [
