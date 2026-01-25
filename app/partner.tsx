@@ -137,7 +137,7 @@ export default function PartnerScreen() {
           <View style={styles.priceRow}>
             <Text style={styles.currency}>$</Text>
             <Text style={styles.price}>399</Text>
-            <Text style={styles.pricePeriod}>/year</Text>
+            <Text style={styles.pricePeriod}>/month</Text>
           </View>
           <Text style={styles.priceNote}>Cancel anytime</Text>
         </View>
