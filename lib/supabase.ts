@@ -5,16 +5,25 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 
 /* ----------------------------------------------------
-   READ FROM app.json -> extra
+   READ CONFIG (ENV FIRST, FALLBACK TO app.json)
 ---------------------------------------------------- */
 
-const supabaseUrl =
+// Expo env vars (recommended)
+const envSupabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+const envSupabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+
+// app.json / app.config.ts fallback
+const extraSupabaseUrl =
   Constants.expoConfig?.extra?.supabaseUrl ??
   Constants.manifest?.extra?.supabaseUrl;
 
-const supabaseAnonKey =
+const extraSupabaseAnonKey =
   Constants.expoConfig?.extra?.supabaseAnonKey ??
   Constants.manifest?.extra?.supabaseAnonKey;
+
+// Final resolved values
+const supabaseUrl = envSupabaseUrl || extraSupabaseUrl;
+const supabaseAnonKey = envSupabaseAnonKey || extraSupabaseAnonKey;
 
 /* ----------------------------------------------------
    CREATE CLIENT SAFELY
@@ -28,20 +37,25 @@ if (supabaseUrl && supabaseAnonKey) {
       storage: AsyncStorage,
       autoRefreshToken: true,
       persistSession: true,
-      detectSessionInUrl: false
+      detectSessionInUrl: false // REQUIRED for React Native
     }
   });
 } else {
-  console.warn('⚠️ Supabase not configured — running in tRPC-only auth mode');
+  console.warn(
+    '⚠️ Supabase not configured. Missing URL or Anon Key.'
+  );
 }
 
 /* ----------------------------------------------------
-   FALLBACK NO-OP CLIENT
+   FALLBACK NO-OP CLIENT (PREVENTS APP CRASHES)
 ---------------------------------------------------- */
 
 const noopSupabase = {
   auth: {
-    getSession: async () => ({ data: { session: null }, error: null }),
+    getSession: async () => ({
+      data: { session: null },
+      error: null
+    }),
 
     onAuthStateChange: () => ({
       data: {
@@ -49,13 +63,35 @@ const noopSupabase = {
       }
     }),
 
-    signInWithPassword: async () => ({ data: null, error: null }),
-    signUp: async () => ({ data: null, error: null }),
-    signOut: async () => ({ error: null })
+    signInWithPassword: async () => ({
+      data: null,
+      error: null
+    }),
+
+    signUp: async () => ({
+      data: null,
+      error: null
+    }),
+
+    signOut: async () => ({
+      error: null
+    })
   },
 
   from: () => ({
     select: async () => ({
+      data: null,
+      error: { message: 'Supabase not configured' }
+    }),
+    insert: async () => ({
+      data: null,
+      error: { message: 'Supabase not configured' }
+    }),
+    update: async () => ({
+      data: null,
+      error: { message: 'Supabase not configured' }
+    }),
+    delete: async () => ({
       data: null,
       error: { message: 'Supabase not configured' }
     })
@@ -66,5 +102,5 @@ const noopSupabase = {
    EXPORTS
 ---------------------------------------------------- */
 
-export const supabase = supabaseClient || noopSupabase;
-export const isSupabaseConfigured = !!supabaseClient;
+export const supabase = supabaseClient ?? noopSupabase;
+export const isSupabaseConfigured = Boolean(supabaseClient);
