@@ -81,7 +81,9 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
 
   const verifyTokenQuery = trpc.auth.verifyToken.useQuery(undefined, {
     enabled: !!token,
-    retry: false
+    retry: 1,
+    retryDelay: 2000,
+    staleTime: 5 * 60 * 1000,
   });
 
   useEffect(() => {
@@ -96,11 +98,22 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
 
   useEffect(() => {
     if (verifyTokenQuery.error) {
-      AsyncStorage.removeItem(STORAGE_KEY);
-      AsyncStorage.removeItem(TOKEN_KEY);
-      setUser(null);
-      setToken(null);
-      queryClient.clear();
+      const errorMessage = verifyTokenQuery.error.message || '';
+      const isNetworkError = errorMessage.includes('timeout') || 
+                            errorMessage.includes('Failed to fetch') || 
+                            errorMessage.includes('Network') ||
+                            errorMessage.includes('offline');
+      
+      if (!isNetworkError) {
+        console.log('Token verification failed, clearing auth');
+        AsyncStorage.removeItem(STORAGE_KEY);
+        AsyncStorage.removeItem(TOKEN_KEY);
+        setUser(null);
+        setToken(null);
+        queryClient.clear();
+      } else {
+        console.log('Network error during token verification, keeping local auth');
+      }
     }
   }, [verifyTokenQuery.error, queryClient]);
 

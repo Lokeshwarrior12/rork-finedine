@@ -22,16 +22,21 @@ app.use("*", cors({
 
 app.use(async (c, next) => {
   const startTime = Date.now();
+  
   try {
     await db.init();
   } catch (error) {
-    console.error('Database initialization error:', error);
+    console.warn('Database initialization warning:', error);
   }
   
   await next();
   
   const duration = Date.now() - startTime;
-  console.log(`[${c.req.method}] ${c.req.url} - ${duration}ms`);
+  if (duration > 1000) {
+    console.warn(`[SLOW] [${c.req.method}] ${c.req.url} - ${duration}ms`);
+  } else {
+    console.log(`[${c.req.method}] ${c.req.url} - ${duration}ms`);
+  }
 });
 
 app.onError((err, c) => {
@@ -52,9 +57,18 @@ app.notFound((c) => {
 });
 
 app.use(
-  "/trpc/*",
+  "/api/trpc/*",
   trpcServer({
     endpoint: "/api/trpc",
+    router: appRouter,
+    createContext,
+  }),
+);
+
+app.use(
+  "/trpc/*",
+  trpcServer({
+    endpoint: "/trpc",
     router: appRouter,
     createContext,
   }),

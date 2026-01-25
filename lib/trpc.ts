@@ -53,11 +53,22 @@ export const trpcClient = trpc.createClient({
         };
       },
       fetch: async (url, options) => {
+        const baseUrl = getBaseUrl();
+        if (!baseUrl) {
+          console.log('No API URL configured, using offline mode');
+          throw new Error('Backend not configured. Running in offline mode.');
+        }
+        
         try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 30000);
+          
           const response = await fetch(url, {
             ...options,
-            signal: AbortSignal.timeout(15000),
+            signal: controller.signal,
           });
+          
+          clearTimeout(timeoutId);
           return response;
         } catch (error) {
           console.error('API fetch error:', error);
@@ -89,11 +100,22 @@ export const createTRPCClient = () => {
           };
         },
         fetch: async (url, options) => {
+          const baseUrl = getBaseUrl();
+          if (!baseUrl) {
+            console.log('No API URL configured, using offline mode');
+            throw new Error('Backend not configured. Running in offline mode.');
+          }
+          
           try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 30000);
+            
             const response = await fetch(url, {
               ...options,
-              signal: AbortSignal.timeout(15000),
+              signal: controller.signal,
             });
+            
+            clearTimeout(timeoutId);
             return response;
           } catch (error) {
             console.error('API fetch error:', error);
@@ -117,17 +139,30 @@ export const checkServerConnection = async (): Promise<boolean> => {
   try {
     const baseUrl = getBaseUrl();
     if (!baseUrl) {
-      console.log('No base URL configured');
+      console.log('No base URL configured - running in offline mode');
       return true;
     }
     
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+    
     const response = await fetch(`${baseUrl}/health`, {
       method: 'GET',
-      signal: AbortSignal.timeout(5000),
+      signal: controller.signal,
     });
-    return response.ok;
+    
+    clearTimeout(timeoutId);
+    
+    if (response.ok) {
+      const data = await response.json();
+      console.log('Server health check:', data);
+      return true;
+    }
+    
+    console.warn('Server health check returned non-OK status:', response.status);
+    return true;
   } catch (error) {
-    console.error('Server connection check failed:', error);
+    console.warn('Server connection check failed:', error);
     return true;
   }
 };

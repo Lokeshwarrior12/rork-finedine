@@ -4,8 +4,8 @@ const getConfig = () => {
   const token = process.env.EXPO_PUBLIC_RORK_DB_TOKEN;
 
   if (!endpoint || !namespace || !token) {
-    console.error('Missing database configuration');
-    throw new Error('Database configuration missing');
+    console.warn('Missing database configuration - some features may be limited');
+    return null;
   }
 
   return { endpoint, namespace, token };
@@ -17,16 +17,35 @@ class SurrealHTTPClient {
   private database: string;
   private token: string;
   private isInitialized: boolean = false;
+  private isConfigured: boolean = false;
 
   constructor() {
     const config = getConfig();
-    this.endpoint = config.endpoint.replace(/\/$/, '');
-    this.namespace = config.namespace;
-    this.database = 'finedine';
-    this.token = config.token;
+    if (config) {
+      this.endpoint = config.endpoint.replace(/\/$/, '');
+      this.namespace = config.namespace;
+      this.database = 'finedine';
+      this.token = config.token;
+      this.isConfigured = true;
+    } else {
+      this.endpoint = '';
+      this.namespace = '';
+      this.database = 'finedine';
+      this.token = '';
+      this.isConfigured = false;
+    }
+  }
+
+  public get configured(): boolean {
+    return this.isConfigured;
   }
 
   private async request<T>(sql: string, vars?: Record<string, unknown>): Promise<T[]> {
+    if (!this.isConfigured) {
+      console.warn('Database not configured - returning empty results');
+      return [];
+    }
+
     const maxRetries = 3;
     let lastError: Error | null = null;
 
@@ -35,7 +54,7 @@ class SurrealHTTPClient {
         const url = `${this.endpoint}/sql`;
         
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 15000);
+        const timeoutId = setTimeout(() => controller.abort(), 25000);
 
         const response = await fetch(url, {
           method: 'POST',
@@ -152,13 +171,30 @@ let client: SurrealHTTPClient | null = null;
 export async function getDB(): Promise<SurrealHTTPClient> {
   if (!client) {
     client = new SurrealHTTPClient();
-    console.log('Database client initialized');
+    if (client.configured) {
+      console.log('Database client initialized successfully');
+    } else {
+      console.warn('Database client created but not configured');
+    }
   }
   return client;
 }
 
+export function isDatabaseConfigured(): boolean {
+  if (!client) {
+    const config = getConfig();
+    return config !== null;
+  }
+  return client.configured;
+}
+
 export async function initializeDatabase(): Promise<void> {
   const database = await getDB();
+  
+  if (!database.configured) {
+    console.warn('Skipping database initialization - not configured');
+    return;
+  }
 
   const schemas = [
     `DEFINE TABLE IF NOT EXISTS users SCHEMAFULL;
