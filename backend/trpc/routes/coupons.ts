@@ -5,6 +5,10 @@ import { db } from "@/backend/db";
 import { Coupon } from "@/types";
 import { generateCouponCode } from "@/backend/auth/jwt";
 
+function toRecord<T extends object>(obj: T): Record<string, unknown> {
+  return obj as unknown as Record<string, unknown>;
+}
+
 export const couponsRouter = createTRPCRouter({
   getByUser: protectedProcedure.query(async ({ ctx }) => {
     return db.coupons.getByUserId(ctx.userId);
@@ -86,7 +90,7 @@ export const couponsRouter = createTRPCRouter({
         await db.users.update(ctx.userId, { points: user.points + 10 });
       }
 
-      return db.coupons.create(coupon as unknown as Record<string, unknown>);
+      return db.coupons.create(toRecord(coupon));
     }),
 
   redeem: protectedProcedure

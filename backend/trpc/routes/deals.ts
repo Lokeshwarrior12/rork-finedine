@@ -4,6 +4,10 @@ import { createTRPCRouter, publicProcedure, protectedProcedure } from "../create
 import { db } from "@/backend/db";
 import { Deal } from "@/types";
 
+function toRecord<T extends object>(obj: T): Record<string, unknown> {
+  return obj as unknown as Record<string, unknown>;
+}
+
 export const dealsRouter = createTRPCRouter({
   getAll: publicProcedure.query(async () => {
     return db.deals.getAll();
@@ -119,7 +123,7 @@ export const dealsRouter = createTRPCRouter({
         termsConditions: input.termsConditions,
       };
 
-      const created = await db.deals.create(deal as unknown as Record<string, unknown>);
+      const created = await db.deals.create(toRecord(deal));
 
       if (input.isActive) {
         await db.notifications.notifyFavorites(input.restaurantId, input.title);

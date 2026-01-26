@@ -4,6 +4,10 @@ import { createTRPCRouter, protectedProcedure } from "../create-context";
 import { db } from "@/backend/db";
 import { Order, OrderStatus, OrderMessage } from "@/types";
 
+function toRecord<T extends object>(obj: T): Record<string, unknown> {
+  return obj as unknown as Record<string, unknown>;
+}
+
 export const ordersRouter = createTRPCRouter({
   getByRestaurant: protectedProcedure
     .input(z.object({ restaurantId: z.string() }))
@@ -78,7 +82,7 @@ export const ordersRouter = createTRPCRouter({
         messages: [],
       };
 
-      const created = await db.orders.create(order as unknown as Record<string, unknown>);
+      const created = await db.orders.create(toRecord(order));
 
       await db.notifications.create({
         id: `notif_${Date.now()}`,
@@ -159,7 +163,7 @@ export const ordersRouter = createTRPCRouter({
         read: false,
       };
 
-      return db.orders.addMessage(input.orderId, newMessage as unknown as Record<string, unknown>);
+      return db.orders.addMessage(input.orderId, toRecord(newMessage));
     }),
 
   markMessageRead: protectedProcedure

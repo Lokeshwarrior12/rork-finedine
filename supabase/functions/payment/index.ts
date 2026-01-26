@@ -1,3 +1,4 @@
+// @ts-nocheck - Deno runtime file
 // supabase/functions/create-payment-intent/index.ts
 
 import Stripe from 'stripe';

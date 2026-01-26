@@ -4,6 +4,10 @@ import { createTRPCRouter, protectedProcedure } from "../create-context";
 import { db } from "@/backend/db";
 import type { InventoryItem } from "@/backend/db";
 
+function toRecord<T extends object>(obj: T): Record<string, unknown> {
+  return obj as unknown as Record<string, unknown>;
+}
+
 export const inventoryRouter = createTRPCRouter({
   getByRestaurant: protectedProcedure
     .input(z.object({ restaurantId: z.string() }))
@@ -57,7 +61,7 @@ export const inventoryRouter = createTRPCRouter({
         lastRestocked: new Date().toISOString(),
       };
 
-      return db.inventory.create(item as unknown as Record<string, unknown>);
+      return db.inventory.create(toRecord(item));
     }),
 
   update: protectedProcedure

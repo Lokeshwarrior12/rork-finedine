@@ -4,6 +4,10 @@ import { createTRPCRouter, publicProcedure, protectedProcedure } from "../create
 import { db } from "@/backend/db";
 import { TableBooking, ServiceBooking, Service, BookingSlot } from "@/types";
 
+function toRecord<T extends object>(obj: T): Record<string, unknown> {
+  return obj as unknown as Record<string, unknown>;
+}
+
 export const bookingsRouter = createTRPCRouter({
   getSlotsByRestaurant: publicProcedure
     .input(z.object({ restaurantId: z.string() }))
@@ -49,7 +53,7 @@ export const bookingsRouter = createTRPCRouter({
         status: 'pending',
       };
 
-      const created = await db.tableBookings.create(booking as unknown as Record<string, unknown>);
+      const created = await db.tableBookings.create(toRecord(booking));
 
       const restaurant = await db.restaurants.getById(input.restaurantId);
       await db.notifications.create({
@@ -104,7 +108,7 @@ export const bookingsRouter = createTRPCRouter({
         status: 'pending',
       };
 
-      return db.serviceBookings.create(booking as unknown as Record<string, unknown>);
+      return db.serviceBookings.create(toRecord(booking));
     }),
 
   getMyTableBookings: protectedProcedure.query(async ({ ctx }) => {

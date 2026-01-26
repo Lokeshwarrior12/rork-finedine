@@ -4,6 +4,10 @@ import { createTRPCRouter, publicProcedure, protectedProcedure } from "../create
 import { db } from "@/backend/db";
 import type { MenuItem } from "@/backend/db";
 
+function toRecord<T extends object>(obj: T): Record<string, unknown> {
+  return obj as unknown as Record<string, unknown>;
+}
+
 export const menuRouter = createTRPCRouter({
   getByRestaurant: publicProcedure
     .input(z.object({ restaurantId: z.string() }))
@@ -56,7 +60,7 @@ export const menuRouter = createTRPCRouter({
         preparationTime: input.preparationTime,
       };
 
-      return db.menuItems.create(menuItem as unknown as Record<string, unknown>);
+      return db.menuItems.create(toRecord(menuItem));
     }),
 
   update: protectedProcedure

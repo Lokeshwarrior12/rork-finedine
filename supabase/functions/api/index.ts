@@ -1,3 +1,4 @@
+// @ts-nocheck - Deno runtime file
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { fetchRequestHandler } from '@trpc/server/adapters/fetch';
 import { appRouter } from '../../../backend/root.ts'; // adjust path

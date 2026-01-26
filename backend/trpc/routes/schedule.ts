@@ -4,6 +4,10 @@ import { createTRPCRouter, protectedProcedure } from "../create-context";
 import { db } from "@/backend/db";
 import { Employee, WeeklySchedule, Shift } from "@/types";
 
+function toRecord<T extends object>(obj: T): Record<string, unknown> {
+  return obj as unknown as Record<string, unknown>;
+}
+
 export const scheduleRouter = createTRPCRouter({
   getEmployees: protectedProcedure
     .input(z.object({ restaurantId: z.string() }))
@@ -41,7 +45,7 @@ export const scheduleRouter = createTRPCRouter({
         availability: input.availability,
       };
 
-      return db.employees.create(employee as unknown as Record<string, unknown>);
+      return db.employees.create(toRecord(employee));
     }),
 
   updateEmployee: protectedProcedure
@@ -123,7 +127,7 @@ export const scheduleRouter = createTRPCRouter({
         updatedAt: new Date().toISOString(),
       };
 
-      return db.schedules.create(schedule as unknown as Record<string, unknown>);
+      return db.schedules.create(toRecord(schedule));
     }),
 
   updateSchedule: protectedProcedure

@@ -3,6 +3,10 @@ import { createTRPCRouter, protectedProcedure } from "../create-context";
 import { db } from "@/backend/db";
 import { Transaction } from "@/types";
 
+function toRecord<T extends object>(obj: T): Record<string, unknown> {
+  return obj as unknown as Record<string, unknown>;
+}
+
 export const transactionsRouter = createTRPCRouter({
   getByRestaurant: protectedProcedure
     .input(z.object({ restaurantId: z.string() }))
@@ -48,7 +52,7 @@ export const transactionsRouter = createTRPCRouter({
         }
       }
 
-      return db.transactions.create(transaction as unknown as Record<string, unknown>);
+      return db.transactions.create(toRecord(transaction));
     }),
 
   updateStatus: protectedProcedure

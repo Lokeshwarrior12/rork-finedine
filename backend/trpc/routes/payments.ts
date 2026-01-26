@@ -3,6 +3,10 @@ import { TRPCError } from "@trpc/server";
 import { createTRPCRouter, protectedProcedure } from "../create-context";
 import { db } from "@/backend/db";
 
+function toRecord<T extends object>(obj: T): Record<string, unknown> {
+  return obj as unknown as Record<string, unknown>;
+}
+
 interface Payment {
   id: string;
   userId: string;
@@ -24,7 +28,7 @@ export const paymentsRouter = createTRPCRouter({
     .input(z.object({ id: z.string() }))
     .query(async ({ input }) => {
       const payments = await db.payments.getAll() as Payment[];
-      return payments.find(p => p.id === input.id) || null;
+      return payments.find((p: Payment) => p.id === input.id) || null;
     }),
 
   create: protectedProcedure
@@ -46,7 +50,7 @@ export const paymentsRouter = createTRPCRouter({
         createdAt: new Date().toISOString(),
       };
 
-      return db.payments.create(payment as unknown as Record<string, unknown>);
+      return db.payments.create(toRecord(payment));
     }),
 
   processPayment: protectedProcedure
