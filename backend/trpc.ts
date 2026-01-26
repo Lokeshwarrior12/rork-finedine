@@ -1,7 +1,7 @@
 // backend/trpc.ts
-import { initTRPC } from '@trpc/server';
+import { initTRPC, TRPCError } from '@trpc/server';
 import superjson from 'superjson';
-import { Context } from './create-context'; // import from same folder
+import { Context } from './trpc/create-context';
 
 const t = initTRPC.context<Context>().create({
   transformer: superjson,
@@ -20,8 +20,7 @@ export const protectedProcedure = t.procedure.use(async ({ ctx, next }) => {
 });
 
 export const restaurantOwnerProcedure = protectedProcedure.use(async ({ ctx, next }) => {
-  // You can fetch role from Supabase here if not in JWT
-  if (ctx.user?.role !== 'restaurant_owner') {  // assuming role is in JWT payload
+  if (ctx.user?.role !== 'restaurant_owner') {
     throw new TRPCError({ code: 'FORBIDDEN' });
   }
   return next({ ctx });

@@ -48,7 +48,7 @@ export const transactionsRouter = createTRPCRouter({
         }
       }
 
-      return db.transactions.create(transaction);
+      return db.transactions.create(transaction as unknown as Record<string, unknown>);
     }),
 
   updateStatus: protectedProcedure

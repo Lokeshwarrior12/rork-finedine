@@ -119,7 +119,7 @@ export const dealsRouter = createTRPCRouter({
         termsConditions: input.termsConditions,
       };
 
-      const created = await db.deals.create(deal);
+      const created = await db.deals.create(deal as unknown as Record<string, unknown>);
 
       if (input.isActive) {
         await db.notifications.notifyFavorites(input.restaurantId, input.title);

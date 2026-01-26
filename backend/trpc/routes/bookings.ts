@@ -49,7 +49,7 @@ export const bookingsRouter = createTRPCRouter({
         status: 'pending',
       };
 
-      const created = await db.tableBookings.create(booking);
+      const created = await db.tableBookings.create(booking as unknown as Record<string, unknown>);
 
       const restaurant = await db.restaurants.getById(input.restaurantId);
       await db.notifications.create({
@@ -104,7 +104,7 @@ export const bookingsRouter = createTRPCRouter({
         status: 'pending',
       };
 
-      return db.serviceBookings.create(booking);
+      return db.serviceBookings.create(booking as unknown as Record<string, unknown>);
     }),
 
   getMyTableBookings: protectedProcedure.query(async ({ ctx }) => {

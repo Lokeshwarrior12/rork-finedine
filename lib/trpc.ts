@@ -5,7 +5,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import type { AppRouter } from "@/backend/trpc/app-router";
 
-export const trpc = createTRPCReact<AppRouter, any, null>();
+export const trpc = createTRPCReact<AppRouter>();
 
 
 const TOKEN_KEY = 'auth_token';

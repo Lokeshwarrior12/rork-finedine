@@ -86,7 +86,7 @@ export const couponsRouter = createTRPCRouter({
         await db.users.update(ctx.userId, { points: user.points + 10 });
       }
 
-      return db.coupons.create(coupon);
+      return db.coupons.create(coupon as unknown as Record<string, unknown>);
     }),
 
   redeem: protectedProcedure

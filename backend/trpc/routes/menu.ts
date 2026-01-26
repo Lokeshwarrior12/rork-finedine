@@ -1,7 +1,8 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { createTRPCRouter, publicProcedure, protectedProcedure } from "../create-context";
-import { db, MenuItem } from "@/backend/db";
+import { db } from "@/backend/db";
+import type { MenuItem } from "@/backend/db";
 
 export const menuRouter = createTRPCRouter({
   getByRestaurant: publicProcedure
@@ -55,7 +56,7 @@ export const menuRouter = createTRPCRouter({
         preparationTime: input.preparationTime,
       };
 
-      return db.menuItems.create(menuItem);
+      return db.menuItems.create(menuItem as unknown as Record<string, unknown>);
     }),
 
   update: protectedProcedure
@@ -95,7 +96,7 @@ export const menuRouter = createTRPCRouter({
   toggleAvailability: protectedProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ input }) => {
-      const item = await db.menuItems.getById(input.id);
+      const item = await db.menuItems.getById(input.id) as MenuItem | null;
       if (!item) {
         throw new TRPCError({
           code: "NOT_FOUND",
@@ -108,7 +109,7 @@ export const menuRouter = createTRPCRouter({
   getCategories: publicProcedure
     .input(z.object({ restaurantId: z.string() }))
     .query(async ({ input }) => {
-      const items = await db.menuItems.getByRestaurantId(input.restaurantId);
+      const items = await db.menuItems.getByRestaurantId(input.restaurantId) as MenuItem[];
       const categories = [...new Set(items.map(item => item.category))];
       return categories;
     }),

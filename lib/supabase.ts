@@ -10,6 +10,7 @@ import Constants from 'expo-constants';
 
 const envSupabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const envSupabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+const envSupabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 const extraSupabaseUrl =
   Constants.expoConfig?.extra?.supabaseUrl ??
@@ -19,11 +20,16 @@ const extraSupabaseAnonKey =
   Constants.expoConfig?.extra?.supabaseAnonKey ??
   Constants.manifest?.extra?.supabaseAnonKey;
 
+const extraSupabaseServiceKey =
+  Constants.expoConfig?.extra?.supabaseServiceKey ??
+  Constants.manifest?.extra?.supabaseServiceKey;
+
 const supabaseUrl = envSupabaseUrl || extraSupabaseUrl;
 const supabaseAnonKey = envSupabaseAnonKey || extraSupabaseAnonKey;
+const supabaseServiceKey = envSupabaseServiceKey || extraSupabaseServiceKey;
 
 /* ----------------------------------------------------
-   CREATE CLIENT
+   CREATE CLIENT (Browser/App)
 ---------------------------------------------------- */
 
 let supabaseClient: SupabaseClient | null = null;
@@ -44,6 +50,28 @@ if (supabaseUrl && supabaseAnonKey) {
   });
 } else {
   console.warn('⚠️ Supabase not configured');
+}
+
+/* ----------------------------------------------------
+   CREATE SERVER CLIENT (Backend with Service Role Key)
+---------------------------------------------------- */
+
+export function createServerSupabase(): SupabaseClient {
+  if (!supabaseUrl) {
+    throw new Error('SUPABASE_URL is not configured');
+  }
+  
+  const key = supabaseServiceKey || supabaseAnonKey;
+  if (!key) {
+    throw new Error('SUPABASE_SERVICE_ROLE_KEY or SUPABASE_ANON_KEY is not configured');
+  }
+
+  return createClient(supabaseUrl, key, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  });
 }
 
 /* ----------------------------------------------------

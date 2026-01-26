@@ -76,7 +76,7 @@ export const foodWasteRouter = createTRPCRouter({
         }
       }
 
-      return db.foodWaste.create(record);
+      return db.foodWaste.create(record as unknown as Record<string, unknown>);
     }),
 
   update: protectedProcedure

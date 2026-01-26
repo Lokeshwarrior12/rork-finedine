@@ -2,7 +2,18 @@ import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { createTRPCRouter, protectedProcedure } from "../create-context";
 import { db } from "@/backend/db";
-import { Payment } from "@/backend/db/schema";
+
+interface Payment {
+  id: string;
+  userId: string;
+  amount: number;
+  currency: string;
+  type: string;
+  status: string;
+  stripePaymentIntentId?: string;
+  metadata?: Record<string, string>;
+  createdAt: string;
+}
 
 export const paymentsRouter = createTRPCRouter({
   getByUser: protectedProcedure.query(async ({ ctx }) => {
@@ -12,7 +23,7 @@ export const paymentsRouter = createTRPCRouter({
   getById: protectedProcedure
     .input(z.object({ id: z.string() }))
     .query(async ({ input }) => {
-      const payments = await db.payments.getAll();
+      const payments = await db.payments.getAll() as Payment[];
       return payments.find(p => p.id === input.id) || null;
     }),
 
@@ -35,7 +46,7 @@ export const paymentsRouter = createTRPCRouter({
         createdAt: new Date().toISOString(),
       };
 
-      return db.payments.create(payment);
+      return db.payments.create(payment as unknown as Record<string, unknown>);
     }),
 
   processPayment: protectedProcedure
@@ -45,7 +56,7 @@ export const paymentsRouter = createTRPCRouter({
     }))
     .mutation(async ({ input }) => {
       const payments = await db.payments.getAll();
-      const foundPayment = payments.find(p => p.id === input.paymentId);
+      const foundPayment = (payments as Payment[]).find(p => p.id === input.paymentId);
       
       if (!foundPayment) {
         throw new TRPCError({
@@ -69,7 +80,7 @@ export const paymentsRouter = createTRPCRouter({
     }),
 
   getPaymentHistory: protectedProcedure.query(async ({ ctx }) => {
-    const payments = await db.payments.getByUserId(ctx.userId);
+    const payments = await db.payments.getByUserId(ctx.userId) as Payment[];
     return payments.sort((a, b) => 
       new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );

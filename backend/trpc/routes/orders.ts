@@ -78,7 +78,7 @@ export const ordersRouter = createTRPCRouter({
         messages: [],
       };
 
-      const created = await db.orders.create(order);
+      const created = await db.orders.create(order as unknown as Record<string, unknown>);
 
       await db.notifications.create({
         id: `notif_${Date.now()}`,
@@ -159,7 +159,7 @@ export const ordersRouter = createTRPCRouter({
         read: false,
       };
 
-      return db.orders.addMessage(input.orderId, newMessage);
+      return db.orders.addMessage(input.orderId, newMessage as unknown as Record<string, unknown>);
     }),
 
   markMessageRead: protectedProcedure

@@ -1,7 +1,8 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { createTRPCRouter, protectedProcedure } from "../create-context";
-import { db, InventoryItem } from "@/backend/db";
+import { db } from "@/backend/db";
+import type { InventoryItem } from "@/backend/db";
 
 export const inventoryRouter = createTRPCRouter({
   getByRestaurant: protectedProcedure
@@ -56,7 +57,7 @@ export const inventoryRouter = createTRPCRouter({
         lastRestocked: new Date().toISOString(),
       };
 
-      return db.inventory.create(item);
+      return db.inventory.create(item as unknown as Record<string, unknown>);
     }),
 
   update: protectedProcedure

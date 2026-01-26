@@ -41,7 +41,7 @@ export const scheduleRouter = createTRPCRouter({
         availability: input.availability,
       };
 
-      return db.employees.create(employee);
+      return db.employees.create(employee as unknown as Record<string, unknown>);
     }),
 
   updateEmployee: protectedProcedure
@@ -123,7 +123,7 @@ export const scheduleRouter = createTRPCRouter({
         updatedAt: new Date().toISOString(),
       };
 
-      return db.schedules.create(schedule);
+      return db.schedules.create(schedule as unknown as Record<string, unknown>);
     }),
 
   updateSchedule: protectedProcedure
