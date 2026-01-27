@@ -1,5 +1,0 @@
-"scripts": {
-  "server:dev": "cd server && nodemon -r ts-node/register src/index.ts",
-  "server:build": "cd server && tsc",
-  "server:start": "cd server && node dist/index.js"
-}
