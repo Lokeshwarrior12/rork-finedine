@@ -1,107 +1,95 @@
 // lib/supabase.ts
 
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { createClient } from '@supabase/supabase-js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import Constants from 'expo-constants';
 
 /* ----------------------------------------------------
-   READ CONFIG (ENV FIRST, FALLBACK TO app.json)
+   ENV CONFIG (EXPO SAFE)
 ---------------------------------------------------- */
 
-const envSupabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
-const envSupabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
-const envSupabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+// These MUST be prefixed with EXPO_PUBLIC_
+// Do NOT put service role key here
+const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
 
-const extraSupabaseUrl =
-  Constants.expoConfig?.extra?.supabaseUrl ??
-  Constants.manifest?.extra?.supabaseUrl;
-
-const extraSupabaseAnonKey =
-  Constants.expoConfig?.extra?.supabaseAnonKey ??
-  Constants.manifest?.extra?.supabaseAnonKey;
-
-const extraSupabaseServiceKey =
-  Constants.expoConfig?.extra?.supabaseServiceKey ??
-  Constants.manifest?.extra?.supabaseServiceKey;
-
-const supabaseUrl = envSupabaseUrl || extraSupabaseUrl;
-const supabaseAnonKey = envSupabaseAnonKey || extraSupabaseAnonKey;
-const supabaseServiceKey = envSupabaseServiceKey || extraSupabaseServiceKey;
+if (!supabaseUrl || !supabaseAnonKey) {
+  console.warn(
+    '⚠️ Supabase env vars missing. Check EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY'
+  );
+}
 
 /* ----------------------------------------------------
-   CREATE CLIENT (Browser/App)
+   CLIENT (AUTH + REALTIME ONLY)
 ---------------------------------------------------- */
 
-let supabaseClient: SupabaseClient | null = null;
-
-if (supabaseUrl && supabaseAnonKey) {
-  supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
+export const supabase = createClient(
+  supabaseUrl ?? '',
+  supabaseAnonKey ?? '',
+  {
     auth: {
       storage: AsyncStorage,
       autoRefreshToken: true,
       persistSession: true,
-      detectSessionInUrl: false,
+      detectSessionInUrl: false, // REQUIRED for React Native
     },
     realtime: {
       params: {
         eventsPerSecond: 10,
       },
     },
-  });
-} else {
-  console.warn('⚠️ Supabase not configured');
+  }
+);
+
+/* ----------------------------------------------------
+   AUTH HELPERS (EXPLICIT EXPORTS)
+---------------------------------------------------- */
+
+// Only auth-related helpers are exposed
+export const {
+  signInWithPassword,
+  signUp,
+  signOut,
+  getSession,
+  getUser,
+  onAuthStateChange,
+  resetPasswordForEmail,
+} = supabase.auth;
+
+/* ----------------------------------------------------
+   REALTIME SUBSCRIPTIONS (ALLOWED)
+---------------------------------------------------- */
+
+export function subscribeToChannel<T = any>(
+  channelName: string,
+  callback: (payload: T) => void
+) {
+  return supabase
+    .channel(channelName)
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        // table: 'orders', // optional: add table filter when needed
+      },
+      callback
+    )
+    .subscribe();
 }
 
 /* ----------------------------------------------------
-   CREATE SERVER CLIENT (Backend with Service Role Key)
+   IMPORTANT RULE (DOCUMENTATION)
 ---------------------------------------------------- */
 
-export function createServerSupabase(): SupabaseClient {
-  if (!supabaseUrl) {
-    throw new Error('SUPABASE_URL is not configured');
-  }
-  
-  const key = supabaseServiceKey || supabaseAnonKey;
-  if (!key) {
-    throw new Error('SUPABASE_SERVICE_ROLE_KEY or SUPABASE_ANON_KEY is not configured');
-  }
-
-  return createClient(supabaseUrl, key, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  });
-}
-
-/* ----------------------------------------------------
-   FALLBACK CLIENT (NO-OP)
----------------------------------------------------- */
-
-const noopSupabase = {
-  auth: {
-    getSession: async () => ({ data: { session: null }, error: null }),
-    onAuthStateChange: () => ({
-      data: { subscription: { unsubscribe: () => {} } },
-    }),
-    signInWithPassword: async () => ({ data: null, error: null }),
-    signUp: async () => ({ data: null, error: null }),
-    signOut: async () => ({ error: null }),
-  },
-  from: () => ({
-    select: async () => ({ data: null, error: null }),
-    insert: async () => ({ data: null, error: null }),
-    update: async () => ({ data: null, error: null }),
-    delete: async () => ({ data: null, error: null }),
-  }),
-  channel: () => ({
-    on: () => ({ subscribe: () => ({ unsubscribe: () => {} }) }),
-  }),
-} as unknown as SupabaseClient;
-
-/* ----------------------------------------------------
-   EXPORTS
----------------------------------------------------- */
-
-export const supabase = supabaseClient ?? noopSupabase;
-export const isSupabaseConfigured = Boolean(supabaseClient);
+/**
+ * 🚫 DO NOT:
+ * - supabase.from(...)
+ * - supabase.rpc(...)
+ * - supabase.storage.from(...)
+ *
+ * from client-side code anymore.
+ *
+ * ✅ ALL database access MUST go through:
+ * - Go backend (REST / gRPC)
+ * - or Supabase Edge Functions (server-only)
+ */
