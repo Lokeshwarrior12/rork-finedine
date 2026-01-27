@@ -1,28 +1,16 @@
-// server/internal/api/restaurants.go
 package api
 
 import (
+	"encoding/json"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
-	"yourproject/server/internal/middleware"
-	"yourproject/server/internal/repositories"
+	"finedine-server/internal/cache"
+	"finedine-server/internal/repositories"
 )
 
-// SetupRestaurantsRoutes registers restaurant endpoints
-func SetupRestaurantsRoutes(r *gin.RouterGroup) {
-	restaurants := r.Group("/restaurants")
-	{
-		// Public route: anyone can list restaurants (no auth required)
-		restaurants.GET("", getRestaurantsHandler)
-		// Later: protected routes like create/update for owners
-	}
-}
-
-// getRestaurantsHandler handles GET /restaurants
-// getRestaurantsHandler with Redis caching
 func getRestaurantsHandler(c *gin.Context) {
-	// Build filters from query params
 	filters := make(map[string]interface{})
 	if city := c.Query("city"); city != "" {
 		filters["city"] = city
@@ -31,14 +19,12 @@ func getRestaurantsHandler(c *gin.Context) {
 		filters["cuisine"] = cuisine
 	}
 
-	// Generate cache key
 	cacheKey := cache.GenerateKey("restaurants", filters)
 
-	// Try cache first
 	ctx := c.Request.Context()
 	cached, err := cache.Get(ctx, cacheKey)
 	if err == nil && cached != nil {
-		var result []map[string]interface{}
+		var result []repositories.Restaurant
 		if json.Unmarshal(cached, &result) == nil {
 			c.JSON(http.StatusOK, gin.H{
 				"restaurants": result,
@@ -49,14 +35,12 @@ func getRestaurantsHandler(c *gin.Context) {
 		}
 	}
 
-	// Cache miss → query Supabase
 	restaurants, err := repositories.GetRestaurants(ctx, filters)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	// Store in cache for 5 minutes
 	data, _ := json.Marshal(restaurants)
 	cache.Set(ctx, cacheKey, data, 5*time.Minute)
 
@@ -64,5 +48,43 @@ func getRestaurantsHandler(c *gin.Context) {
 		"restaurants": restaurants,
 		"count":       len(restaurants),
 		"cached":      false,
+	})
+}
+
+func getRestaurantByIDHandler(c *gin.Context) {
+	id := c.Param("id")
+
+	cacheKey := cache.GenerateKey("restaurant", map[string]interface{}{"id": id})
+
+	ctx := c.Request.Context()
+	cached, err := cache.Get(ctx, cacheKey)
+	if err == nil && cached != nil {
+		var result repositories.Restaurant
+		if json.Unmarshal(cached, &result) == nil {
+			c.JSON(http.StatusOK, gin.H{
+				"restaurant": result,
+				"cached":     true,
+			})
+			return
+		}
+	}
+
+	restaurant, err := repositories.GetRestaurantByID(ctx, id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	if restaurant == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Restaurant not found"})
+		return
+	}
+
+	data, _ := json.Marshal(restaurant)
+	cache.Set(ctx, cacheKey, data, 5*time.Minute)
+
+	c.JSON(http.StatusOK, gin.H{
+		"restaurant": restaurant,
+		"cached":     false,
 	})
 }

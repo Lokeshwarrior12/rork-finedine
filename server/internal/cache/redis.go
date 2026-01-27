@@ -1,9 +1,7 @@
-// server/internal/cache/redis.go
 package cache
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"time"
@@ -14,42 +12,55 @@ import (
 var redisClient *redis.Client
 
 func Init() {
-	redisURL := os.Getenv("REDIS_REST_URL")
+	redisURL := os.Getenv("REDIS_URL")
+	if redisURL == "" {
+		redisURL = os.Getenv("REDIS_REST_URL")
+	}
 	redisToken := os.Getenv("REDIS_REST_TOKEN")
 
-	if redisURL == "" || redisToken == "" {
+	if redisURL == "" {
 		fmt.Println("Warning: Redis not configured - caching disabled")
 		return
 	}
 
-	redisClient = redis.NewClient(&redis.Options{
-		Addr:     redisURL, // Upstash uses REST, but go-redis supports it via URL
-		Password: redisToken,
-		DB:       0,
-	})
+	opts := &redis.Options{
+		Addr: redisURL,
+		DB:   0,
+	}
 
-	// Test connection
-	_, err := redisClient.Ping(context.Background()).Result()
+	if redisToken != "" {
+		opts.Password = redisToken
+	}
+
+	redisClient = redis.NewClient(opts)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	_, err := redisClient.Ping(ctx).Result()
 	if err != nil {
 		fmt.Printf("Redis connection failed: %v\n", err)
-		redisClient = nil // disable caching on failure
+		redisClient = nil
 	} else {
 		fmt.Println("Redis connected successfully")
 	}
 }
 
-// Get cached data – returns nil if not found or error
 func Get(ctx context.Context, key string) ([]byte, error) {
 	if redisClient == nil {
 		return nil, nil
 	}
-	if cached != nil {
-		fmt.Printf("[Cache] Hit for key: %s\n", key)
+	result, err := redisClient.Get(ctx, key).Bytes()
+	if err == redis.Nil {
+		return nil, nil
 	}
-	return redisClient.Get(ctx, key).Bytes()
+	if err != nil {
+		return nil, err
+	}
+	fmt.Printf("[Cache] Hit for key: %s\n", key)
+	return result, nil
 }
 
-// Set cache with TTL (e.g., 5 minutes)
 func Set(ctx context.Context, key string, value []byte, ttl time.Duration) error {
 	if redisClient == nil {
 		return nil
@@ -58,7 +69,13 @@ func Set(ctx context.Context, key string, value []byte, ttl time.Duration) error
 	return redisClient.Set(ctx, key, value, ttl).Err()
 }
 
-// Generate cache key (e.g., "restaurants:city:Irving:cuisine:Italian")
+func Delete(ctx context.Context, key string) error {
+	if redisClient == nil {
+		return nil
+	}
+	return redisClient.Del(ctx, key).Err()
+}
+
 func GenerateKey(prefix string, params map[string]interface{}) string {
 	key := prefix
 	for k, v := range params {

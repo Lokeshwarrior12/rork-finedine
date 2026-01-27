@@ -1,4 +1,3 @@
-// server/internal/middleware/auth.go
 package middleware
 
 import (
@@ -10,15 +9,13 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-// Claims represents the structure of the Supabase JWT payload
 type Claims struct {
-	Sub   string `json:"sub"`   // user ID
+	Sub   string `json:"sub"`
 	Email string `json:"email"`
-	Role  string `json:"role,omitempty"` // custom claim we added in metadata
+	Role  string `json:"role,omitempty"`
 	jwt.RegisteredClaims
 }
 
-// AuthMiddleware validates Supabase JWT and attaches user info to context
 func AuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader("Authorization")
@@ -27,7 +24,6 @@ func AuthMiddleware() gin.HandlerFunc {
 			return
 		}
 
-		// Expect "Bearer <token>"
 		parts := strings.Split(authHeader, " ")
 		if len(parts) != 2 || parts[0] != "Bearer" {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Invalid authorization format"})
@@ -36,14 +32,12 @@ func AuthMiddleware() gin.HandlerFunc {
 
 		tokenStr := parts[1]
 
-		// Get JWT secret from env (Supabase JWT secret – from dashboard > Settings > API > JWT Settings)
 		secret := os.Getenv("SUPABASE_JWT_SECRET")
 		if secret == "" {
 			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Server configuration error"})
 			return
 		}
 
-		// Parse and validate JWT
 		token, err := jwt.ParseWithClaims(tokenStr, &Claims{}, func(token *jwt.Token) (interface{}, error) {
 			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 				return nil, jwt.ErrSignatureInvalid
@@ -62,16 +56,14 @@ func AuthMiddleware() gin.HandlerFunc {
 			return
 		}
 
-		// Attach to Gin context for use in handlers
 		c.Set("userID", claims.Sub)
 		c.Set("userEmail", claims.Email)
-		c.Set("userRole", claims.Role) // 'user' or 'restaurant_owner'
+		c.Set("userRole", claims.Role)
 
 		c.Next()
 	}
 }
 
-// Optional: Get user info from context in handlers
 func GetUserID(c *gin.Context) string {
 	if val, exists := c.Get("userID"); exists {
 		return val.(string)

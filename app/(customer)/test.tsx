@@ -1,53 +1,45 @@
-import { View, Text, Button, StyleSheet } from 'react-native';
+import { View, Text, Button, StyleSheet, Alert } from 'react-native';
 import { useAuth } from '@/contexts/AuthContext';
-import { supabase, isSupabaseConfigured } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase';
 
 export default function TestScreen() {
-  const { session, user, isAuthenticated, login, signup } = useAuth();
+  const { session, user, isAuthenticated, signIn, signUp } = useAuth();
 
   const testSupabase = async () => {
     try {
-      if (!isSupabaseConfigured) {
-        alert('Supabase not configured - using tRPC auth only');
-        return;
-      }
       const { data, error } = await supabase.from('restaurants').select('count');
-      alert(JSON.stringify({ data, error }));
+      Alert.alert('Supabase Test', JSON.stringify({ data, error }));
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-      alert('Error: ' + errorMessage);
+      Alert.alert('Error', errorMessage);
     }
   };
 
   const testLogin = async () => {
     try {
-      await login({ 
-        email: 'test@example.com', 
-        password: 'password123',
-        role: 'customer'
-      });
-      alert('Login successful!');
+      const result = await signIn('test@example.com', 'password123');
+      if (result.error) {
+        Alert.alert('Login Error', result.error);
+      } else {
+        Alert.alert('Success', 'Login successful!');
+      }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-      alert('Login error: ' + errorMessage);
+      Alert.alert('Login Error', errorMessage);
     }
   };
 
   const testSignup = async () => {
     try {
-      await signup({ 
-        email: 'test@example.com', 
-        password: 'password123',
-        name: 'Test User',
-        phone: '1234567890',
-        address: '123 Main St',
-        role: 'customer',
-        skipVerification: true
-      });
-      alert('Signup successful!');
+      const result = await signUp('test@example.com', 'password123', 'Test User');
+      if (result.error) {
+        Alert.alert('Signup Error', result.error);
+      } else {
+        Alert.alert('Success', 'Signup successful!');
+      }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-      alert('Signup error: ' + errorMessage);
+      Alert.alert('Signup Error', errorMessage);
     }
   };
 
@@ -56,7 +48,6 @@ export default function TestScreen() {
       <Text style={styles.text}>Auth Status: {isAuthenticated ? 'Logged in' : 'Not logged in'}</Text>
       <Text style={styles.text}>User: {user?.name || 'None'}</Text>
       <Text style={styles.text}>Supabase Session: {session ? 'Active' : 'None'}</Text>
-      <Text style={styles.text}>Supabase Configured: {isSupabaseConfigured ? 'Yes' : 'No'}</Text>
       <View style={styles.buttonContainer}>
         <Button title="Test Supabase" onPress={testSupabase} />
       </View>
