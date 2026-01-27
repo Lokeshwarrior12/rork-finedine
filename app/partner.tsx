@@ -53,7 +53,7 @@ const TESTIMONIALS = [
 export default function PartnerScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { signup, signupPending } = useAuth();
+  const { signUp, isLoading: signupPending } = useAuth();
 
   const [step, setStep] = useState<'info' | 'verify' | 'signup'>('info');
   const [restaurantName, setRestaurantName] = useState('');
@@ -113,16 +113,11 @@ export default function PartnerScreen() {
     }
     setError('');
     try {
-      await signup({
-        name: ownerName,
-        email,
-        phone,
-        address: '',
-        password,
-        role: 'restaurant_owner',
-        restaurantId: restaurantName.toLowerCase().replace(/\s+/g, '_') + '_' + Date.now(),
-        skipVerification: true,
-      });
+      const result = await signUp(email, password, ownerName, 'restaurant_owner');
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
       router.replace('/(restaurant)/dashboard' as any);
     } catch {
       setError('Signup failed. Please try again.');

@@ -11,32 +11,9 @@ import {
 import { supabase } from '@/lib/supabase';
 import { Session } from '@supabase/supabase-js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { User, UserRole, CardDetails } from '@/types';
 
-/* -------------------------------------------------------------------------- */
-/*                                   Types                                    */
-/* -------------------------------------------------------------------------- */
-
-export type UserRole = 'user' | 'restaurant_owner';
-
-export interface CardDetails {
-  lastFour: string;
-  expiryDate: string;
-  cardType: string;
-}
-
-export interface User {
-  id: string;
-  name: string;
-  email: string;
-  phone?: string;
-  address?: string;
-  role: UserRole;
-  points: number;
-  favorites: string[];
-  photo?: string;
-  restaurantId?: string;
-  cardDetails?: CardDetails;
-}
+export type { User, UserRole, CardDetails };
 
 export interface AuthContextValue {
   session: Session | null;
@@ -50,7 +27,7 @@ export interface AuthContextValue {
     email: string,
     password: string,
     name?: string,
-    role?: UserRole
+    role?: UserRole | 'user'
   ) => Promise<{ error?: string }>;
   signOut: () => Promise<void>;
   logout: () => Promise<void>;
@@ -145,7 +122,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         email: data?.email || authUser?.email || '',
         phone: data?.phone || '',
         address: data?.address || '',
-        role: data?.role || 'user',
+        role: data?.role || 'customer',
         points: storedPoints ? parseInt(storedPoints, 10) : (data?.points || 0),
         favorites: storedFavorites ? JSON.parse(storedFavorites) : (data?.favorites || []),
         photo: data?.photo || authUser?.user_metadata?.avatar_url,
@@ -164,7 +141,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           id: userId,
           name: authUser.user_metadata?.name || 'User',
           email: authUser.email || '',
-          role: 'user',
+          phone: '',
+          address: '',
+          role: 'customer',
           points: 0,
           favorites: [],
         });
@@ -192,15 +171,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     email: string,
     password: string,
     name?: string,
-    role: UserRole = 'user'
+    role: UserRole | 'user' = 'customer'
   ) => {
+    const normalizedRole: UserRole = role === 'user' ? 'customer' : role;
     const { error } = await supabase.auth.signUp({
       email,
       password,
       options: {
         data: {
           name,
-          role,
+          role: normalizedRole,
         },
       },
     });

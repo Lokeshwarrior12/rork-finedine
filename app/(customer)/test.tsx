@@ -1,19 +1,8 @@
 import { View, Text, Button, StyleSheet, Alert } from 'react-native';
 import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/lib/supabase';
 
 export default function TestScreen() {
   const { session, user, isAuthenticated, signIn, signUp } = useAuth();
-
-  const testSupabase = async () => {
-    try {
-      const { data, error } = await supabase.from('restaurants').select('count');
-      Alert.alert('Supabase Test', JSON.stringify({ data, error }));
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-      Alert.alert('Error', errorMessage);
-    }
-  };
 
   const testLogin = async () => {
     try {
@@ -48,9 +37,6 @@ export default function TestScreen() {
       <Text style={styles.text}>Auth Status: {isAuthenticated ? 'Logged in' : 'Not logged in'}</Text>
       <Text style={styles.text}>User: {user?.name || 'None'}</Text>
       <Text style={styles.text}>Supabase Session: {session ? 'Active' : 'None'}</Text>
-      <View style={styles.buttonContainer}>
-        <Button title="Test Supabase" onPress={testSupabase} />
-      </View>
       <View style={styles.buttonContainer}>
         <Button title="Test Login" onPress={testLogin} />
       </View>
