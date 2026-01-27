@@ -5,6 +5,10 @@ import (
 	"rork-finedine/server/internal/cache"
 )
 import (
+	// ...
+	"rork-finedine/server/internal/api"
+)
+import (
 	"fmt"
 	"log"
 	"net/http"
@@ -47,7 +51,10 @@ func main() {
 			"role":    role,
 		})
 	})
-
+// Register API groups
+	apiGroup := r.Group("/api")
+	api.SetupRestaurantsRoutes(apiGroup)
+	api.SetupProfileRoutes(apiGroup) // NEW
 	// NEW: Register restaurant routes (some public, some will be protected later)
 	api.SetupRestaurantsRoutes(r.Group("/api"))
 
