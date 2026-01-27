@@ -1,6 +1,9 @@
 // server/cmd/main.go
 package main
-
+import (
+	// ... existing imports
+	"rork-finedine/server/internal/cache"
+)
 import (
 	"fmt"
 	"log"
@@ -33,7 +36,7 @@ func main() {
 			"env":     os.Getenv("ENV") == "" ? "development" : os.Getenv("ENV"),
 		})
 	})
-
+    cache.Init()
 	// Protected example
 	r.GET("/protected", func(c *gin.Context) {
 		userID := middleware.GetUserID(c)
