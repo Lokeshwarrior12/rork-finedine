@@ -9,8 +9,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
-	"yourproject/server/internal/api"
-	"yourproject/server/internal/middleware"
+	"rork-finedine/server/internal/api"
+	"rork-finedine/server/internal/middleware"
 )
 
 func main() {
