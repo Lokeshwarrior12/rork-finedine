@@ -9,6 +9,10 @@ import (
 	"rork-finedine/server/internal/api"
 )
 import (
+	// ...
+	"rork-finedine/server/internal/middleware"
+)
+import (
 	"fmt"
 	"log"
 	"net/http"
@@ -26,6 +30,10 @@ func main() {
 	}
 
 	r := gin.Default()
+	r.Use(middleware.RateLimitMiddleware())
+
+	// Then auth (protected routes)
+	r.Use(middleware.AuthMiddleware())
 	r.Use(gin.Logger())
 	r.Use(gin.Recovery())
 
