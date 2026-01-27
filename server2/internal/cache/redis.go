@@ -43,6 +43,9 @@ func Get(ctx context.Context, key string) ([]byte, error) {
 	if redisClient == nil {
 		return nil, nil
 	}
+	if cached != nil {
+		fmt.Printf("[Cache] Hit for key: %s\n", key)
+	}
 	return redisClient.Get(ctx, key).Bytes()
 }
 
@@ -51,6 +54,7 @@ func Set(ctx context.Context, key string, value []byte, ttl time.Duration) error
 	if redisClient == nil {
 		return nil
 	}
+	fmt.Printf("[Cache] Stored key: %s\n", key)
 	return redisClient.Set(ctx, key, value, ttl).Err()
 }
 
