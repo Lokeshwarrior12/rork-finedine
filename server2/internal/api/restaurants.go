@@ -20,8 +20,9 @@ func SetupRestaurantsRoutes(r *gin.RouterGroup) {
 }
 
 // getRestaurantsHandler handles GET /restaurants
+// getRestaurantsHandler with Redis caching
 func getRestaurantsHandler(c *gin.Context) {
-	// Optional query params
+	// Build filters from query params
 	filters := make(map[string]interface{})
 	if city := c.Query("city"); city != "" {
 		filters["city"] = city
@@ -30,18 +31,38 @@ func getRestaurantsHandler(c *gin.Context) {
 		filters["cuisine"] = cuisine
 	}
 
-	restaurants, err := repositories.GetRestaurants(c.Request.Context(), filters)
+	// Generate cache key
+	cacheKey := cache.GenerateKey("restaurants", filters)
+
+	// Try cache first
+	ctx := c.Request.Context()
+	cached, err := cache.Get(ctx, cacheKey)
+	if err == nil && cached != nil {
+		var result []map[string]interface{}
+		if json.Unmarshal(cached, &result) == nil {
+			c.JSON(http.StatusOK, gin.H{
+				"restaurants": result,
+				"count":       len(result),
+				"cached":      true,
+			})
+			return
+		}
+	}
+
+	// Cache miss → query Supabase
+	restaurants, err := repositories.GetRestaurants(ctx, filters)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	// Optional: add role-based extra data (e.g., owners see private fields)
-	// role := middleware.GetUserRole(c)
-	// if role == "restaurant_owner" { ... }
+	// Store in cache for 5 minutes
+	data, _ := json.Marshal(restaurants)
+	cache.Set(ctx, cacheKey, data, 5*time.Minute)
 
 	c.JSON(http.StatusOK, gin.H{
 		"restaurants": restaurants,
 		"count":       len(restaurants),
+		"cached":      false,
 	})
 }
