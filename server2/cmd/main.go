@@ -9,26 +9,23 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
-	"yourproject/server/internal/middleware" // adjust import path if needed
+	"yourproject/server/internal/api"
+	"yourproject/server/internal/middleware"
 )
 
 func main() {
-	// Load .env file
 	if err := godotenv.Load(); err != nil {
 		log.Println("No .env file found - using system env vars")
 	}
 
-	// Initialize Gin router
 	r := gin.Default()
-
-	// Global middleware
 	r.Use(gin.Logger())
 	r.Use(gin.Recovery())
 
-	// Apply auth middleware to ALL routes (we'll make some public later)
+	// Auth middleware (applied globally, but we can skip for public routes later)
 	r.Use(middleware.AuthMiddleware())
 
-	// Health check endpoint - no auth needed (public)
+	// Public health check
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
 			"status":  "healthy",
@@ -37,18 +34,19 @@ func main() {
 		})
 	})
 
-	// Example protected route - will require valid token
+	// Protected example
 	r.GET("/protected", func(c *gin.Context) {
 		userID := middleware.GetUserID(c)
 		role := middleware.GetUserRole(c)
 		c.JSON(http.StatusOK, gin.H{
-			"message": "You are authenticated!",
+			"message": "Authenticated!",
 			"userID":  userID,
 			"role":    role,
 		})
 	})
 
-	// Future: Add more routes here (e.g., /restaurants, /orders)
+	// NEW: Register restaurant routes (some public, some will be protected later)
+	api.SetupRestaurantsRoutes(r.Group("/api"))
 
 	port := os.Getenv("PORT")
 	if port == "" {
