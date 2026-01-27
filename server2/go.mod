@@ -1,5 +1,5 @@
 cd server
-go mod init github.com/Lokeshwarrior12/rork-finedine/server2
+go mod init github.com/Lokeshwarrior12/finedine-server
 go get github.com/gin-gonic/gin
 go get github.com/joho/godotenv
 go get github.com/redis/go-redis/v9
