@@ -111,7 +111,6 @@ func main() {
 	api.SetupProtectedRoutes(protectedAPI)
 
 	// Get port from environment (Fly.io / Render set this automatically)
-	port := os.Getenv("PORT")
     port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
