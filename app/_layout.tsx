@@ -1,11 +1,14 @@
 import React, { useEffect } from 'react';
+import { View, Button, StyleSheet, Platform } from 'react-native';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+
 import { AuthProvider } from '@/contexts/AuthContext';
 import { ThemeProvider, useTheme } from '@/contexts/ThemeContext';
+import { API_URL } from '@/lib/config';
 
 /* -----------------------------------------------------
    SPLASH SCREEN
@@ -14,6 +17,31 @@ import { ThemeProvider, useTheme } from '@/contexts/ThemeContext';
 SplashScreen.preventAutoHideAsync();
 
 const queryClient = new QueryClient();
+
+/* -----------------------------------------------------
+   DEV HEALTH CHECK BUTTON
+----------------------------------------------------- */
+
+function DevHealthCheckButton() {
+  if (!__DEV__) return null;
+
+  return (
+    <View style={styles.devButton}>
+      <Button
+        title="Test Backend"
+        onPress={async () => {
+          try {
+            const res = await fetch(`${API_URL}/health`);
+            const data = await res.json();
+            alert(`Backend OK:\n${JSON.stringify(data, null, 2)}`);
+          } catch (e: any) {
+            alert(`Backend Error:\n${e.message}`);
+          }
+        }}
+      />
+    </View>
+  );
+}
 
 /* -----------------------------------------------------
    NAV STACK
@@ -71,6 +99,9 @@ function RootLayoutNav() {
 
         <Stack.Screen name="+not-found" />
       </Stack>
+
+      {/* DEV ONLY */}
+      <DevHealthCheckButton />
     </>
   );
 }
@@ -96,3 +127,16 @@ export default function RootLayout() {
     </GestureHandlerRootView>
   );
 }
+
+/* -----------------------------------------------------
+   STYLES
+----------------------------------------------------- */
+
+const styles = StyleSheet.create({
+  devButton: {
+    position: 'absolute',
+    bottom: Platform.OS === 'ios' ? 40 : 20,
+    right: 20,
+    zIndex: 999,
+  },
+});
