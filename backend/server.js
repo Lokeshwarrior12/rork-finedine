@@ -30,6 +30,16 @@ io.on('connection', (socket) => {
   });
 });
 
+// ✅ HEALTH CHECK
+app.get("/health", (req, res) => {
+  res.status(200).json({
+    status: "ok",
+    service: "primedine-backend",
+    uptime: process.uptime(),
+    timestamp: new Date().toISOString()
+  });
+});
+
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Server listening on ${PORT}`);
