@@ -1,4 +1,6 @@
+
 # -------- Build stage --------
+RUN test ! -f package.json || (echo "❌ Frontend detected. Wrong Docker context." && exit 1)
 FROM golang:1.23-alpine AS builder
 
 WORKDIR /app
