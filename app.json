@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "FineDine",
-    "slug": "foodiepartner-app",
+    "name": "PrimeDine",
+    "slug": "primedine",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -52,6 +52,9 @@
       "eas": {
         "projectId": "70eb24db"
       },
+
+      "apiUrl": "https://primedine.fly.dev",
+
       "supabaseUrl": "https://ibyyhjwrhaehhmznyadz.supabase.co",
       "supabaseAnonKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlieXloandyaGFlaGhtem55YWR6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjgxMTIyNzEsImV4cCI6MjA4MzY4ODI3MX0.yTOtqjeKEIuRdZ-8BgWK3x2zVbT8XgaAlCqj1EbsYvs"
     }
