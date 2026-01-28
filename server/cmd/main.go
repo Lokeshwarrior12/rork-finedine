@@ -112,9 +112,11 @@ func main() {
 
 	// Get port from environment (Fly.io / Render set this automatically)
 	port := os.Getenv("PORT")
+    port := os.Getenv("PORT")
 	if port == "" {
-		port = "8080" // local fallback
+		port = "8080"
 	}
+
 
 	// Create server with timeouts
 	srv := &http.Server{
