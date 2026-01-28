@@ -7,30 +7,33 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
    ENV CONFIG (EXPO SAFE)
 ---------------------------------------------------- */
 
-// These MUST be prefixed with EXPO_PUBLIC_
-// Do NOT put service role key here
+// 🚨 These MUST be prefixed with EXPO_PUBLIC_
+// 🚫 NEVER put service role keys here
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
 
+// ❌ Hard fail if env vars are missing
+// This prevents silent crashes and restart loops
 if (!supabaseUrl || !supabaseAnonKey) {
-  console.warn(
-    '⚠️ Supabase env vars missing. Check EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY'
+  throw new Error(
+    'Missing environment variables: EXPO_PUBLIC_SUPABASE_URL and/or EXPO_PUBLIC_SUPABASE_ANON_KEY'
   );
 }
 
 /* ----------------------------------------------------
-   CLIENT (AUTH + REALTIME ONLY)
+   SUPABASE CLIENT
+   (AUTH + REALTIME ONLY — NO DB ACCESS)
 ---------------------------------------------------- */
 
 export const supabase = createClient(
-  supabaseUrl ?? '',
-  supabaseAnonKey ?? '',
+  supabaseUrl,
+  supabaseAnonKey,
   {
     auth: {
       storage: AsyncStorage,
       autoRefreshToken: true,
       persistSession: true,
-      detectSessionInUrl: false, // REQUIRED for React Native
+      detectSessionInUrl: false, // REQUIRED for React Native / Expo
     },
     realtime: {
       params: {
@@ -44,7 +47,6 @@ export const supabase = createClient(
    AUTH HELPERS (EXPLICIT EXPORTS)
 ---------------------------------------------------- */
 
-// Only auth-related helpers are exposed
 export const {
   signInWithPassword,
   signUp,
@@ -70,7 +72,6 @@ export function subscribeToChannel<T = any>(
       {
         event: '*',
         schema: 'public',
-        // table: 'orders', // optional: add table filter when needed
       },
       callback
     )
@@ -78,18 +79,18 @@ export function subscribeToChannel<T = any>(
 }
 
 /* ----------------------------------------------------
-   IMPORTANT RULE (DOCUMENTATION)
+   IMPORTANT ARCHITECTURE RULE
 ---------------------------------------------------- */
 
 /**
- * 🚫 DO NOT:
+ * 🚫 DO NOT USE FROM CLIENT:
  * - supabase.from(...)
  * - supabase.rpc(...)
  * - supabase.storage.from(...)
  *
- * from client-side code anymore.
- *
- * ✅ ALL database access MUST go through:
+ * ✅ ALL DATA ACCESS MUST GO THROUGH:
  * - Go backend (REST / gRPC)
- * - or Supabase Edge Functions (server-only)
+ * - OR Supabase Edge Functions
+ *
+ * This prevents RLS bypass and keeps keys secure.
  */
