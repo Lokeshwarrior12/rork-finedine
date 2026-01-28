@@ -1,58 +1,36 @@
-import express from "express";
-import cors from "cors";
-import http from "http";
-import { Server } from "socket.io";
-import dotenv from "dotenv";
-import { createClient } from "@supabase/supabase-js";
+import express from 'express';
+import http from 'http';
+import { Server } from 'socket.io';
+import cors from 'cors';
+import dotenv from 'dotenv';
 
 dotenv.config();
 
 const app = express();
 const server = http.createServer(app);
 
-/* ------------------ Middleware ------------------ */
-app.use(cors());
-app.use(express.json());
-
-/* ------------------ Supabase ------------------ */
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
-
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error("❌ Supabase env vars missing");
-}
-
-export const supabase = createClient(
-  supabaseUrl,
-  supabaseAnonKey
-);
-
-/* ------------------ Socket.IO ------------------ */
 const io = new Server(server, {
   cors: {
-    origin: "*",
+    origin: '*',
   },
 });
 
-io.on("connection", (socket) => {
-  console.log("🟢 Client connected:", socket.id);
+app.use(cors());
+app.use(express.json());
 
-  socket.on("disconnect", () => {
-    console.log("🔴 Client disconnected:", socket.id);
+app.get('/', (req, res) => {
+  res.send('PrimeDine backend running ✅');
+});
+
+io.on('connection', (socket) => {
+  console.log('🔌 Client connected:', socket.id);
+
+  socket.on('disconnect', () => {
+    console.log('❌ Client disconnected:', socket.id);
   });
 });
 
-/* ------------------ Routes ------------------ */
-app.get("/health", (req, res) => {
-  res.json({
-    status: "ok",
-    uptime: process.uptime(),
-  });
-});
-
-/* ------------------ Start Server ------------------ */
-const PORT = process.env.PORT || 8080;
-
-server.listen(PORT, () => {
-  console.log(`🚀 Backend running on port ${PORT}`);
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 Server listening on ${PORT}`);
 });
