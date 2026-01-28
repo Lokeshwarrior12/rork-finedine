@@ -3,7 +3,7 @@
   "main": "expo-router/entry",
   "version": "1.0.0",
   "scripts": {
-    "start": "node server.js",
+    "start": "node backend/server.js",
     "start-web": "bunx rork start -p 3hdmt22ihte9v7gfmtgrh --web --tunnel",
     "start-web-dev": "DEBUG=expo* bunx rork start -p 3hdmt22ihte9v7gfmtgrh --web --tunnel",
     "lint": "expo lint"
