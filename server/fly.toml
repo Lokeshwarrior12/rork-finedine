@@ -5,7 +5,7 @@ primary_region = "dfw"    # Dallas, close to Irving, TX – good latency
   builder = "paketobuildpacks/builder:base"
 
 [http_service]
-  internal_port = 8080
+  internal_port = 3000
   force_https = true
   auto_stop_machines = true   # Saves money when idle
   auto_start_machines = true
