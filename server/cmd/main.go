@@ -118,13 +118,16 @@ func main() {
 
 
 	// Create server with timeouts
-	srv := &http.Server{
-		Addr:         ":" + port,
+    addr := "0.0.0.0:" + port
+
+    srv := &http.Server{
+		Addr:         addr,
 		Handler:      r,
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 10 * time.Second,
 		IdleTimeout:  30 * time.Second,
 	}
+
 
 	// Start server in goroutine
 	go func() {
