@@ -1,9 +1,9 @@
 // backend/trpc.ts
 import { initTRPC, TRPCError } from '@trpc/server';
 import superjson from 'superjson';
-import { Context } from './trpc/create-context';
+import type { TRPCContext } from './trpc/create-context';
 
-const t = initTRPC.context<Context>().create({
+const t = initTRPC.context<TRPCContext>().create({
   transformer: superjson,
   errorFormatter({ shape }) {
     return shape;
@@ -13,14 +13,14 @@ const t = initTRPC.context<Context>().create({
 export const router = t.router;
 export const publicProcedure = t.procedure;
 export const protectedProcedure = t.procedure.use(async ({ ctx, next }) => {
-  if (!ctx.user || !ctx.userId) {
+  if (!ctx.userId) {
     throw new TRPCError({ code: 'UNAUTHORIZED' });
   }
-  return next({ ctx: { ...ctx, user: ctx.user, userId: ctx.userId } });
+  return next({ ctx: { ...ctx, userId: ctx.userId } });
 });
 
 export const restaurantOwnerProcedure = protectedProcedure.use(async ({ ctx, next }) => {
-  if (ctx.user?.role !== 'restaurant_owner') {
+  if (ctx.role !== 'restaurant_owner') {
     throw new TRPCError({ code: 'FORBIDDEN' });
   }
   return next({ ctx });

@@ -64,8 +64,8 @@ export default function SignupScreen() {
   const [error, setError] = useState('');
 
   const sendCodeMutation = trpc.auth.sendVerificationCode.useMutation({
-    onSuccess: (data) => {
-      console.log('Verification code sent:', data.code);
+    onSuccess: () => {
+      console.log('Verification code sent');
       setStep('verify');
       setError('');
     },
@@ -136,16 +136,11 @@ export default function SignupScreen() {
     }
     setError('');
     try {
-      await signup({
-        name,
-        email,
-        phone,
-        address,
-        password,
-        role: (role as UserRole) || 'customer',
-        cuisinePreferences: selectedCuisines,
-        skipVerification: true,
-      });
+      const result = await signup(email, password, name, (role as UserRole) || 'customer');
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
       if (isRestaurant) {
         router.replace('/(restaurant)/dashboard' as any);
       } else {

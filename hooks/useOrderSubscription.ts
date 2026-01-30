@@ -25,7 +25,7 @@ export function useOrderSubscription(
 ) {
   const { userId, restaurantId, onUpdate } = props;
   const queryClient = useQueryClient();
-  const { profile } = useAuth();
+  const { user } = useAuth();
 
   useEffect(() => {
     /**
@@ -44,13 +44,13 @@ export function useOrderSubscription(
     } else if (restaurantId) {
       filter = `restaurant_id=eq.${restaurantId}`;
       channelScope = `restaurant:${restaurantId}`;
-    } else if (profile?.id) {
-      if (profile.role === 'restaurant_owner' && profile.restaurant_id) {
-        filter = `restaurant_id=eq.${profile.restaurant_id}`;
-        channelScope = `restaurant:${profile.restaurant_id}`;
+    } else if (user?.id) {
+      if (user.role === 'restaurant_owner' && user.restaurantId) {
+        filter = `restaurant_id=eq.${user.restaurantId}`;
+        channelScope = `restaurant:${user.restaurantId}`;
       } else {
-        filter = `user_id=eq.${profile.id}`;
-        channelScope = `user:${profile.id}`;
+        filter = `user_id=eq.${user.id}`;
+        channelScope = `user:${user.id}`;
       }
     }
 
@@ -75,19 +75,15 @@ export function useOrderSubscription(
         (payload) => {
           console.log('[Realtime] Order event:', payload);
 
-          /**
-           * Invalidate cached queries so UI updates automatically
-           * Matches lib/api.ts usage
-           */
           queryClient.invalidateQueries({ queryKey: ['orders'] });
 
-          if (payload.new?.id) {
+          const newRecord = payload.new as Record<string, unknown> | undefined;
+          if (newRecord?.id) {
             queryClient.invalidateQueries({
-              queryKey: ['order', payload.new.id],
+              queryKey: ['order', newRecord.id],
             });
           }
 
-          // Optional callback (toast, sound, navigation, etc.)
           if (onUpdate) {
             onUpdate(payload);
           }
@@ -106,9 +102,9 @@ export function useOrderSubscription(
   }, [
     userId,
     restaurantId,
-    profile?.id,
-    profile?.role,
-    profile?.restaurant_id,
+    user?.id,
+    user?.role,
+    user?.restaurantId,
     queryClient,
     onUpdate,
   ]);

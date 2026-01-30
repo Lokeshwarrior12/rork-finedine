@@ -1,7 +1,12 @@
 import 'react-native-url-polyfill/auto';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { config } from './config';
+
+export const isSupabaseConfigured = Boolean(
+  config.supabase.url && config.supabase.anonKey
+);
+
 
 // Initialize Supabase client
 export const supabase = createClient(
@@ -16,6 +21,22 @@ export const supabase = createClient(
     },
   }
 );
+
+// Server-side Supabase client (uses service role key for elevated privileges)
+export function createServerSupabase(): SupabaseClient {
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || config.supabase.anonKey;
+  
+  return createClient(
+    config.supabase.url,
+    serviceRoleKey,
+    {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    }
+  );
+}
 
 // Auth helpers
 export const auth = {

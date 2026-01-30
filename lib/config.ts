@@ -27,6 +27,8 @@ interface Config {
 
 const extra = Constants.expoConfig?.extra || {};
 
+export const API_URL = process.env.EXPO_PUBLIC_API_URL || process.env.EXPO_PUBLIC_RORK_API_BASE_URL || '';
+
 export const config: Config = {
   supabase: {
     url: process.env.EXPO_PUBLIC_SUPABASE_URL || extra.supabaseUrl || '',

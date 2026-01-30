@@ -2,6 +2,8 @@ import { trpcServer } from "@hono/trpc-server";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
+import { compress } from "hono/compress";
+import { timing, startTime, endTime } from "hono/timing";
 
 import { appRouter } from "./trpc/app-router";
 import { createContext } from "./trpc/create-context";
@@ -9,33 +11,41 @@ import { db } from "./db";
 
 const app = new Hono();
 
+let dbInitialized = false;
+
 app.use("*", logger());
+app.use("*", compress());
+app.use("*", timing());
 
 app.use("*", cors({
   origin: '*',
   allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowHeaders: ['Content-Type', 'Authorization'],
-  exposeHeaders: ['Content-Length'],
+  exposeHeaders: ['Content-Length', 'Server-Timing'],
   maxAge: 86400,
   credentials: true,
 }));
 
 app.use(async (c, next) => {
-  const startTime = Date.now();
+  startTime(c, 'db-init');
   
-  try {
-    await db.init();
-  } catch (error) {
-    console.warn('Database initialization warning:', error);
+  if (!dbInitialized) {
+    try {
+      await db.init();
+      dbInitialized = true;
+    } catch (error) {
+      console.warn('Database initialization warning:', error);
+    }
   }
   
-  await next();
+  endTime(c, 'db-init');
   
-  const duration = Date.now() - startTime;
+  const start = Date.now();
+  await next();
+  const duration = Date.now() - start;
+  
   if (duration > 1000) {
     console.warn(`[SLOW] [${c.req.method}] ${c.req.url} - ${duration}ms`);
-  } else {
-    console.log(`[${c.req.method}] ${c.req.url} - ${duration}ms`);
   }
 });
 

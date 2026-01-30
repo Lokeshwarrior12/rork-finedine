@@ -18,12 +18,20 @@ export type { User, UserRole, CardDetails };
 export interface AuthContextValue {
   session: Session | null;
   user: User | null;
+  profile: User | null;
   isLoading: boolean;
   isAuthenticated: boolean;
   error: string | null;
+  signupPending: boolean;
 
   signIn: (email: string, password: string) => Promise<{ error?: string }>;
   signUp: (
+    email: string,
+    password: string,
+    name?: string,
+    role?: UserRole | 'user'
+  ) => Promise<{ error?: string }>;
+  signup: (
     email: string,
     password: string,
     name?: string,
@@ -243,11 +251,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       value={{
         session,
         user,
+        profile: user,
         isLoading,
         isAuthenticated: !!session?.user,
         error,
+        signupPending: isLoading,
         signIn,
         signUp,
+        signup: signUp,
         signOut,
         logout,
         toggleFavorite,

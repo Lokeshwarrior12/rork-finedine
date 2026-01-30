@@ -65,8 +65,8 @@ export default function PartnerScreen() {
   const [error, setError] = useState('');
 
   const sendCodeMutation = trpc.auth.sendVerificationCode.useMutation({
-    onSuccess: (data) => {
-      console.log('Verification code sent:', data.code);
+    onSuccess: () => {
+      console.log('Verification code sent');
       setStep('verify');
       setError('');
     },
