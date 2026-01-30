@@ -5,43 +5,54 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "rork-app",
+    "scheme": "primedine",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
 
     "splash": {
-      "image": "./assets/images/splash-icon.png",
+      "image": "./assets/images/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#F97316"
     },
+
+    "assetBundlePatterns": ["**/*"],
 
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "app.rork.foodiepartner-app"
+      "bundleIdentifier": "com.primedine.app"
     },
 
     "android": {
+      "package": "com.primedine.app",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#F97316"
       },
-      "package": "app.rork.foodiepartner_app",
-      "permissions": ["android.permission.VIBRATE"]
+      "permissions": [
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "VIBRATE"
+      ]
     },
 
     "web": {
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/images/favicon.png",
+      "bundler": "metro"
     },
 
     "plugins": [
       [
         "expo-router",
         {
-          "origin": "https://rork.com/"
+          "origin": false
         }
       ],
       "expo-font",
-      "expo-web-browser"
+      "expo-web-browser",
+      "expo-secure-store"
     ],
 
     "experiments": {
@@ -49,14 +60,14 @@
     },
 
     "extra": {
-      "eas": {
-        "projectId": "70eb24db"
-      },
-
       "apiUrl": "https://primedine.fly.dev",
 
       "supabaseUrl": "https://ibyyhjwrhaehhmznyadz.supabase.co",
       "supabaseAnonKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlieXloandyaGFlaGhtem55YWR6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjgxMTIyNzEsImV4cCI6MjA4MzY4ODI3MX0.yTOtqjeKEIuRdZ-8BgWK3x2zVbT8XgaAlCqj1EbsYvs",
+
+      "eas": {
+        "projectId": "70eb24db"
       }
+    }
   }
 }
