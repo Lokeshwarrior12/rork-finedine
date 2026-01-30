@@ -41,6 +41,7 @@ func main() {
 	router := gin.New()
 
 	// Global middleware
+	router.POST("/webhooks/stripe", handlers.StripeWebhook)
 	router.Use(gin.Recovery()) // Recover from panics
 	router.Use(middleware.RequestLogger()) // Log all requests
 	router.Use(cors.New(cors.Config{
