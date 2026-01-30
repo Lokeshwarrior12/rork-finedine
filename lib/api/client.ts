@@ -1,79 +1,113 @@
 import { config } from '../config';
+import { auth } from '../supabase';
 
 const API_URL = config.api.url;
 
-interface RequestOptions {
-  method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
-  body?: any;
-  headers?: Record<string, string>;
-  token?: string;
+async function getAuthHeaders() {
+  const session = await auth.getSession();
+  const token = session?.access_token;
+
+  return {
+    'Content-Type': 'application/json',
+    ...(token && { 'Authorization': `Bearer ${token}` }),
+  };
 }
 
-export class APIClient {
-  private static async request<T>(
-    endpoint: string,
-    options: RequestOptions = {}
-  ): Promise<T> {
-    const { method = 'GET', body, headers = {}, token } = options;
-
-    const finalHeaders: Record<string, string> = {
-      'Content-Type': 'application/json',
-      ...headers,
-    };
-
-    if (token) {
-      finalHeaders['Authorization'] = `Bearer ${token}`;
-    }
-
+export const api = {
+  async get<T>(endpoint: string): Promise<T> {
+    const headers = await getAuthHeaders();
     const response = await fetch(`${API_URL}${endpoint}`, {
-      method,
-      headers: finalHeaders,
-      body: body ? JSON.stringify(body) : undefined,
+      method: 'GET',
+      headers,
     });
 
     if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Request failed');
+      throw new Error(`API Error: ${response.statusText}`);
     }
 
     return response.json();
-  }
+  },
 
-  // Public endpoints
-  static async getRestaurants(filters?: any) {
-    return this.request('/api/v1/restaurants', {
-      method: 'GET',
-    });
-  }
-
-  static async getRestaurantById(id: string) {
-    return this.request(`/api/v1/restaurants/${id}`);
-  }
-
-  static async getDeals() {
-    return this.request('/api/v1/deals');
-  }
-
-  // Protected endpoints (require token)
-  static async createOrder(token: string, orderData: any) {
-    return this.request('/api/v1/orders', {
+  async post<T>(endpoint: string, data: any): Promise<T> {
+    const headers = await getAuthHeaders();
+    const response = await fetch(`${API_URL}${endpoint}`, {
       method: 'POST',
-      body: orderData,
-      token,
+      headers,
+      body: JSON.stringify(data),
     });
-  }
 
-  static async getUserOrders(token: string) {
-    return this.request('/api/v1/orders', { token });
-  }
+    if (!response.ok) {
+      throw new Error(`API Error: ${response.statusText}`);
+    }
 
-  static async createBooking(token: string, bookingData: any) {
-    return this.request('/api/v1/bookings', {
-      method: 'POST',
-      body: bookingData,
-      token,
+    return response.json();
+  },
+
+  async patch<T>(endpoint: string, data: any): Promise<T> {
+    const headers = await getAuthHeaders();
+    const response = await fetch(`${API_URL}${endpoint}`, {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify(data),
     });
-  }
 
-  // Add more methods as needed...
-}
+    if (!response.ok) {
+      throw new Error(`API Error: ${response.statusText}`);
+    }
+
+    return response.json();
+  },
+
+  async delete<T>(endpoint: string): Promise<T> {
+    const headers = await getAuthHeaders();
+    const response = await fetch(`${API_URL}${endpoint}`, {
+      method: 'DELETE',
+      headers,
+    });
+
+    if (!response.ok) {
+      throw new Error(`API Error: ${response.statusText}`);
+    }
+
+    return response.json();
+  },
+};
+
+// Restaurant API
+export const restaurantAPI = {
+  getAll: () => api.get('/api/v1/restaurants'),
+  getById: (id: string) => api.get(`/api/v1/restaurants/${id}`),
+  getNearby: (lat: number, lng: number) => 
+    api.get(`/api/v1/restaurants/nearby?latitude=${lat}&longitude=${lng}`),
+  getMenu: (id: string) => api.get(`/api/v1/restaurants/${id}/menu`),
+  search: (query: string) => api.get(`/api/v1/search?q=${query}`),
+};
+
+// Order API
+export const orderAPI = {
+  create: (data: any) => api.post('/api/v1/orders', data),
+  getAll: () => api.get('/api/v1/orders'),
+  getById: (id: string) => api.get(`/api/v1/orders/${id}`),
+  cancel: (id: string) => api.patch(`/api/v1/orders/${id}/cancel`, {}),
+};
+
+// Booking API
+export const bookingAPI = {
+  create: (data: any) => api.post('/api/v1/bookings', data),
+  getAll: () => api.get('/api/v1/bookings'),
+  getById: (id: string) => api.get(`/api/v1/bookings/${id}`),
+  cancel: (id: string) => api.patch(`/api/v1/bookings/${id}/cancel`, {}),
+};
+
+// Deals API
+export const dealsAPI = {
+  getActive: () => api.get('/api/v1/deals'),
+  getFeatured: () => api.get('/api/v1/deals/featured'),
+};
+
+// Favorites API
+export const favoritesAPI = {
+  getAll: () => api.get('/api/v1/favorites'),
+  add: (restaurantId: string) => api.post('/api/v1/favorites', { restaurant_id: restaurantId }),
+  remove: (restaurantId: string) => api.delete(`/api/v1/favorites/${restaurantId}`),
+};
