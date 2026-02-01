@@ -38,6 +38,9 @@ yarn-error.*
 *.tsbuildinfo
 .vercel
 
+nano .gitignore
+
+
 .rork
 
 .env
