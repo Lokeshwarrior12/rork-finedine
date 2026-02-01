@@ -39,9 +39,8 @@ yarn-error.*
 .vercel
 
 nano .gitignore
-
-
 .rork
 
 .env
 rork-eslint.config.js
+firebase-adminsdk-*.json
