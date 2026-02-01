@@ -44,9 +44,9 @@ export default function WelcomeScreen() {
   useEffect(() => {
     if (!isLoading && user) {
       router.replace(
-        user.role === 'customer'
+        (user.role === 'customer'
           ? '/(customer)/home'
-          : '/(restaurant)/dashboard'
+          : '/(restaurant)/dashboard') as any
       );
     }
   }, [user, isLoading]);
@@ -103,7 +103,7 @@ export default function WelcomeScreen() {
         </View>
 
         <View style={styles.cardsContainer}>
-          <Pressable style={styles.card} onPress={() => router.push('/login?role=customer')}>
+          <Pressable style={styles.card} onPress={() => router.push('/login?role=customer' as any)}>
             <LinearGradient
               colors={[Colors.primary, Colors.primaryDark]}
               style={styles.cardGradient}
@@ -114,7 +114,7 @@ export default function WelcomeScreen() {
             </LinearGradient>
           </Pressable>
 
-          <Pressable style={styles.card} onPress={() => router.push('/login?role=restaurant_owner')}>
+          <Pressable style={styles.card} onPress={() => router.push('/login?role=restaurant_owner' as any)}>
             <LinearGradient
               colors={[Colors.secondary, '#2D2D4A']}
               style={styles.cardGradient}

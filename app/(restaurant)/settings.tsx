@@ -488,7 +488,7 @@ export default function SettingsScreen() {
           <Text style={styles.sectionTitle}>Support</Text>
           <Pressable 
             style={styles.supportCard}
-            onPress={() => router.push('/(restaurant)/book-call')}
+            onPress={() => router.push('/(restaurant)/book-call' as any)}
           >
             <View style={styles.supportIcon}>
               <Phone size={24} color={colors.primary} />

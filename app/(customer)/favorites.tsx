@@ -113,7 +113,7 @@ export default function FavoritesScreen() {
             </Text>
             <Pressable
               style={styles.exploreButton}
-              onPress={() => router.push('/(customer)/deals')}
+              onPress={() => router.push('/(customer)/deals' as any)}
             >
               <Text style={styles.exploreButtonText}>Explore Restaurants</Text>
             </Pressable>

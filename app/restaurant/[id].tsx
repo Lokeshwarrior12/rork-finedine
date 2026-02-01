@@ -500,7 +500,7 @@ export default function RestaurantDetailScreen() {
                 style={styles.claimSuccessButton}
                 onPress={() => {
                   setShowClaimSuccess(false);
-                  router.push('/(customer)/coupons');
+                  router.push('/(customer)/coupons' as any);
                 }}
               >
                 <Text style={styles.claimSuccessButtonText}>View My Coupons</Text>

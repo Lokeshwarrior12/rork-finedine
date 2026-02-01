@@ -49,7 +49,7 @@ export default function SignupScreen() {
 
   useEffect(() => {
     if (isRestaurant) {
-      router.replace('/partner');
+      router.replace('/partner' as any);
     }
   }, [isRestaurant, router]);
 
@@ -617,7 +617,7 @@ export default function SignupScreen() {
 
             <View style={styles.loginRow}>
               <Text style={styles.loginText}>Already have an account? </Text>
-              <Pressable onPress={() => router.push(`/login?role=${role}`)}>
+              <Pressable onPress={() => router.push(`/login?role=${role}` as any)}>
                 <Text style={styles.loginLink}>Sign In</Text>
               </Pressable>
             </View>
@@ -625,7 +625,7 @@ export default function SignupScreen() {
             {!isRestaurant && (
               <Pressable 
                 style={styles.partnerButton}
-                onPress={() => router.push('/partner')}
+                onPress={() => router.push('/partner' as any)}
               >
                 <Text style={styles.partnerButtonText}>Become a Partner Restaurant</Text>
               </Pressable>

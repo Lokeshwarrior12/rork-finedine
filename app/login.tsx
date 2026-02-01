@@ -16,7 +16,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Mail, Lock, X, Eye, EyeOff } from 'lucide-react-native';
 
 import Colors from '@/constants/colors';
-import { UserRole } from '@/types';
+// UserRole type available from @/types if needed
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 
 export default function LoginScreen() {
@@ -181,9 +181,9 @@ export default function LoginScreen() {
               <Pressable
                 onPress={() => {
                   if (isRestaurant) {
-                    router.push('/partner');
+                    router.push('/partner' as any);
                   } else {
-                    router.push(`/signup?role=${role}`);
+                    router.push(`/signup?role=${role}` as any);
                   }
                 }}
               >
@@ -194,7 +194,7 @@ export default function LoginScreen() {
             {!isRestaurant && (
               <Pressable
                 style={styles.partnerButton}
-                onPress={() => router.push('/partner')}
+                onPress={() => router.push('/partner' as any)}
               >
                 <Text style={styles.partnerButtonText}>
                   Become a Partner Restaurant

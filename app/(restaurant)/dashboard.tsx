@@ -183,7 +183,7 @@ export default function DashboardScreen() {
             </View>
             <Pressable 
               style={styles.notificationBtn}
-              onPress={() => router.push('/(restaurant)/book-call')}
+              onPress={() => router.push('/(restaurant)/book-call' as any)}
             >
               <Bell size={22} color={colors.text} />
               {pendingBookings > 0 && (

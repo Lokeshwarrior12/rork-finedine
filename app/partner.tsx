@@ -253,7 +253,7 @@ export default function PartnerScreen() {
 
         <View style={styles.loginRow}>
           <Text style={styles.loginText}>Already a partner? </Text>
-          <Pressable onPress={() => router.push('/login?role=restaurant_owner')}>
+          <Pressable onPress={() => router.push('/login?role=restaurant_owner' as any)}>
             <Text style={styles.loginLink}>Sign In</Text>
           </Pressable>
         </View>

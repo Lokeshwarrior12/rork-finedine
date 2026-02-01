@@ -330,14 +330,14 @@ export default function CustomerHomeScreen() {
             <View style={styles.headerActions}>
               <Pressable 
                 style={styles.walletBadge}
-                onPress={() => router.push('/(customer)/rewards')}
+                onPress={() => router.push('/(customer)/rewards' as any)}
               >
                 <Wallet size={16} color={colors.primary} />
                 <Text style={styles.walletText}>{user?.points || 0}</Text>
               </Pressable>
               <Pressable 
                 style={styles.notificationBtn}
-                onPress={() => router.push('/(customer)/notifications')}
+                onPress={() => router.push('/(customer)/notifications' as any)}
               >
                 <Bell size={22} color={colors.text} />
                 <View style={styles.notificationDot} />
@@ -451,7 +451,7 @@ export default function CustomerHomeScreen() {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>In the spotlight</Text>
-            <Pressable onPress={() => router.push('/(customer)/deals')}>
+            <Pressable onPress={() => router.push('/(customer)/deals' as any)}>
               <Text style={styles.seeAll}>See all</Text>
             </Pressable>
           </View>
@@ -508,7 +508,7 @@ export default function CustomerHomeScreen() {
             </Pressable>
             <Pressable 
               style={styles.quickActionCard}
-              onPress={() => router.push('/(customer)/deals')}
+              onPress={() => router.push('/(customer)/deals' as any)}
             >
               <View style={[styles.quickActionIcon, { backgroundColor: colors.accentLight }]}>
                 <Percent size={24} color={colors.secondary} />
@@ -534,7 +534,7 @@ export default function CustomerHomeScreen() {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Hot Deals 🔥</Text>
-            <Pressable onPress={() => router.push('/(customer)/deals')}>
+            <Pressable onPress={() => router.push('/(customer)/deals' as any)}>
               <ChevronRight size={22} color={colors.textMuted} />
             </Pressable>
           </View>
