@@ -7,7 +7,7 @@ import {
   Pressable,
 } from 'react-native';
 import { Image } from 'expo-image';
-import { useRouter } from 'expo-router';
+import { useRouter, Href } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Heart,
@@ -113,7 +113,7 @@ export default function FavoritesScreen() {
             </Text>
             <Pressable
               style={styles.exploreButton}
-              onPress={() => router.push('/(customer)/deals' as any)}
+              onPress={() => router.push('/(customer)/deals' as Href)}
             >
               <Text style={styles.exploreButtonText}>Explore Restaurants</Text>
             </Pressable>

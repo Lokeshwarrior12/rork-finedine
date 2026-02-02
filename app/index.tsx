@@ -8,7 +8,7 @@ import {
   Dimensions,
   Alert
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, Href } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Utensils, Store, ChevronRight } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -39,17 +39,17 @@ export default function WelcomeScreen() {
         useNativeDriver: true,
       }),
     ]).start();
-  }, []);
+  }, [fadeAnim, slideAnim]);
 
   useEffect(() => {
     if (!isLoading && user) {
       router.replace(
         (user.role === 'customer'
           ? '/(customer)/home'
-          : '/(restaurant)/dashboard') as any
+          : '/(restaurant)/dashboard') as Href
       );
     }
-  }, [user, isLoading]);
+  }, [user, isLoading, router]);
 
   async function testBackend() {
     try {
@@ -103,7 +103,7 @@ export default function WelcomeScreen() {
         </View>
 
         <View style={styles.cardsContainer}>
-          <Pressable style={styles.card} onPress={() => router.push('/login?role=customer' as any)}>
+          <Pressable style={styles.card} onPress={() => router.push('/login?role=customer' as Href)}>
             <LinearGradient
               colors={[Colors.primary, Colors.primaryDark]}
               style={styles.cardGradient}
@@ -114,7 +114,7 @@ export default function WelcomeScreen() {
             </LinearGradient>
           </Pressable>
 
-          <Pressable style={styles.card} onPress={() => router.push('/login?role=restaurant_owner' as any)}>
+          <Pressable style={styles.card} onPress={() => router.push('/login?role=restaurant_owner' as Href)}>
             <LinearGradient
               colors={[Colors.secondary, '#2D2D4A']}
               style={styles.cardGradient}

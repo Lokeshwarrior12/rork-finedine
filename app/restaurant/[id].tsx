@@ -14,7 +14,7 @@ import {
   NativeScrollEvent,
 } from 'react-native';
 import { Image } from 'expo-image';
-import { useRouter, useLocalSearchParams, Stack } from 'expo-router';
+import { useRouter, useLocalSearchParams, Stack, Href } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -500,7 +500,7 @@ export default function RestaurantDetailScreen() {
                 style={styles.claimSuccessButton}
                 onPress={() => {
                   setShowClaimSuccess(false);
-                  router.push('/(customer)/coupons' as any);
+                  router.push('/(customer)/coupons' as Href);
                 }}
               >
                 <Text style={styles.claimSuccessButtonText}>View My Coupons</Text>

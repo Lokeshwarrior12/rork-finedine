@@ -11,7 +11,7 @@ import {
   ActivityIndicator,
   Dimensions,
 } from 'react-native';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter, useLocalSearchParams, Href } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { User, Mail, Lock, Phone, MapPin, X, ChevronRight, Star, Check, Shield } from 'lucide-react-native';
@@ -49,7 +49,7 @@ export default function SignupScreen() {
 
   useEffect(() => {
     if (isRestaurant) {
-      router.replace('/partner' as any);
+      router.replace('/partner' as Href);
     }
   }, [isRestaurant, router]);
 
@@ -142,9 +142,9 @@ export default function SignupScreen() {
         return;
       }
       if (isRestaurant) {
-        router.replace('/(restaurant)/dashboard' as any);
+        router.replace('/(restaurant)/dashboard' as Href);
       } else {
-        router.replace('/(customer)/home' as any);
+        router.replace('/(customer)/home' as Href);
       }
     } catch {
       setError('Signup failed. Please try again.');
@@ -617,7 +617,7 @@ export default function SignupScreen() {
 
             <View style={styles.loginRow}>
               <Text style={styles.loginText}>Already have an account? </Text>
-              <Pressable onPress={() => router.push(`/login?role=${role}` as any)}>
+              <Pressable onPress={() => router.push(`/login?role=${role}` as Href)}>
                 <Text style={styles.loginLink}>Sign In</Text>
               </Pressable>
             </View>
@@ -625,7 +625,7 @@ export default function SignupScreen() {
             {!isRestaurant && (
               <Pressable 
                 style={styles.partnerButton}
-                onPress={() => router.push('/partner' as any)}
+                onPress={() => router.push('/partner' as Href)}
               >
                 <Text style={styles.partnerButtonText}>Become a Partner Restaurant</Text>
               </Pressable>

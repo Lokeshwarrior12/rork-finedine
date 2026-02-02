@@ -9,7 +9,7 @@ import {
   Modal,
   Alert,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, Href } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -183,7 +183,7 @@ export default function DashboardScreen() {
             </View>
             <Pressable 
               style={styles.notificationBtn}
-              onPress={() => router.push('/(restaurant)/book-call' as any)}
+              onPress={() => router.push('/(restaurant)/book-call' as Href)}
             >
               <Bell size={22} color={colors.text} />
               {pendingBookings > 0 && (

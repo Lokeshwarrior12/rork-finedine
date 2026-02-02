@@ -10,7 +10,7 @@ import {
   ScrollView,
   ActivityIndicator,
 } from 'react-native';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter, useLocalSearchParams, Href } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Mail, Lock, X, Eye, EyeOff } from 'lucide-react-native';
@@ -75,9 +75,9 @@ export default function LoginScreen() {
 
       // 🔁 Navigate by role
       if (isRestaurant) {
-        router.replace('/(restaurant)/dashboard' as any);
+        router.replace('/(restaurant)/dashboard' as Href);
       } else {
-        router.replace('/(customer)/home' as any);
+        router.replace('/(customer)/home' as Href);
       }
     } catch (err) {
       console.error('Login error:', err);
@@ -181,9 +181,9 @@ export default function LoginScreen() {
               <Pressable
                 onPress={() => {
                   if (isRestaurant) {
-                    router.push('/partner' as any);
+                    router.push('/partner' as Href);
                   } else {
-                    router.push(`/signup?role=${role}` as any);
+                    router.push(`/signup?role=${role}` as Href);
                   }
                 }}
               >

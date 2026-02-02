@@ -44,3 +44,5 @@ nano .gitignore
 .env
 rork-eslint.config.js
 firebase-adminsdk-*.json
+
+core

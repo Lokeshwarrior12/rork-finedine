@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
-import { useRouter } from 'expo-router';
+import { useRouter, Href } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { 
   LogOut, 
@@ -488,7 +488,7 @@ export default function SettingsScreen() {
           <Text style={styles.sectionTitle}>Support</Text>
           <Pressable 
             style={styles.supportCard}
-            onPress={() => router.push('/(restaurant)/book-call' as any)}
+            onPress={() => router.push('/(restaurant)/book-call' as Href)}
           >
             <View style={styles.supportIcon}>
               <Phone size={24} color={colors.primary} />

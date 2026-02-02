@@ -11,7 +11,7 @@ import {
   ActivityIndicator,
   Dimensions,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, Href } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { 
@@ -118,7 +118,7 @@ export default function PartnerScreen() {
         setError(result.error);
         return;
       }
-      router.replace('/(restaurant)/dashboard' as any);
+      router.replace('/(restaurant)/dashboard' as Href);
     } catch {
       setError('Signup failed. Please try again.');
     }
@@ -253,7 +253,7 @@ export default function PartnerScreen() {
 
         <View style={styles.loginRow}>
           <Text style={styles.loginText}>Already a partner? </Text>
-          <Pressable onPress={() => router.push('/login?role=restaurant_owner' as any)}>
+          <Pressable onPress={() => router.push('/login?role=restaurant_owner' as Href)}>
             <Text style={styles.loginLink}>Sign In</Text>
           </Pressable>
         </View>

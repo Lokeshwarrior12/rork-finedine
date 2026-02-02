@@ -12,7 +12,7 @@ import {
   Modal,
 } from 'react-native';
 import { Image } from 'expo-image';
-import { useRouter } from 'expo-router';
+import { useRouter, Href } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -330,14 +330,14 @@ export default function CustomerHomeScreen() {
             <View style={styles.headerActions}>
               <Pressable 
                 style={styles.walletBadge}
-                onPress={() => router.push('/(customer)/rewards' as any)}
+                onPress={() => router.push('/(customer)/rewards' as Href)}
               >
                 <Wallet size={16} color={colors.primary} />
                 <Text style={styles.walletText}>{user?.points || 0}</Text>
               </Pressable>
               <Pressable 
                 style={styles.notificationBtn}
-                onPress={() => router.push('/(customer)/notifications' as any)}
+                onPress={() => router.push('/(customer)/notifications' as Href)}
               >
                 <Bell size={22} color={colors.text} />
                 <View style={styles.notificationDot} />
@@ -451,7 +451,7 @@ export default function CustomerHomeScreen() {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>In the spotlight</Text>
-            <Pressable onPress={() => router.push('/(customer)/deals' as any)}>
+            <Pressable onPress={() => router.push('/(customer)/deals' as Href)}>
               <Text style={styles.seeAll}>See all</Text>
             </Pressable>
           </View>
@@ -534,7 +534,7 @@ export default function CustomerHomeScreen() {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Hot Deals 🔥</Text>
-            <Pressable onPress={() => router.push('/(customer)/deals' as any)}>
+            <Pressable onPress={() => router.push('/(customer)/deals' as Href)}>
               <ChevronRight size={22} color={colors.textMuted} />
             </Pressable>
           </View>

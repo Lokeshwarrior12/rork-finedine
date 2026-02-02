@@ -6,557 +6,467 @@ import {
   ScrollView,
   Pressable,
   TextInput,
-  Modal,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { LinearGradient } from 'expo-linear-gradient';
+import { useRouter } from 'expo-router';
 import {
   Phone,
   Calendar,
   Clock,
-  User,
   MessageSquare,
   CheckCircle,
-  X,
+  ArrowLeft,
+  Video,
   Headphones,
 } from 'lucide-react-native';
-import * as Haptics from 'expo-haptics';
+import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
-import Colors from '@/constants/colors';
-
-const topics = [
-  { id: 'setup', label: 'Setup Help', desc: 'Get help setting up your restaurant profile' },
-  { id: 'technical', label: 'Technical Support', desc: 'Issues with the app or features' },
-  { id: 'marketing', label: 'Marketing Tips', desc: 'Learn how to attract more customers' },
-  { id: 'payment', label: 'Payment Issues', desc: 'Help with subscription or payments' },
-  { id: 'other', label: 'Other', desc: 'Any other questions or concerns' },
-];
 
 const timeSlots = [
-  'Morning (9AM - 12PM)',
-  'Afternoon (12PM - 5PM)',
-  'Evening (5PM - 8PM)',
+  '09:00 AM', '10:00 AM', '11:00 AM', '12:00 PM',
+  '02:00 PM', '03:00 PM', '04:00 PM', '05:00 PM',
+];
+
+const dates = ['Today', 'Tomorrow', 'Jan 15', 'Jan 16', 'Jan 17'];
+
+const callTypes = [
+  { id: 'phone', label: 'Phone Call', icon: Phone, description: 'Quick voice call' },
+  { id: 'video', label: 'Video Call', icon: Video, description: 'Face-to-face meeting' },
+  { id: 'support', label: 'Support Chat', icon: Headphones, description: 'Live text support' },
 ];
 
 export default function BookCallScreen() {
+  const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { user } = useAuth();
-  const [name, setName] = useState(user?.name || '');
-  const [phone, setPhone] = useState(user?.phone || '');
-  const [selectedTopic, setSelectedTopic] = useState('');
+  const { colors, isDark } = useTheme();
+  useAuth();
+
   const [selectedDate, setSelectedDate] = useState('');
   const [selectedTime, setSelectedTime] = useState('');
-  const [message, setMessage] = useState('');
-  const [showSuccess, setShowSuccess] = useState(false);
-
-  const dates = Array.from({ length: 7 }, (_, i) => {
-    const date = new Date();
-    date.setDate(date.getDate() + i + 1);
-    return {
-      day: date.toLocaleDateString('en-US', { weekday: 'short' }),
-      date: date.getDate(),
-      month: date.toLocaleDateString('en-US', { month: 'short' }),
-      full: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-    };
-  });
+  const [selectedCallType, setSelectedCallType] = useState('phone');
+  const [topic, setTopic] = useState('');
+  const [notes, setNotes] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSuccess, setIsSuccess] = useState(false);
 
   const handleSubmit = async () => {
-    if (!name || !phone || !selectedTopic || !selectedDate || !selectedTime) {
+    if (!selectedDate || !selectedTime) {
+      Alert.alert('Missing Information', 'Please select a date and time for your call.');
       return;
     }
+
+    setIsSubmitting(true);
     
-    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    setShowSuccess(true);
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    
+    setIsSubmitting(false);
+    setIsSuccess(true);
   };
 
-  const resetForm = () => {
-    setSelectedTopic('');
-    setSelectedDate('');
-    setSelectedTime('');
-    setMessage('');
-    setShowSuccess(false);
-  };
+  const styles = createStyles(colors, isDark);
 
-  const isFormValid = name && phone && selectedTopic && selectedDate && selectedTime;
+  if (isSuccess) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        <View style={styles.successContainer}>
+          <View style={styles.successIcon}>
+            <CheckCircle size={64} color={colors.success} />
+          </View>
+          <Text style={styles.successTitle}>Call Scheduled!</Text>
+          <Text style={styles.successMessage}>
+            We&apos;ll call you on {selectedDate} at {selectedTime}
+          </Text>
+          <View style={styles.successDetails}>
+            <View style={styles.successDetailRow}>
+              <Calendar size={18} color={colors.textSecondary} />
+              <Text style={styles.successDetailText}>{selectedDate}</Text>
+            </View>
+            <View style={styles.successDetailRow}>
+              <Clock size={18} color={colors.textSecondary} />
+              <Text style={styles.successDetailText}>{selectedTime}</Text>
+            </View>
+            {topic && (
+              <View style={styles.successDetailRow}>
+                <MessageSquare size={18} color={colors.textSecondary} />
+                <Text style={styles.successDetailText}>{topic}</Text>
+              </View>
+            )}
+          </View>
+          <Text style={styles.successNote}>
+            You&apos;ll receive a confirmation email with call details.
+          </Text>
+          <Pressable 
+            style={styles.successButton}
+            onPress={() => router.back()}
+          >
+            <Text style={styles.successButtonText}>Back to Dashboard</Text>
+          </Pressable>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
+      <View style={styles.header}>
+        <Pressable style={styles.backButton} onPress={() => router.back()}>
+          <ArrowLeft size={22} color={colors.text} />
+        </Pressable>
+        <Text style={styles.title}>Book a Call</Text>
+        <View style={{ width: 40 }} />
+      </View>
+
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: insets.bottom + 20 }}
+        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 20 }]}
       >
-        <LinearGradient
-          colors={[Colors.secondary, '#2D2D4A']}
-          style={styles.header}
+        <Text style={styles.sectionLabel}>Call Type</Text>
+        <View style={styles.callTypeGrid}>
+          {callTypes.map((type) => (
+            <Pressable
+              key={type.id}
+              style={[
+                styles.callTypeCard,
+                selectedCallType === type.id && styles.callTypeCardActive,
+              ]}
+              onPress={() => setSelectedCallType(type.id)}
+            >
+              <View style={[
+                styles.callTypeIcon,
+                selectedCallType === type.id && styles.callTypeIconActive
+              ]}>
+                <type.icon 
+                  size={24} 
+                  color={selectedCallType === type.id ? '#fff' : colors.primary} 
+                />
+              </View>
+              <Text style={[
+                styles.callTypeLabel,
+                selectedCallType === type.id && styles.callTypeLabelActive
+              ]}>
+                {type.label}
+              </Text>
+              <Text style={styles.callTypeDesc}>{type.description}</Text>
+            </Pressable>
+          ))}
+        </View>
+
+        <Text style={styles.sectionLabel}>Select Date</Text>
+        <ScrollView 
+          horizontal 
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.dateScroll}
         >
-          <View style={styles.headerIcon}>
-            <Headphones size={32} color={Colors.surface} />
-          </View>
-          <Text style={styles.headerTitle}>Book a Call</Text>
-          <Text style={styles.headerSubtitle}>
-            Schedule a call with our support team. We are here to help you succeed!
-          </Text>
-        </LinearGradient>
+          {dates.map((date) => (
+            <Pressable
+              key={date}
+              style={[
+                styles.dateChip,
+                selectedDate === date && styles.dateChipActive,
+              ]}
+              onPress={() => setSelectedDate(date)}
+            >
+              <Text style={[
+                styles.dateChipText,
+                selectedDate === date && styles.dateChipTextActive,
+              ]}>
+                {date}
+              </Text>
+            </Pressable>
+          ))}
+        </ScrollView>
 
-        <View style={styles.content}>
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Your Details</Text>
-            <View style={styles.inputGroup}>
-              <View style={styles.inputIcon}>
-                <User size={20} color={Colors.textSecondary} />
-              </View>
-              <TextInput
-                style={styles.input}
-                placeholder="Your Name"
-                placeholderTextColor={Colors.textLight}
-                value={name}
-                onChangeText={setName}
-              />
-            </View>
-            <View style={styles.inputGroup}>
-              <View style={styles.inputIcon}>
-                <Phone size={20} color={Colors.textSecondary} />
-              </View>
-              <TextInput
-                style={styles.input}
-                placeholder="Phone Number"
-                placeholderTextColor={Colors.textLight}
-                value={phone}
-                onChangeText={setPhone}
-                keyboardType="phone-pad"
-              />
-            </View>
-          </View>
-
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>What do you need help with?</Text>
-            <View style={styles.topicsGrid}>
-              {topics.map((topic) => (
-                <Pressable
-                  key={topic.id}
-                  style={[
-                    styles.topicCard,
-                    selectedTopic === topic.id && styles.topicCardActive,
-                  ]}
-                  onPress={() => setSelectedTopic(topic.id)}
-                >
-                  <Text style={[
-                    styles.topicLabel,
-                    selectedTopic === topic.id && styles.topicLabelActive,
-                  ]}>
-                    {topic.label}
-                  </Text>
-                  <Text style={[
-                    styles.topicDesc,
-                    selectedTopic === topic.id && styles.topicDescActive,
-                  ]}>
-                    {topic.desc}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-          </View>
-
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Select a Date</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              <View style={styles.datesRow}>
-                {dates.map((d) => (
-                  <Pressable
-                    key={d.full}
-                    style={[
-                      styles.dateCard,
-                      selectedDate === d.full && styles.dateCardActive,
-                    ]}
-                    onPress={() => setSelectedDate(d.full)}
-                  >
-                    <Text style={[
-                      styles.dateDay,
-                      selectedDate === d.full && styles.dateDayActive,
-                    ]}>
-                      {d.day}
-                    </Text>
-                    <Text style={[
-                      styles.dateNumber,
-                      selectedDate === d.full && styles.dateNumberActive,
-                    ]}>
-                      {d.date}
-                    </Text>
-                    <Text style={[
-                      styles.dateMonth,
-                      selectedDate === d.full && styles.dateMonthActive,
-                    ]}>
-                      {d.month}
-                    </Text>
-                  </Pressable>
-                ))}
-              </View>
-            </ScrollView>
-          </View>
-
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Preferred Time</Text>
-            <View style={styles.timeSlots}>
-              {timeSlots.map((slot) => (
-                <Pressable
-                  key={slot}
-                  style={[
-                    styles.timeSlot,
-                    selectedTime === slot && styles.timeSlotActive,
-                  ]}
-                  onPress={() => setSelectedTime(slot)}
-                >
-                  <Clock size={16} color={selectedTime === slot ? Colors.surface : Colors.textSecondary} />
-                  <Text style={[
-                    styles.timeSlotText,
-                    selectedTime === slot && styles.timeSlotTextActive,
-                  ]}>
-                    {slot}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-          </View>
-
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Additional Notes (Optional)</Text>
-            <View style={styles.textareaContainer}>
-              <MessageSquare size={20} color={Colors.textSecondary} style={styles.textareaIcon} />
-              <TextInput
-                style={styles.textarea}
-                placeholder="Tell us more about what you need help with..."
-                placeholderTextColor={Colors.textLight}
-                value={message}
-                onChangeText={setMessage}
-                multiline
-                numberOfLines={4}
-              />
-            </View>
-          </View>
-
-          <Pressable
-            style={[styles.submitButton, !isFormValid && styles.submitButtonDisabled]}
-            onPress={handleSubmit}
-            disabled={!isFormValid}
-          >
-            <Calendar size={20} color={Colors.surface} />
-            <Text style={styles.submitButtonText}>Schedule Call</Text>
-          </Pressable>
-
-          <View style={styles.infoBox}>
-            <Text style={styles.infoTitle}>What to expect:</Text>
-            <Text style={styles.infoText}>
-              • Our team will call you at your preferred time{'\n'}
-              • Calls typically last 15-30 minutes{'\n'}
-              • You will receive a confirmation email{'\n'}
-              • Reschedule anytime if needed
-            </Text>
-          </View>
+        <Text style={styles.sectionLabel}>Select Time</Text>
+        <View style={styles.timeGrid}>
+          {timeSlots.map((time) => (
+            <Pressable
+              key={time}
+              style={[
+                styles.timeChip,
+                selectedTime === time && styles.timeChipActive,
+              ]}
+              onPress={() => setSelectedTime(time)}
+            >
+              <Text style={[
+                styles.timeChipText,
+                selectedTime === time && styles.timeChipTextActive,
+              ]}>
+                {time}
+              </Text>
+            </Pressable>
+          ))}
         </View>
+
+        <Text style={styles.sectionLabel}>Topic (Optional)</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="What would you like to discuss?"
+          placeholderTextColor={colors.placeholder}
+          value={topic}
+          onChangeText={setTopic}
+        />
+
+        <Text style={styles.sectionLabel}>Additional Notes (Optional)</Text>
+        <TextInput
+          style={[styles.input, styles.textArea]}
+          placeholder="Any additional information..."
+          placeholderTextColor={colors.placeholder}
+          value={notes}
+          onChangeText={setNotes}
+          multiline
+          numberOfLines={4}
+        />
+
+        <Pressable 
+          style={[styles.submitButton, isSubmitting && styles.submitButtonDisabled]}
+          onPress={handleSubmit}
+          disabled={isSubmitting}
+        >
+          {isSubmitting ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <>
+              <Phone size={20} color="#fff" />
+              <Text style={styles.submitButtonText}>Schedule Call</Text>
+            </>
+          )}
+        </Pressable>
+
+        <Text style={styles.disclaimer}>
+          Our support team is available Monday - Friday, 9 AM - 6 PM IST.
+          You&apos;ll receive a confirmation email once your call is scheduled.
+        </Text>
       </ScrollView>
-
-      <Modal visible={showSuccess} animationType="fade" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContainer}>
-            <Pressable style={styles.modalClose} onPress={resetForm}>
-              <X size={24} color={Colors.text} />
-            </Pressable>
-            
-            <View style={styles.successIcon}>
-              <CheckCircle size={48} color={Colors.surface} />
-            </View>
-            <Text style={styles.successTitle}>Call Scheduled!</Text>
-            <Text style={styles.successText}>
-              We have scheduled your call for{'\n'}
-              <Text style={styles.successHighlight}>{selectedDate}</Text>{'\n'}
-              during {selectedTime}
-            </Text>
-            <Text style={styles.successNote}>
-              You will receive a confirmation email shortly with all the details.
-            </Text>
-            
-            <Pressable style={styles.doneButton} onPress={resetForm}>
-              <Text style={styles.doneButtonText}>Done</Text>
-            </Pressable>
-          </View>
-        </View>
-      </Modal>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: colors.background,
   },
   header: {
-    padding: 24,
-    paddingTop: 20,
+    flexDirection: 'row',
     alignItems: 'center',
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    backgroundColor: colors.surface,
   },
-  headerIcon: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: 'rgba(255,255,255,0.2)',
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.backgroundSecondary,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 16,
   },
-  headerTitle: {
-    fontSize: 28,
-    fontWeight: '700' as const,
-    color: Colors.surface,
-    marginBottom: 8,
-  },
-  headerSubtitle: {
-    fontSize: 15,
-    color: 'rgba(255,255,255,0.8)',
-    textAlign: 'center',
-    lineHeight: 22,
+  title: {
+    fontSize: 18,
+    fontWeight: '600' as const,
+    color: colors.text,
   },
   content: {
     padding: 20,
   },
-  section: {
-    marginBottom: 24,
-  },
-  sectionTitle: {
-    fontSize: 16,
+  sectionLabel: {
+    fontSize: 14,
     fontWeight: '600' as const,
-    color: Colors.text,
+    color: colors.text,
     marginBottom: 12,
+    marginTop: 20,
   },
-  inputGroup: {
+  callTypeGrid: {
     flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.surface,
-    borderRadius: 14,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: Colors.border,
+    gap: 12,
   },
-  inputIcon: {
-    paddingHorizontal: 16,
+  callTypeCard: {
+    flex: 1,
+    backgroundColor: colors.surface,
+    borderRadius: 16,
+    padding: 16,
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: colors.border,
+  },
+  callTypeCardActive: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primaryLight,
+  },
+  callTypeIcon: {
+    width: 52,
+    height: 52,
+    borderRadius: 14,
+    backgroundColor: colors.backgroundSecondary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
+  },
+  callTypeIconActive: {
+    backgroundColor: colors.primary,
+  },
+  callTypeLabel: {
+    fontSize: 13,
+    fontWeight: '600' as const,
+    color: colors.text,
+    marginBottom: 4,
+  },
+  callTypeLabelActive: {
+    color: colors.primary,
+  },
+  callTypeDesc: {
+    fontSize: 11,
+    color: colors.textSecondary,
+    textAlign: 'center',
+  },
+  dateScroll: {
+    gap: 10,
+  },
+  dateChip: {
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  dateChipActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  dateChipText: {
+    fontSize: 14,
+    fontWeight: '500' as const,
+    color: colors.text,
+  },
+  dateChipTextActive: {
+    color: '#fff',
+  },
+  timeGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  timeChip: {
+    width: '23%',
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+  },
+  timeChipActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  timeChipText: {
+    fontSize: 13,
+    fontWeight: '500' as const,
+    color: colors.text,
+  },
+  timeChipTextActive: {
+    color: '#fff',
   },
   input: {
-    flex: 1,
-    paddingVertical: 14,
-    paddingRight: 16,
-    fontSize: 16,
-    color: Colors.text,
-  },
-  topicsGrid: {
-    gap: 10,
-  },
-  topicCard: {
-    backgroundColor: Colors.surface,
-    borderRadius: 14,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  topicCardActive: {
-    backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
-  },
-  topicLabel: {
-    fontSize: 15,
-    fontWeight: '600' as const,
-    color: Colors.text,
-    marginBottom: 4,
-  },
-  topicLabelActive: {
-    color: Colors.surface,
-  },
-  topicDesc: {
-    fontSize: 13,
-    color: Colors.textSecondary,
-  },
-  topicDescActive: {
-    color: 'rgba(255,255,255,0.8)',
-  },
-  datesRow: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  dateCard: {
-    width: 72,
-    backgroundColor: Colors.surface,
-    borderRadius: 14,
-    padding: 12,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  dateCardActive: {
-    backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
-  },
-  dateDay: {
-    fontSize: 12,
-    fontWeight: '500' as const,
-    color: Colors.textSecondary,
-    marginBottom: 4,
-  },
-  dateDayActive: {
-    color: 'rgba(255,255,255,0.8)',
-  },
-  dateNumber: {
-    fontSize: 22,
-    fontWeight: '700' as const,
-    color: Colors.text,
-  },
-  dateNumberActive: {
-    color: Colors.surface,
-  },
-  dateMonth: {
-    fontSize: 12,
-    color: Colors.textSecondary,
-    marginTop: 2,
-  },
-  dateMonthActive: {
-    color: 'rgba(255,255,255,0.8)',
-  },
-  timeSlots: {
-    gap: 10,
-  },
-  timeSlot: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.surface,
+    backgroundColor: colors.surface,
     borderRadius: 12,
-    padding: 14,
-    gap: 10,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  timeSlotActive: {
-    backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
-  },
-  timeSlotText: {
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     fontSize: 15,
-    color: Colors.text,
-  },
-  timeSlotTextActive: {
-    color: Colors.surface,
-    fontWeight: '500' as const,
-  },
-  textareaContainer: {
-    backgroundColor: Colors.surface,
-    borderRadius: 14,
+    color: colors.text,
     borderWidth: 1,
-    borderColor: Colors.border,
-    padding: 14,
+    borderColor: colors.border,
   },
-  textareaIcon: {
-    marginBottom: 8,
-  },
-  textarea: {
-    fontSize: 15,
-    color: Colors.text,
-    minHeight: 80,
+  textArea: {
+    minHeight: 100,
     textAlignVertical: 'top',
   },
   submitButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: Colors.primary,
-    paddingVertical: 18,
-    borderRadius: 16,
+    backgroundColor: colors.primary,
+    paddingVertical: 16,
+    borderRadius: 14,
     gap: 10,
-    marginBottom: 20,
+    marginTop: 24,
   },
   submitButtonDisabled: {
-    backgroundColor: Colors.textLight,
+    opacity: 0.7,
   },
   submitButtonText: {
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: '600' as const,
-    color: Colors.surface,
+    color: '#fff',
   },
-  infoBox: {
-    backgroundColor: Colors.surfaceAlt,
-    borderRadius: 14,
-    padding: 16,
+  disclaimer: {
+    fontSize: 12,
+    color: colors.textMuted,
+    textAlign: 'center',
+    marginTop: 16,
+    lineHeight: 18,
   },
-  infoTitle: {
-    fontSize: 14,
-    fontWeight: '600' as const,
-    color: Colors.text,
-    marginBottom: 8,
-  },
-  infoText: {
-    fontSize: 13,
-    color: Colors.textSecondary,
-    lineHeight: 22,
-  },
-  modalOverlay: {
+  successContainer: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    alignItems: 'center',
     justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  modalContainer: {
-    backgroundColor: Colors.surface,
-    borderRadius: 24,
-    padding: 24,
-    width: '100%',
-    maxWidth: 340,
-    alignItems: 'center',
-  },
-  modalClose: {
-    position: 'absolute',
-    top: 16,
-    right: 16,
+    padding: 40,
   },
   successIcon: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: Colors.success,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 20,
+    marginBottom: 24,
   },
   successTitle: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: '700' as const,
-    color: Colors.text,
-    marginBottom: 12,
+    color: colors.text,
+    marginBottom: 8,
   },
-  successText: {
-    fontSize: 15,
-    color: Colors.textSecondary,
+  successMessage: {
+    fontSize: 16,
+    color: colors.textSecondary,
     textAlign: 'center',
-    lineHeight: 24,
+    marginBottom: 24,
   },
-  successHighlight: {
-    fontWeight: '600' as const,
-    color: Colors.text,
+  successDetails: {
+    backgroundColor: colors.surface,
+    borderRadius: 16,
+    padding: 20,
+    width: '100%',
+    gap: 12,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+  },
+  successDetailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  successDetailText: {
+    fontSize: 15,
+    color: colors.text,
   },
   successNote: {
     fontSize: 13,
-    color: Colors.textLight,
+    color: colors.textMuted,
     textAlign: 'center',
-    marginTop: 16,
+    marginBottom: 24,
   },
-  doneButton: {
-    backgroundColor: Colors.primary,
+  successButton: {
+    backgroundColor: colors.primary,
     paddingVertical: 14,
-    paddingHorizontal: 48,
-    borderRadius: 14,
-    marginTop: 24,
+    paddingHorizontal: 32,
+    borderRadius: 12,
   },
-  doneButtonText: {
+  successButtonText: {
     fontSize: 16,
     fontWeight: '600' as const,
-    color: Colors.surface,
+    color: '#fff',
   },
 });
