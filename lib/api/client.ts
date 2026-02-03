@@ -13,6 +13,30 @@ async function getAuthHeaders() {
   };
 }
 
+export async function apiFetch<T = any>(
+  endpoint: string,
+  method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE' = 'GET',
+  body?: any
+): Promise<T> {
+  const headers = await getAuthHeaders();
+  const response = await fetch(`${API_URL}${endpoint}`, {
+    method,
+    headers,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => response.statusText);
+    throw new Error(`API Error: ${errorText}`);
+  }
+
+  if (response.status === 204) {
+    return null as T;
+  }
+
+  return response.json();
+}
+
 export const api = {
   async get<T>(endpoint: string): Promise<T> {
     const headers = await getAuthHeaders();

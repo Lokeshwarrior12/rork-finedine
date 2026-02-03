@@ -82,3 +82,20 @@ class WebSocketClient {
 }
 
 export const wsClient = new WebSocketClient();
+
+export function subscribeToOrder(
+  orderId: string,
+  onStatusUpdate: (status: string) => void
+): () => void {
+  const handler = (payload: any) => {
+    if (payload.orderId === orderId && payload.status) {
+      onStatusUpdate(payload.status);
+    }
+  };
+
+  wsClient.on('order_updated', handler);
+
+  return () => {
+    wsClient.off('order_updated', handler);
+  };
+}

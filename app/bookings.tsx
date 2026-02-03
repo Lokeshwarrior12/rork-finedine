@@ -1,21 +1,137 @@
-import { View, Text, Button, TextInput } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, Pressable, TextInput, StyleSheet, ActivityIndicator } from 'react-native';
 import { useMutation } from '@tanstack/react-query';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 import { apiFetch } from '@/lib/api/client';
+import { useTheme } from '@/contexts/ThemeContext';
+import { CalendarDays, Users, ArrowLeft } from 'lucide-react-native';
 
 export default function BookingsScreen() {
+  const insets = useSafeAreaInsets();
+  const router = useRouter();
+  const { colors } = useTheme();
   const [date, setDate] = useState('');
   const [guests, setGuests] = useState('');
 
-  const { mutate: createBooking } = useMutation({
-    mutationFn: () => apiFetch('/bookings', 'POST', { date, guests: parseInt(guests) }),
+  const { mutate: createBooking, isPending } = useMutation({
+    mutationFn: () => apiFetch('/api/v1/bookings', 'POST', { 
+      date, 
+      guests: parseInt(guests, 10) || 1 
+    }),
+    onSuccess: () => {
+      router.back();
+    },
+    onError: (error) => {
+      console.error('Booking failed:', error);
+    },
   });
 
+  const handleSubmit = () => {
+    if (date && guests) {
+      createBooking();
+    }
+  };
+
   return (
-    <View style={{ flex: 1, padding: 16 }}>
-      <Text style={{ fontSize: 24 }}>Make a Booking</Text>
-      <TextInput placeholder="Date (YYYY-MM-DD)" value={date} onChangeText={setDate} />
-      <TextInput placeholder="Number of Guests" value={guests} onChangeText={setGuests} keyboardType="numeric" />
-      <Button title="Book" onPress={createBooking} />
+    <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top }]}>
+      <View style={styles.header}>
+        <Pressable onPress={() => router.back()} style={styles.backButton}>
+          <ArrowLeft size={24} color={colors.text} />
+        </Pressable>
+        <Text style={[styles.title, { color: colors.text }]}>Make a Booking</Text>
+        <View style={{ width: 40 }} />
+      </View>
+
+      <View style={styles.content}>
+        <View style={[styles.inputContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <CalendarDays size={20} color={colors.textMuted} />
+          <TextInput
+            style={[styles.input, { color: colors.text }]}
+            placeholder="Date (YYYY-MM-DD)"
+            placeholderTextColor={colors.placeholder}
+            value={date}
+            onChangeText={setDate}
+          />
+        </View>
+
+        <View style={[styles.inputContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <Users size={20} color={colors.textMuted} />
+          <TextInput
+            style={[styles.input, { color: colors.text }]}
+            placeholder="Number of Guests"
+            placeholderTextColor={colors.placeholder}
+            value={guests}
+            onChangeText={setGuests}
+            keyboardType="numeric"
+          />
+        </View>
+
+        <Pressable
+          style={[styles.button, { backgroundColor: colors.primary, opacity: isPending ? 0.7 : 1 }]}
+          onPress={handleSubmit}
+          disabled={isPending}
+        >
+          {isPending ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={styles.buttonText}>Book Now</Text>
+          )}
+        </Pressable>
+      </View>
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  title: {
+    fontSize: 20,
+    fontWeight: '700' as const,
+  },
+  content: {
+    flex: 1,
+    padding: 20,
+    gap: 16,
+  },
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    height: 56,
+    gap: 12,
+  },
+  input: {
+    flex: 1,
+    fontSize: 16,
+  },
+  button: {
+    height: 56,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 8,
+  },
+  buttonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600' as const,
+  },
+});
