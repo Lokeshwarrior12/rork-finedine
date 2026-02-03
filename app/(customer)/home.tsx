@@ -10,6 +10,7 @@ import {
   Animated,
   RefreshControl,
   Modal,
+  ActivityIndicator,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter, Href } from 'expo-router';
@@ -52,7 +53,10 @@ import {
 } from 'lucide-react-native';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
-import { restaurants, deals, cuisineTypes, serviceCategories, serviceFilters, diningCategories } from '@/mocks/data';
+import { cuisineTypes, serviceCategories, serviceFilters, diningCategories } from '@/mocks/data';
+import { useRestaurants, useDeals } from '@/hooks/useApi';
+import { useLocation } from '@/hooks/useLocation';
+import { useDebounce } from '@/hooks/useDebounce';
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = width * 0.75;
@@ -76,9 +80,31 @@ export default function CustomerHomeScreen() {
     services: [],
     categories: [],
   });
+  const [nearMeRadius, setNearMeRadius] = useState<number | null>(null);
   
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const filterAnim = useRef(new Animated.Value(0)).current;
+  
+  const debouncedSearch = useDebounce(searchQuery, 300);
+  const { latitude, longitude, loading: locationLoading, getCurrentLocation, hasLocation } = useLocation();
+  
+  const selectedCuisine = filters.cuisines.length > 0 
+    ? cuisineTypes.find(c => c.id === filters.cuisines[0])?.name 
+    : undefined;
+  const selectedCategory = filters.categories.length > 0
+    ? diningCategories.find(c => c.id === filters.categories[0])?.name
+    : undefined;
+  
+  const { data: restaurantsData, refetch: refetchRestaurants } = useRestaurants({
+    query: debouncedSearch || undefined,
+    cuisineType: selectedCuisine,
+    category: selectedCategory,
+    lat: nearMeRadius && latitude ? latitude : undefined,
+    lng: nearMeRadius && longitude ? longitude : undefined,
+    radius: nearMeRadius || undefined,
+  });
+  
+  const { data: dealsData, refetch: refetchDeals } = useDeals();
 
   useEffect(() => {
     Animated.timing(fadeAnim, {
@@ -96,10 +122,23 @@ export default function CustomerHomeScreen() {
     }).start();
   }, [showFilters, filterAnim]);
 
-  const onRefresh = useCallback(() => {
+  const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    setTimeout(() => setRefreshing(false), 1500);
-  }, []);
+    await Promise.all([refetchRestaurants(), refetchDeals()]);
+    setRefreshing(false);
+  }, [refetchRestaurants, refetchDeals]);
+  
+  const handleNearMePress = useCallback(async () => {
+    if (nearMeRadius) {
+      setNearMeRadius(null);
+      return;
+    }
+    
+    if (!hasLocation) {
+      await getCurrentLocation();
+    }
+    setNearMeRadius(5);
+  }, [nearMeRadius, hasLocation, getCurrentLocation]);
 
   const toggleFilter = useCallback((type: keyof FilterState, id: string) => {
     setFilters(prev => ({
@@ -118,42 +157,11 @@ export default function CustomerHomeScreen() {
     filters.cuisines.length + filters.services.length + filters.categories.length,
   [filters]);
 
-  const filteredRestaurants = useMemo(() => {
-    let result = [...restaurants];
-    
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
-      result = result.filter(r => 
-        r.name.toLowerCase().includes(query) ||
-        r.cuisineType.toLowerCase().includes(query) ||
-        r.city.toLowerCase().includes(query)
-      );
-    }
-    
-    if (filters.cuisines.length > 0) {
-      result = result.filter(r => 
-        filters.cuisines.some(c => 
-          cuisineTypes.find(ct => ct.id === c)?.name.toLowerCase() === r.cuisineType.toLowerCase()
-        )
-      );
-    }
-    
-    if (filters.categories.length > 0) {
-      result = result.filter(r =>
-        r.categories.some(cat => 
-          filters.categories.some(fc => {
-            const category = diningCategories.find(dc => dc.id === fc);
-            return category && cat.toLowerCase().includes(category.name.toLowerCase().split(' ')[0]);
-          })
-        )
-      );
-    }
-    
-    return result;
-  }, [searchQuery, filters]);
-
+  const restaurants = restaurantsData || [];
+  const deals = dealsData || [];
+  
   const hotDeals = deals.filter(d => d.isActive).slice(0, 5);
-  const nearbyRestaurants = filteredRestaurants.slice(0, 6);
+  const nearbyRestaurants = restaurants.slice(0, 6);
   const spotlightRestaurants = restaurants.slice(0, 3);
 
   const categoryIcons: Record<string, React.ReactNode> = {
@@ -500,11 +508,20 @@ export default function CustomerHomeScreen() {
           <Text style={styles.sectionTitle}>{user?.name?.split(' ')[0] || 'Hey'}, what&apos;s on your mind?</Text>
           
           <View style={styles.quickActions}>
-            <Pressable style={styles.quickActionCard}>
-              <View style={[styles.quickActionIcon, { backgroundColor: colors.primaryLight }]}>
-                <MapPin size={24} color={colors.primary} />
+            <Pressable 
+              style={[styles.quickActionCard, nearMeRadius && styles.quickActionCardActive]}
+              onPress={handleNearMePress}
+            >
+              <View style={[styles.quickActionIcon, { backgroundColor: nearMeRadius ? colors.primary : colors.primaryLight }]}>
+                {locationLoading ? (
+                  <ActivityIndicator size="small" color={nearMeRadius ? '#fff' : colors.primary} />
+                ) : (
+                  <MapPin size={24} color={nearMeRadius ? '#fff' : colors.primary} />
+                )}
               </View>
-              <Text style={styles.quickActionText}>Restaurants{'\n'}near me</Text>
+              <Text style={[styles.quickActionText, nearMeRadius && { color: colors.primary }]}>
+                {nearMeRadius ? `Within ${nearMeRadius}km` : 'Restaurants\nnear me'}
+              </Text>
             </Pressable>
             <Pressable 
               style={styles.quickActionCard}
@@ -1085,6 +1102,10 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     gap: 12,
     borderWidth: 1,
     borderColor: colors.border,
+  },
+  quickActionCardActive: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primaryLight,
   },
   quickActionIcon: {
     width: 48,

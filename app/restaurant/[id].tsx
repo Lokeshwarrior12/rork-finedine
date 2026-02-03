@@ -12,6 +12,7 @@ import {
   FlatList,
   NativeSyntheticEvent,
   NativeScrollEvent,
+  ActivityIndicator,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter, useLocalSearchParams, Stack, Href } from 'expo-router';
@@ -36,7 +37,7 @@ import {
 import * as Haptics from 'expo-haptics';
 import { useAuth } from '@/contexts/AuthContext';
 import Colors from '@/constants/colors';
-import { restaurants, deals, services } from '@/mocks/data';
+import { useRestaurant, useDeals, useServices, useClaimDeal, useCreateTableBooking } from '@/hooks/useApi';
 import { Deal } from '@/types';
 
 const { width } = Dimensions.get('window');
@@ -119,9 +120,14 @@ export default function RestaurantDetailScreen() {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const imageSliderRef = useRef<FlatList>(null);
 
-  const restaurant = restaurants.find(r => r.id === id);
-  const restaurantDeals = deals.filter(d => d.restaurantId === id && d.isActive);
-  const restaurantServices = services.filter(s => s.restaurantId === id);
+  const { data: restaurant, isLoading: restaurantLoading } = useRestaurant(id);
+  const { data: allDeals } = useDeals({ restaurantId: id });
+  const { data: allServices } = useServices(id);
+  const claimDealMutation = useClaimDeal();
+  const createBookingMutation = useCreateTableBooking();
+  
+  const restaurantDeals = (allDeals || []).filter(d => d.restaurantId === id && d.isActive);
+  const restaurantServices = allServices || [];
 
   const handleImageScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const slideIndex = Math.round(event.nativeEvent.contentOffset.x / width);
@@ -138,10 +144,25 @@ export default function RestaurantDetailScreen() {
     </View>
   ), []);
 
+  if (restaurantLoading) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top, justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color={Colors.primary} />
+        <Text style={{ marginTop: 16, color: Colors.textSecondary }}>Loading restaurant...</Text>
+      </View>
+    );
+  }
+
   if (!restaurant) {
     return (
-      <View style={[styles.container, { paddingTop: insets.top }]}>
-        <Text>Restaurant not found</Text>
+      <View style={[styles.container, { paddingTop: insets.top, justifyContent: 'center', alignItems: 'center' }]}>
+        <Text style={{ color: Colors.text, fontSize: 16 }}>Restaurant not found</Text>
+        <Pressable 
+          style={{ marginTop: 16, padding: 12, backgroundColor: Colors.primary, borderRadius: 8 }}
+          onPress={() => router.back()}
+        >
+          <Text style={{ color: '#fff', fontWeight: '600' }}>Go Back</Text>
+        </Pressable>
       </View>
     );
   }
@@ -154,19 +175,42 @@ export default function RestaurantDetailScreen() {
   };
 
   const handleBook = async () => {
-    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    setShowBookingModal(false);
-    setShowSuccess(true);
-    setTimeout(() => setShowSuccess(false), 3000);
+    if (!selectedDate || !selectedTime) {
+      return;
+    }
+    
+    try {
+      await createBookingMutation.mutateAsync({
+        restaurantId: restaurant.id,
+        date: selectedDate,
+        time: selectedTime,
+        guests: parseInt(guestCount, 10),
+        specialRequests: specialRequests || undefined,
+      });
+      
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setShowBookingModal(false);
+      setShowSuccess(true);
+      setSelectedDate('');
+      setSelectedTime('');
+      setGuestCount('2');
+      setSpecialRequests('');
+      setTimeout(() => setShowSuccess(false), 3000);
+    } catch (error) {
+      console.error('[Booking] Error:', error);
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    }
   };
 
   const handleClaimCoupon = async (deal: Deal) => {
-    if (claimingDealId) return;
+    if (claimingDealId || claimDealMutation.isPending) return;
     
     setClaimingDealId(deal.id);
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     
-    setTimeout(async () => {
+    try {
+      await claimDealMutation.mutateAsync(deal.id);
+      
       setClaimedDeal(deal);
       setShowConfetti(true);
       setShowClaimSuccess(true);
@@ -175,12 +219,15 @@ export default function RestaurantDetailScreen() {
       const pointsEarned = Math.round(deal.discountPercent / 2);
       addPoints(pointsEarned);
       
-      setClaimingDealId(null);
-      
       setTimeout(() => {
         setShowConfetti(false);
       }, 3000);
-    }, 500);
+    } catch (error) {
+      console.error('[Claim] Error:', error);
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    } finally {
+      setClaimingDealId(null);
+    }
   };
 
   const timeSlots = ['12:00', '12:30', '13:00', '18:00', '18:30', '19:00', '19:30', '20:00'];
@@ -447,8 +494,16 @@ export default function RestaurantDetailScreen() {
                 />
               </View>
 
-              <Pressable style={styles.confirmButton} onPress={handleBook}>
-                <Text style={styles.confirmButtonText}>Confirm Booking</Text>
+              <Pressable 
+                style={[styles.confirmButton, createBookingMutation.isPending && styles.confirmButtonDisabled]} 
+                onPress={handleBook}
+                disabled={createBookingMutation.isPending || !selectedDate || !selectedTime}
+              >
+                {createBookingMutation.isPending ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={styles.confirmButtonText}>Confirm Booking</Text>
+                )}
               </Pressable>
             </ScrollView>
           </View>
@@ -958,7 +1013,12 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderRadius: 14,
     alignItems: 'center',
+    justifyContent: 'center',
     marginTop: 8,
+    minHeight: 52,
+  },
+  confirmButtonDisabled: {
+    backgroundColor: Colors.textLight,
   },
   confirmButtonText: {
     fontSize: 17,

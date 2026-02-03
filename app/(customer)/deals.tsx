@@ -6,6 +6,7 @@ import {
   ScrollView,
   Pressable,
   TextInput,
+  ActivityIndicator,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
@@ -21,7 +22,7 @@ import {
   Star,
 } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
-import { deals } from '@/mocks/data';
+import { useDeals } from '@/hooks/useApi';
 
 type OfferTypeFilter = 'all' | 'dinein' | 'pickup' | 'both';
 type DiscountFilter = 'all' | '10-20' | '21-30' | '31-50';
@@ -35,7 +36,10 @@ export default function DealsScreen() {
   const [offerType, setOfferType] = useState<OfferTypeFilter>('all');
   const [discountRange, setDiscountRange] = useState<DiscountFilter>('all');
 
+  const { data: dealsData, isLoading } = useDeals();
+
   const filteredDeals = useMemo(() => {
+    const deals = dealsData || [];
     return deals.filter(deal => {
       const matchesSearch = deal.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
         deal.restaurantName.toLowerCase().includes(searchQuery.toLowerCase());
@@ -50,7 +54,7 @@ export default function DealsScreen() {
       
       return matchesSearch && matchesType && matchesDiscount && deal.isActive;
     });
-  }, [searchQuery, offerType, discountRange]);
+  }, [searchQuery, offerType, discountRange, dealsData]);
 
   const clearFilters = () => {
     setOfferType('all');
@@ -69,7 +73,9 @@ export default function DealsScreen() {
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
         <Text style={styles.title}>Explore Deals</Text>
-        <Text style={styles.subtitle}>{filteredDeals.length} offers available</Text>
+        <Text style={styles.subtitle}>
+          {isLoading ? 'Loading...' : `${filteredDeals.length} offers available`}
+        </Text>
       </View>
 
       <View style={styles.searchRow}>
@@ -228,7 +234,14 @@ export default function DealsScreen() {
           </Pressable>
         ))}
 
-        {filteredDeals.length === 0 && (
+        {isLoading && (
+          <View style={styles.loadingState}>
+            <ActivityIndicator size="large" color={colors.primary} />
+            <Text style={styles.loadingText}>Loading deals...</Text>
+          </View>
+        )}
+
+        {!isLoading && filteredDeals.length === 0 && (
           <View style={styles.emptyState}>
             <Search size={48} color={colors.textMuted} />
             <Text style={styles.emptyTitle}>No deals found</Text>
@@ -491,5 +504,14 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     fontSize: 14,
     color: colors.textSecondary,
     marginTop: 8,
+  },
+  loadingState: {
+    alignItems: 'center',
+    paddingVertical: 60,
+  },
+  loadingText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    marginTop: 16,
   },
 });
