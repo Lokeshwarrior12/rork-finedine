@@ -1,52 +1,74 @@
 import 'react-native-url-polyfill/auto';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { config } from './config';
+import Constants from 'expo-constants';
 
-export const isSupabaseConfigured = Boolean(
-  config.supabase.url && config.supabase.anonKey
-);
+/* ──────────────────────────────────────────────────────────
+   Environment / Config
+────────────────────────────────────────────────────────── */
 
+const extra = Constants.expoConfig?.extra ?? {};
 
-// Initialize Supabase client
-export const supabase = createClient(
-  config.supabase.url,
-  config.supabase.anonKey,
-  {
-    auth: {
-      storage: AsyncStorage,
-      autoRefreshToken: true,
-      persistSession: true,
-      detectSessionInUrl: false,
-    },
-  }
-);
+const SUPABASE_URL =
+  process.env.EXPO_PUBLIC_SUPABASE_URL ??
+  extra.supabaseUrl ??
+  '';
 
-// Server-side Supabase client (uses service role key for elevated privileges)
-export function createServerSupabase(): SupabaseClient {
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || config.supabase.anonKey;
-  
-  return createClient(
-    config.supabase.url,
-    serviceRoleKey,
-    {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-      },
-    }
+const SUPABASE_ANON_KEY =
+  process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ??
+  extra.supabaseAnonKey ??
+  '';
+
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+  console.warn(
+    '⚠️ Supabase not configured. Set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY'
   );
 }
 
-// Auth helpers
+export const isSupabaseConfigured = Boolean(
+  SUPABASE_URL && SUPABASE_ANON_KEY
+);
+
+/* ──────────────────────────────────────────────────────────
+   Client-side Supabase (App)
+────────────────────────────────────────────────────────── */
+
+export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  auth: {
+    storage: AsyncStorage,
+    autoRefreshToken: true,
+    persistSession: true,
+    detectSessionInUrl: false,
+  },
+});
+
+/* ──────────────────────────────────────────────────────────
+   Server-side Supabase (Edge / Backend only)
+   ⚠️ NEVER import this in client components
+────────────────────────────────────────────────────────── */
+
+export function createServerSupabase(): SupabaseClient {
+  const serviceRoleKey =
+    process.env.SUPABASE_SERVICE_ROLE_KEY || SUPABASE_ANON_KEY;
+
+  return createClient(SUPABASE_URL, serviceRoleKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  });
+}
+
+/* ──────────────────────────────────────────────────────────
+   Auth Helpers
+────────────────────────────────────────────────────────── */
+
 export const auth = {
   signUp: async (email: string, password: string, metadata?: any) => {
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
-      options: {
-        data: metadata,
-      },
+      options: { data: metadata },
     });
     if (error) throw error;
     return data;
@@ -67,37 +89,42 @@ export const auth = {
   },
 
   getUser: async () => {
-    const { data: { user }, error } = await supabase.auth.getUser();
+    const { data, error } = await supabase.auth.getUser();
     if (error) throw error;
-    return user;
+    return data.user;
   },
 
   getSession: async () => {
-    const { data: { session }, error } = await supabase.auth.getSession();
+    const { data, error } = await supabase.auth.getSession();
     if (error) throw error;
-    return session;
+    return data.session;
   },
 };
 
-// Database helpers
+/* ──────────────────────────────────────────────────────────
+   Database Helpers (Typed access points)
+────────────────────────────────────────────────────────── */
+
 export const db = {
   from: (table: string) => supabase.from(table),
-  
-  // Specific table helpers
+
   users: () => supabase.from('users'),
   restaurants: () => supabase.from('restaurants'),
   menuItems: () => supabase.from('menu_items'),
+  deals: () => supabase.from('deals'),
   orders: () => supabase.from('orders'),
   bookings: () => supabase.from('bookings'),
-  deals: () => supabase.from('deals'),
-  coupons: () => supabase.from('coupons'),
+  favorites: () => supabase.from('favorites'),
   inventory: () => supabase.from('inventory'),
   notifications: () => supabase.from('notifications'),
 };
 
-// Storage helpers
+/* ──────────────────────────────────────────────────────────
+   Storage Helpers
+────────────────────────────────────────────────────────── */
+
 export const storage = {
-  upload: async (bucket: string, path: string, file: File | Blob) => {
+  upload: async (bucket: string, path: string, file: Blob | File) => {
     const { data, error } = await supabase.storage
       .from(bucket)
       .upload(path, file);
@@ -106,38 +133,48 @@ export const storage = {
   },
 
   getPublicUrl: (bucket: string, path: string) => {
-    const { data } = supabase.storage
-      .from(bucket)
-      .getPublicUrl(path);
+    const { data } = supabase.storage.from(bucket).getPublicUrl(path);
     return data.publicUrl;
   },
 
   delete: async (bucket: string, paths: string[]) => {
-    const { error } = await supabase.storage
-      .from(bucket)
-      .remove(paths);
+    const { error } = await supabase.storage.from(bucket).remove(paths);
     if (error) throw error;
   },
 };
 
-// Realtime helpers
+/* ──────────────────────────────────────────────────────────
+   Realtime Helpers
+────────────────────────────────────────────────────────── */
+
 export const realtime = {
-  subscribe: (table: string, callback: (payload: any) => void) => {
+  subscribeTable: (
+    table: string,
+    opts: { filter?: string; event?: 'INSERT' | 'UPDATE' | 'DELETE' | '*' },
+    callback: (payload: any) => void
+  ) => {
     const channel = supabase
-      .channel(`${table}-changes`)
+      .channel(`rt-${table}-${Date.now()}`)
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table },
+        {
+          event: opts.event ?? '*',
+          schema: 'public',
+          table,
+          filter: opts.filter,
+        },
         callback
       )
       .subscribe();
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    return () => supabase.removeChannel(channel);
   },
 
-  subscribeToRow: (table: string, id: string, callback: (payload: any) => void) => {
+  subscribeToRow: (
+    table: string,
+    id: string,
+    callback: (payload: any) => void
+  ) => {
     const channel = supabase
       .channel(`${table}-${id}`)
       .on(
@@ -152,8 +189,6 @@ export const realtime = {
       )
       .subscribe();
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    return () => supabase.removeChannel(channel);
   },
 };
