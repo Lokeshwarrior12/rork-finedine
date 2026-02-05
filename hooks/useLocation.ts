@@ -2,80 +2,89 @@ import { useState, useCallback } from 'react';
 import { Platform, Alert } from 'react-native';
 import * as Location from 'expo-location';
 
+/* ============================================================
+   Types
+============================================================ */
+
 interface LocationState {
   latitude: number | null;
   longitude: number | null;
   city: string | null;
-  error: string | null;
   loading: boolean;
+  error: string | null;
   permissionStatus: 'undetermined' | 'granted' | 'denied';
+  enabled: boolean; // user toggled "Near Me"
 }
+
+/* ============================================================
+   Hook
+============================================================ */
 
 export function useLocation() {
   const [state, setState] = useState<LocationState>({
     latitude: null,
     longitude: null,
     city: null,
-    error: null,
     loading: false,
+    error: null,
     permissionStatus: 'undetermined',
+    enabled: false,
   });
 
-  const requestPermission = useCallback(async () => {
-    setState(prev => ({ ...prev, loading: true, error: null }));
+  /* ─── Permission ───────────────────────────────────────── */
 
+  const requestPermission = useCallback(async () => {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
-      
+
       if (status !== 'granted') {
         setState(prev => ({
           ...prev,
-          loading: false,
           permissionStatus: 'denied',
-          error: 'Location permission denied',
+          enabled: false,
         }));
         return false;
       }
 
-      setState(prev => ({ ...prev, permissionStatus: 'granted' }));
+      setState(prev => ({
+        ...prev,
+        permissionStatus: 'granted',
+      }));
       return true;
     } catch (err) {
       console.error('[Location] Permission error:', err);
       setState(prev => ({
         ...prev,
-        loading: false,
         error: 'Failed to request location permission',
+        permissionStatus: 'denied',
+        enabled: false,
       }));
       return false;
     }
   }, []);
 
+  /* ─── Get Location (Web + Native) ───────────────────────── */
+
   const getCurrentLocation = useCallback(async () => {
     setState(prev => ({ ...prev, loading: true, error: null }));
 
     try {
+      /* ---------- Web ---------- */
       if (Platform.OS === 'web') {
         if (!navigator.geolocation) {
-          setState(prev => ({
-            ...prev,
-            loading: false,
-            error: 'Geolocation not supported',
-          }));
-          return null;
+          throw new Error('Geolocation not supported');
         }
 
         return new Promise<{ latitude: number; longitude: number } | null>((resolve) => {
           navigator.geolocation.getCurrentPosition(
-            async (position) => {
+            async position => {
               const { latitude, longitude } = position.coords;
-              
-              let city = 'New York';
+
+              let city: string | null = null;
               try {
                 const [address] = await Location.reverseGeocodeAsync({ latitude, longitude });
-                city = address?.city || address?.subregion || 'Unknown';
-              } catch (e) {
-                console.warn('[Location] Reverse geocode failed:', e);
-              }
+                city = address?.city || address?.subregion || null;
+              } catch {}
 
               setState(prev => ({
                 ...prev,
@@ -83,12 +92,13 @@ export function useLocation() {
                 longitude,
                 city,
                 loading: false,
+                enabled: true,
                 permissionStatus: 'granted',
               }));
+
               resolve({ latitude, longitude });
             },
-            (error) => {
-              console.error('[Location] Web geolocation error:', error);
+            error => {
               setState(prev => ({
                 ...prev,
                 loading: false,
@@ -102,8 +112,10 @@ export function useLocation() {
         });
       }
 
+      /* ---------- Native ---------- */
       const hasPermission = await requestPermission();
       if (!hasPermission) {
+        setState(prev => ({ ...prev, loading: false }));
         return null;
       }
 
@@ -113,13 +125,11 @@ export function useLocation() {
 
       const { latitude, longitude } = location.coords;
 
-      let city = 'New York';
+      let city: string | null = null;
       try {
         const [address] = await Location.reverseGeocodeAsync({ latitude, longitude });
-        city = address?.city || address?.subregion || 'Unknown';
-      } catch (e) {
-        console.warn('[Location] Reverse geocode failed:', e);
-      }
+        city = address?.city || address?.subregion || null;
+      } catch {}
 
       setState(prev => ({
         ...prev,
@@ -127,6 +137,7 @@ export function useLocation() {
         longitude,
         city,
         loading: false,
+        enabled: true,
       }));
 
       return { latitude, longitude };
@@ -141,10 +152,32 @@ export function useLocation() {
     }
   }, [requestPermission]);
 
+  /* ─── Toggle / Disable ──────────────────────────────────── */
+
+  const disable = useCallback(() => {
+    setState(prev => ({
+      ...prev,
+      enabled: false,
+      latitude: null,
+      longitude: null,
+      city: null,
+    }));
+  }, []);
+
+  const toggle = useCallback(() => {
+    if (state.enabled) {
+      disable();
+    } else {
+      getCurrentLocation();
+    }
+  }, [state.enabled, disable, getCurrentLocation]);
+
+  /* ─── Permission Alert ──────────────────────────────────── */
+
   const showPermissionAlert = useCallback(() => {
     Alert.alert(
       'Location Access',
-      'PrimeDine needs your location to show restaurants near you. Would you like to enable location access?',
+      'PrimeDine needs your location to show restaurants near you.',
       [
         { text: 'Not Now', style: 'cancel' },
         { text: 'Enable', onPress: getCurrentLocation },
@@ -152,14 +185,22 @@ export function useLocation() {
     );
   }, [getCurrentLocation]);
 
+  /* ─── Public API ────────────────────────────────────────── */
+
   return {
     ...state,
+    hasLocation: state.latitude !== null && state.longitude !== null,
     getCurrentLocation,
     requestPermission,
+    toggle,
+    disable,
     showPermissionAlert,
-    hasLocation: state.latitude !== null && state.longitude !== null,
   };
 }
+
+/* ============================================================
+   Helpers
+============================================================ */
 
 export function calculateDistance(
   lat1: number,
@@ -171,9 +212,10 @@ export function calculateDistance(
   const dLat = toRad(lat2 - lat1);
   const dLon = toRad(lon2 - lon1);
   const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
-    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) *
+      Math.cos(toRad(lat2)) *
+      Math.sin(dLon / 2) ** 2;
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c;
 }
@@ -183,8 +225,6 @@ function toRad(deg: number): number {
 }
 
 export function formatDistance(km: number): string {
-  if (km < 1) {
-    return `${Math.round(km * 1000)}m`;
-  }
+  if (km < 1) return `${Math.round(km * 1000)}m`;
   return `${km.toFixed(1)}km`;
 }
