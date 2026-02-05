@@ -1,4 +1,14 @@
+/* ============================================================
+   Core User & Auth
+============================================================ */
+
 export type UserRole = 'customer' | 'restaurant_owner';
+
+export interface CardDetails {
+  lastFour: string;
+  expiryDate: string;
+  cardType: string;
+}
 
 export interface User {
   id: string;
@@ -15,11 +25,9 @@ export interface User {
   cuisinePreferences?: string[];
 }
 
-export interface CardDetails {
-  lastFour: string;
-  expiryDate: string;
-  cardType: string;
-}
+/* ============================================================
+   Restaurant
+============================================================ */
 
 export interface Restaurant {
   id: string;
@@ -42,6 +50,12 @@ export interface Restaurant {
   ownerId: string;
 }
 
+/* ============================================================
+   Deals & Coupons
+============================================================ */
+
+export type OfferType = 'dinein' | 'pickup' | 'both';
+
 export interface Deal {
   id: string;
   restaurantId: string;
@@ -50,7 +64,7 @@ export interface Deal {
   title: string;
   description: string;
   discountPercent: number;
-  offerType: 'dinein' | 'pickup' | 'both';
+  offerType: OfferType;
   maxCoupons: number;
   claimedCoupons: number;
   minOrder: number;
@@ -62,6 +76,8 @@ export interface Deal {
   termsConditions: string;
 }
 
+export type CouponStatus = 'active' | 'used' | 'expired';
+
 export interface Coupon {
   id: string;
   dealId: string;
@@ -69,12 +85,16 @@ export interface Coupon {
   restaurantName: string;
   restaurantImage: string;
   discountPercent: number;
-  status: 'active' | 'used' | 'expired';
+  status: CouponStatus;
   claimedAt: string;
   usedAt?: string;
   expiresAt: string;
   code: string;
 }
+
+/* ============================================================
+   Services & Bookings
+============================================================ */
 
 export interface Service {
   id: string;
@@ -96,6 +116,8 @@ export interface BookingSlot {
   maxGuests: number;
 }
 
+export type BookingStatus = 'pending' | 'confirmed' | 'cancelled';
+
 export interface TableBooking {
   id: string;
   restaurantId: string;
@@ -105,7 +127,7 @@ export interface TableBooking {
   guests: number;
   tableType: string;
   specialRequests?: string;
-  status: 'pending' | 'confirmed' | 'cancelled';
+  status: BookingStatus;
 }
 
 export interface ServiceBooking {
@@ -118,18 +140,66 @@ export interface ServiceBooking {
   timeSlot: string;
   guests: number;
   totalPrice: number;
-  status: 'pending' | 'confirmed' | 'cancelled';
+  status: BookingStatus;
 }
 
-export interface Analytics {
-  totalCoupons: number;
-  redemptionRate: number;
-  activeCoupons: number;
-  usedCoupons: number;
-  dailyActivity: DailyActivity[];
-  offerTypeDistribution: OfferTypeDistribution;
-  discountRangeDistribution: DiscountRange[];
+/* ============================================================
+   Orders
+============================================================ */
+
+export type OrderType = 'dinein' | 'pickup';
+export type OrderStatus =
+  | 'pending'
+  | 'accepted'
+  | 'preparing'
+  | 'ready'
+  | 'completed'
+  | 'rejected'
+  | 'cancelled';
+
+export interface OrderItem {
+  id: string;
+  name: string;
+  quantity: number;
+  price: number;
+  notes?: string;
 }
+
+export interface OrderMessage {
+  id: string;
+  orderId: string;
+  senderId: string;
+  senderType: 'restaurant' | 'customer';
+  message: string;
+  timestamp: string;
+  read: boolean;
+}
+
+export interface Order {
+  id: string;
+  restaurantId: string;
+  customerId: string;
+  customerName: string;
+  customerPhone: string;
+  customerPhoto?: string;
+  orderType: OrderType;
+  items: OrderItem[];
+  subtotal: number;
+  discount: number;
+  total: number;
+  status: OrderStatus;
+  tableNumber?: string;
+  pickupTime?: string;
+  specialInstructions?: string;
+  createdAt: string;
+  updatedAt: string;
+  estimatedTime?: number;
+  messages: OrderMessage[];
+}
+
+/* ============================================================
+   Analytics
+============================================================ */
 
 export interface DailyActivity {
   day: string;
@@ -147,26 +217,24 @@ export interface DiscountRange {
   count: number;
 }
 
-export interface ServiceCategory {
-  id: string;
-  name: string;
-  icon: string;
+export interface Analytics {
+  totalCoupons: number;
+  redemptionRate: number;
+  activeCoupons: number;
+  usedCoupons: number;
+  dailyActivity: DailyActivity[];
+  offerTypeDistribution: OfferTypeDistribution;
+  discountRangeDistribution: DiscountRange[];
 }
 
-export interface CuisineType {
-  id: string;
-  name: string;
-  image: string;
-}
+/* ============================================================
+   Employees & Scheduling
+============================================================ */
 
-export interface Employee {
-  id: string;
-  name: string;
-  phone?: string;
-  email?: string;
-  role: string;
-  availability: WeeklyAvailability;
-  hourlyRate?: number;
+export interface DayAvailability {
+  available: boolean;
+  startTime?: string;
+  endTime?: string;
 }
 
 export interface WeeklyAvailability {
@@ -179,11 +247,17 @@ export interface WeeklyAvailability {
   sunday: DayAvailability;
 }
 
-export interface DayAvailability {
-  available: boolean;
-  startTime?: string;
-  endTime?: string;
+export interface Employee {
+  id: string;
+  name: string;
+  phone?: string;
+  email?: string;
+  role: string;
+  availability: WeeklyAvailability;
+  hourlyRate?: number;
 }
+
+export type ShiftStatus = 'scheduled' | 'swapRequested' | 'completed' | 'cancelled';
 
 export interface Shift {
   id: string;
@@ -194,7 +268,7 @@ export interface Shift {
   startTime: string;
   endTime: string;
   role: string;
-  status: 'scheduled' | 'swapRequested' | 'completed' | 'cancelled';
+  status: ShiftStatus;
   swapRequestedWith?: string;
 }
 
@@ -208,6 +282,13 @@ export interface WeeklySchedule {
   updatedAt: string;
 }
 
+/* ============================================================
+   Payments & Sales
+============================================================ */
+
+export type PaymentMethod = 'cash' | 'card' | 'upi';
+export type TransactionStatus = 'pending' | 'completed' | 'refunded';
+
 export interface Transaction {
   id: string;
   restaurantId: string;
@@ -218,20 +299,9 @@ export interface Transaction {
   originalAmount: number;
   discountAmount: number;
   finalAmount: number;
-  paymentMethod: 'cash' | 'card' | 'upi';
-  status: 'pending' | 'completed' | 'refunded';
+  paymentMethod: PaymentMethod;
+  status: TransactionStatus;
   createdAt: string;
-}
-
-export interface SalesAnalytics {
-  restaurantId: string;
-  period: 'daily' | 'weekly' | 'monthly';
-  totalSales: number;
-  totalTransactions: number;
-  averageOrderValue: number;
-  topOffers: OfferPerformance[];
-  peakHours: PeakHour[];
-  recommendations: SalesRecommendation[];
 }
 
 export interface OfferPerformance {
@@ -256,6 +326,29 @@ export interface SalesRecommendation {
   basedOn: string;
 }
 
+export interface SalesAnalytics {
+  restaurantId: string;
+  period: 'daily' | 'weekly' | 'monthly';
+  totalSales: number;
+  totalTransactions: number;
+  averageOrderValue: number;
+  topOffers: OfferPerformance[];
+  peakHours: PeakHour[];
+  recommendations: SalesRecommendation[];
+}
+
+/* ============================================================
+   Waste Management
+============================================================ */
+
+export type WasteReason =
+  | 'expired'
+  | 'spoiled'
+  | 'overproduction'
+  | 'customer_return'
+  | 'preparation_error'
+  | 'other';
+
 export interface FoodWasteRecord {
   id: string;
   restaurantId: string;
@@ -263,7 +356,7 @@ export interface FoodWasteRecord {
   category: string;
   quantity: number;
   unit: string;
-  reason: 'expired' | 'spoiled' | 'overproduction' | 'customer_return' | 'preparation_error' | 'other';
+  reason: WasteReason;
   costPerUnit: number;
   totalCost: number;
   date: string;
@@ -271,20 +364,6 @@ export interface FoodWasteRecord {
   recordedBy?: string;
   notes?: string;
   inventoryItemId?: string;
-}
-
-export interface WasteAnalytics {
-  totalWasteThisMonth: number;
-  totalCostThisMonth: number;
-  wasteByCategory: WasteCategoryBreakdown[];
-  wasteByReason: WasteReasonBreakdown[];
-  wasteTrend: WasteTrendData[];
-  topWastedItems: TopWastedItem[];
-  recommendations: WasteRecommendation[];
-  comparisonToPreviousMonth: {
-    wasteChange: number;
-    costChange: number;
-  };
 }
 
 export interface WasteCategoryBreakdown {
@@ -326,45 +405,16 @@ export interface WasteRecommendation {
   basedOn: string;
 }
 
-export type OrderType = 'dinein' | 'pickup';
-export type OrderStatus = 'pending' | 'accepted' | 'preparing' | 'ready' | 'completed' | 'rejected' | 'cancelled';
-
-export interface OrderItem {
-  id: string;
-  name: string;
-  quantity: number;
-  price: number;
-  notes?: string;
-}
-
-export interface Order {
-  id: string;
-  restaurantId: string;
-  customerId: string;
-  customerName: string;
-  customerPhone: string;
-  customerPhoto?: string;
-  orderType: OrderType;
-  items: OrderItem[];
-  subtotal: number;
-  discount: number;
-  total: number;
-  status: OrderStatus;
-  tableNumber?: string;
-  pickupTime?: string;
-  specialInstructions?: string;
-  createdAt: string;
-  updatedAt: string;
-  estimatedTime?: number;
-  messages: OrderMessage[];
-}
-
-export interface OrderMessage {
-  id: string;
-  orderId: string;
-  senderId: string;
-  senderType: 'restaurant' | 'customer';
-  message: string;
-  timestamp: string;
-  read: boolean;
+export interface WasteAnalytics {
+  totalWasteThisMonth: number;
+  totalCostThisMonth: number;
+  wasteByCategory: WasteCategoryBreakdown[];
+  wasteByReason: WasteReasonBreakdown[];
+  wasteTrend: WasteTrendData[];
+  topWastedItems: TopWastedItem[];
+  recommendations: WasteRecommendation[];
+  comparisonToPreviousMonth: {
+    wasteChange: number;
+    costChange: number;
+  };
 }
