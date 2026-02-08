@@ -30,9 +30,9 @@ import {
   ArrowRight,
   Phone,
 } from 'lucide-react-native';
-import { useMutation } from '@tanstack/react-query';
+
 import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/lib/supabase';
+import { trpc } from '@/lib/trpc';
 import Colors from '@/constants/colors';
 
 const { width } = Dimensions.get('window');
@@ -65,39 +65,23 @@ export default function PartnerScreen() {
   const [verificationCode, setVerificationCode] = useState('');
   const [error, setError] = useState('');
 
-  const sendCodeMutation = useMutation({
-    mutationFn: async ({ email: targetEmail }: { email: string }) => {
-      console.log('[Partner] Sending verification code to:', targetEmail);
-      const { error: otpError } = await supabase.auth.signInWithOtp({ email: targetEmail });
-      if (otpError) throw otpError;
-      return { success: true };
-    },
+const sendCodeMutation = trpc.auth.sendVerificationCode.useMutation({
     onSuccess: () => {
       console.log('Verification code sent');
       setStep('verify');
       setError('');
     },
-    onError: (err: Error) => {
+    onError: (err) => {
       setError(err.message || 'Failed to send verification code');
     },
   });
 
-  const verifyCodeMutation = useMutation({
-    mutationFn: async ({ email: targetEmail, code }: { email: string; code: string }) => {
-      console.log('[Partner] Verifying code for:', targetEmail);
-      const { error: verifyError } = await supabase.auth.verifyOtp({
-        email: targetEmail,
-        token: code,
-        type: 'email',
-      });
-      if (verifyError) throw verifyError;
-      return { success: true };
-    },
+  const verifyCodeMutation = trpc.auth.verifyCode.useMutation({
     onSuccess: () => {
       setStep('signup');
       setError('');
     },
-    onError: (err: Error) => {
+    onError: (err) => {
       setError(err.message || 'Invalid verification code');
     },
   });
