@@ -1,167 +1,273 @@
 // lib/api.ts
-// Central REST API client (Go / Rork backend)
-// Safe for Expo + Supabase Auth
+// REST API client to replace tRPC
 
-import { supabase } from './supabase';
+import Constants from 'expo-constants';
 
-const API_BASE_URL =
-  process.env.EXPO_PUBLIC_API_URL ??
-  process.env.EXPO_PUBLIC_RORK_API_BASE_URL ??
-  '';
+const API_BASE_URL = __DEV__
+  ? 'http://localhost:8080/api/v1' // Change to your local IP for physical device testing
+  : Constants.expoConfig?.extra?.apiUrl || 'https://primedine.fly.dev/';
 
-if (!API_BASE_URL) {
-  console.warn('⚠️ EXPO_PUBLIC_API_URL is not set');
+interface RequestOptions extends RequestInit {
+  requireAuth?: boolean;
 }
 
-/* -------------------------------------------------------------------------- */
-/*                               Auth helper                                  */
-/* -------------------------------------------------------------------------- */
+class APIClient {
+  private baseURL: string;
+  private authToken: string | null = null;
 
-async function getAuthToken(): Promise<string | null> {
-  try {
-    const { data, error } = await supabase.auth.getSession();
-    if (error) {
-      console.warn('Auth session error:', error.message);
-      return null;
+  constructor(baseURL: string) {
+    this.baseURL = baseURL;
+  }
+
+  setAuthToken(token: string | null) {
+    this.authToken = token;
+  }
+
+  private async request<T>(
+    endpoint: string,
+    options: RequestOptions = {}
+  ): Promise<T> {
+    const { requireAuth = false, ...fetchOptions } = options;
+
+    const headers: HeadersInit = {
+      'Content-Type': 'application/json',
+      ...(fetchOptions.headers || {}),
+    };
+
+    if (requireAuth && this.authToken) {
+      headers['Authorization'] = `Bearer ${this.authToken}`;
     }
-    return data.session?.access_token ?? null;
-  } catch (err) {
-    console.error('Failed to get auth token:', err);
-    return null;
-  }
-}
 
-/* -------------------------------------------------------------------------- */
-/*                            Generic API request                              */
-/* -------------------------------------------------------------------------- */
+    const response = await fetch(`${this.baseURL}${endpoint}`, {
+      ...fetchOptions,
+      headers,
+    });
 
-type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'Unknown error' }));
+      throw new Error(error.error || `HTTP ${response.status}`);
+    }
 
-async function apiRequest<T>(
-  method: HttpMethod,
-  endpoint: string,
-  options?: {
-    body?: unknown;
-    params?: Record<string, string | number | boolean | undefined>;
-  }
-): Promise<T> {
-  if (!API_BASE_URL) {
-    throw new Error('API base URL not configured');
+    return response.json();
   }
 
-  const token = await getAuthToken();
+  // Restaurant APIs
+  async getRestaurants() {
+    return this.request<{ data: Restaurant[] }>('/restaurants');
+  }
 
-  const url = new URL(`${API_BASE_URL}${endpoint}`);
+  async getRestaurant(id: string) {
+    return this.request<{ data: Restaurant }>(`/restaurants/${id}`);
+  }
 
-  if (options?.params) {
-    Object.entries(options.params).forEach(([key, value]) => {
-      if (value !== undefined) {
-        url.searchParams.append(key, String(value));
-      }
+  async getRestaurantMenu(id: string) {
+    return this.request<{ data: MenuItem[] }>(`/restaurants/${id}/menu`);
+  }
+
+  // Order APIs
+  async createOrder(data: CreateOrderRequest) {
+    return this.request<{ data: Order }>('/orders', {
+      method: 'POST',
+      body: JSON.stringify(data),
+      requireAuth: true,
     });
   }
 
-  const headers: HeadersInit = {
-    'Content-Type': 'application/json',
-  };
-
-  if (token) {
-    headers.Authorization = `Bearer ${token}`;
+  async getOrder(id: string) {
+    return this.request<{ data: Order }>(`/orders/${id}`, {
+      requireAuth: true,
+    });
   }
 
-  const response = await fetch(url.toString(), {
-    method,
-    headers,
-    body: options?.body ? JSON.stringify(options.body) : undefined,
-  });
-
-  if (!response.ok) {
-    let message = 'API request failed';
-    try {
-      const errorData = await response.json();
-      message = errorData?.message ?? message;
-    } catch {
-      // ignore JSON parse error
-    }
-    throw new Error(`${message} (HTTP ${response.status})`);
+  async getUserOrders(userId: string) {
+    return this.request<{ data: Order[] }>(`/orders/user/${userId}`, {
+      requireAuth: true,
+    });
   }
 
-  // Handle empty responses (204)
-  if (response.status === 204) {
-    return null as T;
+  // User APIs
+  async getUserProfile() {
+    return this.request<{ data: User }>('/profile', {
+      requireAuth: true,
+    });
   }
 
-  return (await response.json()) as T;
+  async updateUserProfile(data: Partial<User>) {
+    return this.request<{ data: User }>('/profile', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+      requireAuth: true,
+    });
+  }
+
+  // Booking APIs
+  async createBooking(data: CreateBookingRequest) {
+    return this.request<{ data: Booking }>('/bookings', {
+      method: 'POST',
+      body: JSON.stringify(data),
+      requireAuth: true,
+    });
+  }
+
+  async getUserBookings(userId: string) {
+    return this.request<{ data: Booking[] }>(`/bookings/user/${userId}`, {
+      requireAuth: true,
+    });
+  }
+
+  // Favorites APIs
+  async addFavorite(restaurantId: string) {
+    return this.request<{ data: Favorite }>('/favorites', {
+      method: 'POST',
+      body: JSON.stringify({ restaurantId }),
+      requireAuth: true,
+    });
+  }
+
+  async getFavorites() {
+    return this.request<{ data: Favorite[] }>('/favorites', {
+      requireAuth: true,
+    });
+  }
+
+  async removeFavorite(restaurantId: string) {
+    return this.request<{ success: boolean }>(`/favorites/${restaurantId}`, {
+      method: 'DELETE',
+      requireAuth: true,
+    });
+  }
+
+  // Notification APIs
+  async getNotifications() {
+    return this.request<{ data: Notification[] }>('/notifications', {
+      requireAuth: true,
+    });
+  }
+
+  async markNotificationRead(id: string) {
+    return this.request<{ success: boolean }>(`/notifications/${id}/read`, {
+      method: 'PATCH',
+      requireAuth: true,
+    });
+  }
 }
 
-/* -------------------------------------------------------------------------- */
-/*                                 API Layer                                  */
-/* -------------------------------------------------------------------------- */
+// Types
+export interface Restaurant {
+  id: string;
+  name: string;
+  address: string;
+  phone: string;
+  email: string;
+  cuisineTypes: string[];
+  description?: string;
+  priceRange: number;
+  rating: number;
+  totalReviews: number;
+  images: string[];
+  openingHours: Record<string, any>;
+  location?: {
+    latitude: number;
+    longitude: number;
+  };
+}
 
-export const api = {
-  /* -------------------------------- Restaurants --------------------------- */
-  getRestaurants: (params?: {
-    lat?: number;
-    lng?: number;
-    radius?: number;
-  }) =>
-    apiRequest<any[]>('GET', '/restaurants', {
-      params,
-    }),
+export interface MenuItem {
+  id: string;
+  restaurantId: string;
+  name: string;
+  description: string;
+  price: number;
+  category: string;
+  isVegetarian: boolean;
+  isVegan: boolean;
+  isGlutenFree: boolean;
+  images: string[];
+  isAvailable: boolean;
+}
 
-  getRestaurantById: (id: string) =>
-    apiRequest<any>('GET', `/restaurants/${id}`),
+export interface Order {
+  id: string;
+  userId: string;
+  restaurantId: string;
+  restaurantName?: string;
+  items: Array<{
+    menuItemId: string;
+    name: string;
+    quantity: number;
+    price: number;
+  }>;
+  deliveryAddress: string;
+  notes?: string;
+  subtotal: number;
+  tax: number;
+  deliveryFee: number;
+  total: number;
+  status: 'pending' | 'confirmed' | 'preparing' | 'ready' | 'delivered' | 'cancelled';
+  createdAt: string;
+  updatedAt: string;
+}
 
-  /* -------------------------------- Menu ---------------------------------- */
-  getMenuItems: (restaurantId: string) =>
-    apiRequest<any[]>('GET', `/menu/${restaurantId}`),
+export interface CreateOrderRequest {
+  restaurantId: string;
+  items: Array<{
+    menuItemId: string;
+    quantity: number;
+    price: number;
+  }>;
+  deliveryAddress: string;
+  notes?: string;
+}
 
-  createMenuItem: (data: any) =>
-    apiRequest<any>('POST', '/menu', { body: data }),
+export interface User {
+  id: string;
+  email: string;
+  name: string;
+  phone?: string;
+  address?: string;
+  role: 'customer' | 'restaurant_owner' | 'admin';
+  loyaltyPoints: number;
+  createdAt: string;
+}
 
-  updateMenuItem: (id: string, data: any) =>
-    apiRequest<any>('PATCH', `/menu/${id}`, { body: data }),
+export interface Booking {
+  id: string;
+  userId: string;
+  restaurantId: string;
+  date: string;
+  time: string;
+  guests: number;
+  status: 'pending' | 'confirmed' | 'cancelled';
+  specialRequests?: string;
+}
 
-  deleteMenuItem: (id: string) =>
-    apiRequest<void>('DELETE', `/menu/${id}`),
+export interface CreateBookingRequest {
+  restaurantId: string;
+  date: string;
+  time: string;
+  guests: number;
+  specialRequests?: string;
+}
 
-  /* -------------------------------- Orders -------------------------------- */
-  getOrders: (status?: string) =>
-    apiRequest<any[]>('GET', '/orders', {
-      params: status ? { status } : undefined,
-    }),
+export interface Favorite {
+  id: string;
+  userId: string;
+  restaurantId: string;
+  restaurant?: Restaurant;
+}
 
-  getOrderById: (id: string) =>
-    apiRequest<any>('GET', `/orders/${id}`),
+export interface Notification {
+  id: string;
+  userId: string;
+  title: string;
+  message: string;
+  type: 'order' | 'booking' | 'promotion' | 'system';
+  isRead: boolean;
+  createdAt: string;
+}
 
-  createOrder: (order: {
-    restaurantId: string;
-    items: any[];
-    subtotal: number;
-    total: number;
-    notes?: string;
-  }) =>
-    apiRequest<any>('POST', '/orders', {
-      body: order,
-    }),
+// Export singleton instance
+export const api = new APIClient(API_BASE_URL);
 
-  updateOrderStatus: (orderId: string, status: string) =>
-    apiRequest<any>('PATCH', `/orders/${orderId}`, {
-      body: { status },
-    }),
-
-  /* -------------------------------- Profile ------------------------------- */
-  getProfile: () =>
-    apiRequest<any>('GET', '/profile'),
-
-  updateProfile: (updates: any) =>
-    apiRequest<any>('PATCH', '/profile', {
-      body: updates,
-    }),
-
-  /* ------------------------------ Health Check ---------------------------- */
-  healthCheck: () =>
-    apiRequest<{ status: string }>('GET', '/health'),
-};
-
-export default api;
+// Hook for React Query integration
+export const useAPI = () => api;
