@@ -3,11 +3,9 @@
   "main": "expo-router/entry",
   "version": "1.0.0",
   "scripts": {
-    "start": "bunx expo start",
+    "start": "node backend/server.js",
     "start-web": "bunx rork start -p 3hdmt22ihte9v7gfmtgrh --web --tunnel",
     "start-web-dev": "DEBUG=expo* bunx rork start -p 3hdmt22ihte9v7gfmtgrh --web --tunnel",
-    "start-backend": "cd backend && go run .",
-    "start-backend-node": "node backend/server.js",
     "lint": "expo lint"
   },
   "dependencies": {

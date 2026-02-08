@@ -2,15 +2,13 @@ package main
 
 import (
 	"log"
-	"net/http"
 	"os"
-	"time"
 
-	"github.com/Lokeshwarrior12/rork-finedine/backend/handlers"
 	"github.com/Lokeshwarrior12/rork-finedine/backend/internal/cache"
 	"github.com/Lokeshwarrior12/rork-finedine/backend/internal/database"
 	"github.com/Lokeshwarrior12/rork-finedine/backend/internal/middleware"
 	"github.com/Lokeshwarrior12/rork-finedine/backend/internal/realtime"
+	"github.com/Lokeshwarrior12/rork-finedine/backend/handlers"
 	
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -183,15 +181,7 @@ func main() {
 	log.Printf("✅ Server ready for 1000+ concurrent users")
 	log.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 	
-		addr := ":" + port
-	server := &http.Server{
-		Addr:         addr,
-		Handler:      router,
-		ReadTimeout:  10 * time.Second,
-		WriteTimeout: 10 * time.Second,
-		IdleTimeout:  30 * time.Second,
-	}
-
-	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+	if err := router.Run(":" + port); err != nil {
+		log.Fatalf("❌ Server failed to start: %v", err)
 	}
 }

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -30,7 +30,7 @@ import {
   Package,
   CircleCheck,
   CircleX,
-  Filter,
+
   Search,
   User,
 } from 'lucide-react-native';

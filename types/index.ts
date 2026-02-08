@@ -51,6 +51,22 @@ export interface Restaurant {
 }
 
 /* ============================================================
+   Categories & Cuisines
+============================================================ */
+
+export interface ServiceCategory {
+  id: string;
+  name: string;
+  icon: string;
+}
+
+export interface CuisineType {
+  id: string;
+  name: string;
+  image: string;
+}
+
+/* ============================================================
    Deals & Coupons
 ============================================================ */
 

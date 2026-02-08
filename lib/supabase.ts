@@ -156,7 +156,7 @@ export const realtime = {
     const channel = supabase
       .channel(`rt-${table}-${Date.now()}`)
       .on(
-        'postgres_changes',
+        'postgres_changes' as any,
         {
           event: opts.event ?? '*',
           schema: 'public',
@@ -178,7 +178,7 @@ export const realtime = {
     const channel = supabase
       .channel(`${table}-${id}`)
       .on(
-        'postgres_changes',
+        'postgres_changes' as any,
         {
           event: 'UPDATE',
           schema: 'public',

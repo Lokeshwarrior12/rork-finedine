@@ -7,7 +7,6 @@ import {
   Pressable,
   TextInput,
   Alert,
-  Dimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -24,7 +23,6 @@ import {
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 
-const { width: _screenWidth } = Dimensions.get('window');
 
 interface WasteEntry {
   id: string;
@@ -76,7 +74,6 @@ export default function FoodWasteScreen() {
   const [selectedMonth, setSelectedMonth] = useState(new Date());
   const [newItemName, setNewItemName] = useState('');
   const [newQuantity, setNewQuantity] = useState('');
-  const [_editingId, _setEditingId] = useState<string | null>(null);
 
   const styles = createStyles(colors, isDark);
 

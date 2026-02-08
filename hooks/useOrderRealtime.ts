@@ -1,5 +1,5 @@
-import { useEffect, useCallback, useRef } from 'react';
-import { supabase, subscribeTable } from '@/lib/supabase';
+import { useEffect, useRef } from 'react';
+import { supabase, realtime } from '@/lib/supabase';
 //
 export function useOrderRealtime(onUpdate: (order: any) => void) {
   const cbRef = useRef(onUpdate);
@@ -9,10 +9,10 @@ export function useOrderRealtime(onUpdate: (order: any) => void) {
     (async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-      unsub = subscribeTable(
+      unsub = realtime.subscribeTable(
         'orders',
         { event: 'UPDATE', filter: `customer_id=eq.${user.id}` },
-        (payload) => {
+        (payload: any) => {
           if (payload.eventType === 'UPDATE') {
             cbRef.current(payload.new);
           }

@@ -11,7 +11,6 @@ import {
   RefreshControl,
   Modal,
   ActivityIndicator,
-  FlatList,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter, Href } from 'expo-router';
@@ -55,13 +54,9 @@ import {
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { cuisineTypes, serviceCategories, serviceFilters, diningCategories } from '@/mocks/data';
-
-// ── REAL BACKEND HOOKS ──
-import { useRestaurants } from '@/hooks/useRestaurants';
-import { useDeals } from '@/hooks/useDeals';
+import { useRestaurants, useDeals } from '@/hooks/useApi';
 import { useLocation } from '@/hooks/useLocation';
-import { useFavorites } from '@/hooks/useFavorites';
-import { useOrderRealtime } from '@/hooks/useOrderRealtime';
+import { useDebounce } from '@/hooks/useDebounce';
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = width * 0.75;
@@ -72,23 +67,11 @@ interface FilterState {
   categories: string[];
 }
 
-// ── DEBOUNCE HOOK ──
-function useDebounce<T>(value: T, delay: number): T {
-  const [debounced, setDebounced] = useState(value);
-  useEffect(() => {
-    const t = setTimeout(() => setDebounced(value), delay);
-    return () => clearTimeout(t);
-  }, [value, delay]);
-  return debounced;
-}
-
 export default function CustomerHomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { user } = useAuth();
+  const { user, toggleFavorite } = useAuth();
   const { colors, isDark } = useTheme();
-  
-  // ── STATE ──
   const [searchQuery, setSearchQuery] = useState('');
   const [refreshing, setRefreshing] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
@@ -97,59 +80,32 @@ export default function CustomerHomeScreen() {
     services: [],
     categories: [],
   });
-  const [page, setPage] = useState(0);
-  const [lastOrderUpdate, setLastOrderUpdate] = useState<any>(null);
+  const [nearMeRadius, setNearMeRadius] = useState<number | null>(null);
   
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const filterAnim = useRef(new Animated.Value(0)).current;
   
-  const debouncedSearch = useDebounce(searchQuery, 400);
-
-  // ── LOCATION HOOK (REAL) ──
-  const location = useLocation();
-  const nearMeEnabled = location.enabled;
-
-  // ── PREPARE FILTER PARAMS ──
+  const debouncedSearch = useDebounce(searchQuery, 300);
+  const { latitude, longitude, loading: locationLoading, getCurrentLocation, hasLocation } = useLocation();
+  
   const selectedCuisine = filters.cuisines.length > 0 
     ? cuisineTypes.find(c => c.id === filters.cuisines[0])?.name 
     : undefined;
   const selectedCategory = filters.categories.length > 0
     ? diningCategories.find(c => c.id === filters.categories[0])?.name
     : undefined;
-
-  // ── REAL DATA HOOKS ──
-  const { 
-    restaurants, 
-    loading: restaurantsLoading, 
-    error: restaurantsError,
-    total: totalRestaurants,
-    refetch: refetchRestaurants 
-  } = useRestaurants({
+  
+  const { data: restaurantsData, refetch: refetchRestaurants } = useRestaurants({
     query: debouncedSearch || undefined,
     cuisineType: selectedCuisine,
     category: selectedCategory,
-    services: filters.services.length > 0 ? filters.services : undefined,
-    lat: nearMeEnabled && location.coords?.lat ? location.coords.lat : undefined,
-    lng: nearMeEnabled && location.coords?.lng ? location.coords.lng : undefined,
-    radius: nearMeEnabled ? 5 : undefined,
-    limit: 20,
-    page,
+    lat: nearMeRadius && latitude ? latitude : undefined,
+    lng: nearMeRadius && longitude ? longitude : undefined,
+    radius: nearMeRadius || undefined,
   });
   
-  const { deals, loading: dealsLoading, refetch: refetchDeals } = useDeals({ limit: 10 });
+  const { data: dealsData, refetch: refetchDeals } = useDeals();
 
-  // ── FAVORITES HOOK (REAL) ──
-  const { isFavorite, toggle: toggleFavorite } = useFavorites();
-
-  // ── REALTIME ORDER UPDATES ──
-  useOrderRealtime(setLastOrderUpdate);
-
-  // ── RESET PAGE WHEN FILTERS CHANGE ──
-  useEffect(() => {
-    setPage(0);
-  }, [debouncedSearch, selectedCuisine, selectedCategory, filters.services, nearMeEnabled]);
-
-  // ── ANIMATIONS ──
   useEffect(() => {
     Animated.timing(fadeAnim, {
       toValue: 1,
@@ -166,14 +122,24 @@ export default function CustomerHomeScreen() {
     }).start();
   }, [showFilters, filterAnim]);
 
-  // ── REFRESH ──
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await Promise.all([refetchRestaurants(), refetchDeals()]);
     setRefreshing(false);
   }, [refetchRestaurants, refetchDeals]);
+  
+  const handleNearMePress = useCallback(async () => {
+    if (nearMeRadius) {
+      setNearMeRadius(null);
+      return;
+    }
+    
+    if (!hasLocation) {
+      await getCurrentLocation();
+    }
+    setNearMeRadius(5);
+  }, [nearMeRadius, hasLocation, getCurrentLocation]);
 
-  // ── FILTER ACTIONS ──
   const toggleFilter = useCallback((type: keyof FilterState, id: string) => {
     setFilters(prev => ({
       ...prev,
@@ -191,17 +157,13 @@ export default function CustomerHomeScreen() {
     filters.cuisines.length + filters.services.length + filters.categories.length,
   [filters]);
 
-  // ── DERIVED DATA ──
-  const hotDeals = deals?.filter(d => d.is_active)?.slice(0, 5) || [];
-  const nearbyRestaurants = restaurants || [];
-  const spotlightRestaurants = restaurants?.slice(0, 3) || [];
+  const restaurants = restaurantsData || [];
+  const deals = dealsData || [];
+  
+  const hotDeals = deals.filter(d => d.isActive).slice(0, 5);
+  const nearbyRestaurants = restaurants.slice(0, 6);
+  const spotlightRestaurants = restaurants.slice(0, 3);
 
-  // ── NAVIGATION ──
-  const navigateToRestaurant = (id: string) => {
-    router.push(`/restaurant/${id}` as any);
-  };
-
-  // ── ICONS MAP ──
   const categoryIcons: Record<string, React.ReactNode> = {
     'Banquet Halls': <Building2 size={24} color={colors.secondary} />,
     'Party Halls': <PartyPopper size={24} color={colors.secondary} />,
@@ -240,9 +202,12 @@ export default function CustomerHomeScreen() {
     'star': <Star size={16} color={colors.text} />,
   };
 
+  const navigateToRestaurant = (id: string) => {
+    router.push(`/restaurant/${id}` as any);
+  };
+
   const styles = createStyles(colors, isDark);
 
-  // ── RENDER FILTER MODAL ──
   const renderFilterModal = () => (
     <Modal
       visible={showFilters}
@@ -259,7 +224,6 @@ export default function CustomerHomeScreen() {
         </View>
 
         <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
-          {/* Cuisine Type */}
           <View style={styles.filterSection}>
             <Text style={styles.filterSectionTitle}>Cuisine Type</Text>
             <View style={styles.filterChipsContainer}>
@@ -282,7 +246,6 @@ export default function CustomerHomeScreen() {
             </View>
           </View>
 
-          {/* Services & Amenities */}
           <View style={styles.filterSection}>
             <Text style={styles.filterSectionTitle}>Services & Amenities</Text>
             <View style={styles.filterChipsContainer}>
@@ -307,7 +270,6 @@ export default function CustomerHomeScreen() {
             </View>
           </View>
 
-          {/* Dining Categories */}
           <View style={styles.filterSection}>
             <Text style={styles.filterSectionTitle}>Dining Categories</Text>
             <View style={styles.filterChipsContainer}>
@@ -352,11 +314,9 @@ export default function CustomerHomeScreen() {
     </Modal>
   );
 
-  // ── MAIN RENDER ──
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       {renderFilterModal()}
-      
       <ScrollView
         showsVerticalScrollIndicator={false}
         refreshControl={
@@ -369,7 +329,6 @@ export default function CustomerHomeScreen() {
         }
         contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
       >
-        {/* ── HEADER ── */}
         <View style={styles.header}>
           <View style={styles.headerTop}>
             <View>
@@ -394,7 +353,6 @@ export default function CustomerHomeScreen() {
             </View>
           </View>
 
-          {/* ── SEARCH BAR ── */}
           <View style={styles.searchRow}>
             <Pressable style={styles.searchContainer}>
               <Search size={20} color={colors.textMuted} />
@@ -424,7 +382,6 @@ export default function CustomerHomeScreen() {
             </Pressable>
           </View>
 
-          {/* ── ACTIVE FILTERS ── */}
           {activeFilterCount > 0 && (
             <ScrollView 
               horizontal 
@@ -477,31 +434,6 @@ export default function CustomerHomeScreen() {
           )}
         </View>
 
-        {/* ── LOCATION DENIED WARNING ── */}
-        {location.denied && (
-          <View style={styles.deniedBanner}>
-            <Text style={styles.deniedText}>
-              📍 Location denied – enable it in Settings to see nearby restaurants.
-            </Text>
-          </View>
-        )}
-
-        {/* ── REALTIME ORDER UPDATE TOAST ── */}
-        {lastOrderUpdate && (
-          <Pressable
-            style={styles.toastBanner}
-            onPress={() => {
-              router.push(`/orders/${lastOrderUpdate.id}` as any);
-              setLastOrderUpdate(null);
-            }}
-          >
-            <Text style={styles.toastText}>
-              🔔 Order {lastOrderUpdate.order_number} is now <Text style={{ fontWeight: '700' }}>{lastOrderUpdate.status}</Text>
-            </Text>
-          </Pressable>
-        )}
-
-        {/* ── CASHBACK BANNER ── */}
         <View style={styles.cashbackBanner}>
           <LinearGradient
             colors={[colors.primary, colors.primaryDark]}
@@ -524,7 +456,6 @@ export default function CustomerHomeScreen() {
           </LinearGradient>
         </View>
 
-        {/* ── SPOTLIGHT SECTION ── */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>In the spotlight</Text>
@@ -540,14 +471,14 @@ export default function CustomerHomeScreen() {
             decelerationRate="fast"
             snapToInterval={CARD_WIDTH + 16}
           >
-            {spotlightRestaurants.map((restaurant) => (
+            {spotlightRestaurants.map((restaurant, index) => (
               <Pressable
                 key={restaurant.id}
                 style={styles.spotlightCard}
                 onPress={() => navigateToRestaurant(restaurant.id)}
               >
                 <Image
-                  source={{ uri: restaurant.banner_url || restaurant.logo_url }}
+                  source={{ uri: restaurant.images[0] }}
                   style={styles.spotlightImage}
                   contentFit="cover"
                 />
@@ -562,7 +493,7 @@ export default function CustomerHomeScreen() {
                 <View style={styles.spotlightInfo}>
                   <Text style={styles.spotlightName}>{restaurant.name}</Text>
                   <Text style={styles.spotlightDesc} numberOfLines={2}>
-                    {restaurant.description || 'Crafted for Connoisseurs'}
+                    Crafted for Connoisseurs
                   </Text>
                   <Pressable style={styles.prebookBtn}>
                     <Text style={styles.prebookBtnText}>PREBOOK NOW</Text>
@@ -573,24 +504,23 @@ export default function CustomerHomeScreen() {
           </ScrollView>
         </View>
 
-        {/* ── QUICK ACTIONS ── */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>{user?.name?.split(' ')[0] || 'Hey'}, what&apos;s on your mind?</Text>
           
           <View style={styles.quickActions}>
             <Pressable 
-              style={[styles.quickActionCard, nearMeEnabled && styles.quickActionCardActive]}
-              onPress={() => location.toggle()}
+              style={[styles.quickActionCard, nearMeRadius && styles.quickActionCardActive]}
+              onPress={handleNearMePress}
             >
-              <View style={[styles.quickActionIcon, { backgroundColor: nearMeEnabled ? colors.primary : colors.primaryLight }]}>
-                {location.loading ? (
-                  <ActivityIndicator size="small" color={nearMeEnabled ? '#fff' : colors.primary} />
+              <View style={[styles.quickActionIcon, { backgroundColor: nearMeRadius ? colors.primary : colors.primaryLight }]}>
+                {locationLoading ? (
+                  <ActivityIndicator size="small" color={nearMeRadius ? '#fff' : colors.primary} />
                 ) : (
-                  <MapPin size={24} color={nearMeEnabled ? '#fff' : colors.primary} />
+                  <MapPin size={24} color={nearMeRadius ? '#fff' : colors.primary} />
                 )}
               </View>
-              <Text style={[styles.quickActionText, nearMeEnabled && { color: colors.primary }]}>
-                {nearMeEnabled ? 'Within 5km' : 'Restaurants\nnear me'}
+              <Text style={[styles.quickActionText, nearMeRadius && { color: colors.primary }]}>
+                {nearMeRadius ? `Within ${nearMeRadius}km` : 'Restaurants\nnear me'}
               </Text>
             </Pressable>
             <Pressable 
@@ -605,7 +535,6 @@ export default function CustomerHomeScreen() {
           </View>
         </View>
 
-        {/* ── CATEGORIES GRID ── */}
         <View style={styles.section}>
           <View style={styles.categoriesGrid}>
             {serviceCategories.map((category) => (
@@ -619,7 +548,6 @@ export default function CustomerHomeScreen() {
           </View>
         </View>
 
-        {/* ── HOT DEALS ── */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Hot Deals 🔥</Text>
@@ -628,53 +556,42 @@ export default function CustomerHomeScreen() {
             </Pressable>
           </View>
 
-          {dealsLoading ? (
-            <ActivityIndicator color={colors.primary} style={{ marginVertical: 12 }} />
-          ) : hotDeals.length === 0 ? (
-            <Text style={styles.emptySmall}>No active deals right now.</Text>
-          ) : (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.dealsScroll}
-            >
-              {hotDeals.map((deal) => (
-                <Pressable
-                  key={deal.id}
-                  style={styles.dealCard}
-                  onPress={() => navigateToRestaurant(deal.restaurant_id)}
-                >
-                  <Image
-                    source={{ uri: deal.restaurant?.logo_url }}
-                    style={styles.dealImage}
-                    contentFit="cover"
-                  />
-                  <LinearGradient
-                    colors={['transparent', 'rgba(0,0,0,0.8)']}
-                    style={styles.dealGradient}
-                  />
-                  <View style={styles.discountBadge}>
-                    <Text style={styles.discountText}>
-                      {deal.discount_percent ? `${deal.discount_percent}% OFF` : `$${deal.discount_amount} OFF`}
-                    </Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.dealsScroll}
+          >
+            {hotDeals.map((deal) => (
+              <Pressable
+                key={deal.id}
+                style={styles.dealCard}
+                onPress={() => navigateToRestaurant(deal.restaurantId)}
+              >
+                <Image
+                  source={{ uri: deal.restaurantImage }}
+                  style={styles.dealImage}
+                  contentFit="cover"
+                />
+                <LinearGradient
+                  colors={['transparent', 'rgba(0,0,0,0.8)']}
+                  style={styles.dealGradient}
+                />
+                <View style={styles.discountBadge}>
+                  <Text style={styles.discountText}>{deal.discountPercent}% OFF</Text>
+                </View>
+                <View style={styles.dealInfo}>
+                  <Text style={styles.dealRestaurant}>{deal.restaurantName}</Text>
+                  <Text style={styles.dealTitle} numberOfLines={1}>{deal.title}</Text>
+                  <View style={styles.dealMeta}>
+                    <Clock size={12} color="rgba(255,255,255,0.8)" />
+                    <Text style={styles.dealMetaText}>Until {deal.validTill}</Text>
                   </View>
-                  <View style={styles.dealInfo}>
-                    <Text style={styles.dealRestaurant}>{deal.restaurant?.name}</Text>
-                    <Text style={styles.dealTitle} numberOfLines={1}>{deal.title}</Text>
-                    <View style={styles.dealMeta}>
-                      <Clock size={12} color="rgba(255,255,255,0.8)" />
-                      <Text style={styles.dealMetaText}>
-                        Until {new Date(deal.valid_until).toLocaleDateString()}
-                      </Text>
-                    </View>
-                  </View>
-                </Pressable>
-              ))}
-            </ScrollView>
-          )}
+                </View>
+              </Pressable>
+            ))}
+          </ScrollView>
         </View>
 
-        {/* ── CUISINE TYPES ── */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Cuisine Types</Text>
@@ -703,124 +620,75 @@ export default function CustomerHomeScreen() {
           </ScrollView>
         </View>
 
-        {/* ── NEARBY RESTAURANTS (REAL DATA) ── */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <View style={styles.sectionTitleRow}>
               <MapPin size={20} color={colors.primary} />
-              <Text style={styles.sectionTitle}>
-                {nearMeEnabled ? 'Near You' : 'All Restaurants'}
-                <Text style={styles.countText}> ({totalRestaurants})</Text>
-              </Text>
+              <Text style={styles.sectionTitle}>Nearby Restaurants</Text>
             </View>
           </View>
 
-          {restaurantsLoading ? (
-            <ActivityIndicator color={colors.primary} style={{ marginVertical: 24 }} />
-          ) : restaurantsError ? (
-            <View style={styles.errorBox}>
-              <Text style={styles.errorText}>⚠️ {restaurantsError}</Text>
-              <Pressable onPress={refetchRestaurants}>
-                <Text style={styles.retryText}>Retry</Text>
-              </Pressable>
-            </View>
-          ) : nearbyRestaurants.length === 0 ? (
-            <View style={styles.emptyBox}>
-              <Text style={styles.emptyTitle}>No restaurants found</Text>
-              <Text style={styles.emptySub}>
-                {activeFilterCount > 0 ? 'Try clearing some filters.' : 'Check back later.'}
-              </Text>
-              {activeFilterCount > 0 && (
-                <Pressable onPress={clearAllFilters} style={styles.clearBtn}>
-                  <Text style={styles.clearBtnText}>Clear filters</Text>
-                </Pressable>
-              )}
-            </View>
-          ) : (
-            <>
-              {nearbyRestaurants.map((restaurant) => {
-                const isFav = isFavorite(restaurant.id);
-                return (
-                  <Pressable
-                    key={restaurant.id}
-                    style={styles.restaurantCard}
-                    onPress={() => navigateToRestaurant(restaurant.id)}
-                  >
-                    <Image
-                      source={{ uri: restaurant.banner_url || restaurant.logo_url }}
-                      style={styles.restaurantImage}
-                      contentFit="cover"
-                    />
-                    <View style={styles.restaurantInfo}>
-                      <View style={styles.restaurantHeader}>
-                        <View style={styles.restaurantNameRow}>
-                          <Text style={styles.restaurantName} numberOfLines={1}>{restaurant.name}</Text>
-                          <View style={styles.ratingBadge}>
-                            <Star size={12} color="#fff" fill="#fff" />
-                            <Text style={styles.ratingText}>{restaurant.rating?.toFixed(1)}</Text>
-                          </View>
-                        </View>
-                        <Pressable 
-                          onPress={(e) => {
-                            e.stopPropagation();
-                            toggleFavorite(restaurant.id);
-                          }}
-                          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                        >
-                          <Heart
-                            size={22}
-                            color={isFav ? colors.error : colors.textMuted}
-                            fill={isFav ? colors.error : 'transparent'}
-                          />
-                        </Pressable>
-                      </View>
-                      <Text style={styles.restaurantCuisine}>
-                        {(restaurant.cuisine_type || []).join(' • ')} • {'$'.repeat(restaurant.price_range || 2)}
-                      </Text>
-                      <View style={styles.restaurantMeta}>
-                        <View style={styles.metaItem}>
-                          <Clock size={14} color={colors.textMuted} />
-                          <Text style={styles.metaText}>20-30 min</Text>
-                        </View>
-                        <View style={styles.metaDot} />
-                        <Text style={styles.openStatus}>
-                          <Text style={{ color: colors.success }}>{restaurant.is_open ? 'Open' : 'Closed'}</Text>
-                          {restaurant.is_open && ' till 11:59PM'}
-                        </Text>
-                      </View>
-                      <View style={styles.restaurantActions}>
-                        <Pressable style={styles.bookTableBtn}>
-                          <Text style={styles.bookTableText}>Book a table</Text>
-                        </Pressable>
-                        <Pressable style={styles.orderBtn}>
-                          <Text style={styles.orderBtnText}>Order</Text>
-                        </Pressable>
+          {nearbyRestaurants.map((restaurant) => {
+            const isFavorite = user?.favorites.includes(restaurant.id);
+            return (
+              <Pressable
+                key={restaurant.id}
+                style={styles.restaurantCard}
+                onPress={() => navigateToRestaurant(restaurant.id)}
+              >
+                <Image
+                  source={{ uri: restaurant.images[0] }}
+                  style={styles.restaurantImage}
+                  contentFit="cover"
+                />
+                <View style={styles.restaurantInfo}>
+                  <View style={styles.restaurantHeader}>
+                    <View style={styles.restaurantNameRow}>
+                      <Text style={styles.restaurantName} numberOfLines={1}>{restaurant.name}</Text>
+                      <View style={styles.ratingBadge}>
+                        <Star size={12} color="#fff" fill="#fff" />
+                        <Text style={styles.ratingText}>{restaurant.rating}</Text>
                       </View>
                     </View>
-                  </Pressable>
-                );
-              })}
-              
-              {/* ── LOAD MORE ── */}
-              {nearbyRestaurants.length === 20 && (
-                <Pressable
-                  style={styles.loadMore}
-                  onPress={() => setPage(p => p + 1)}
-                >
-                  <Text style={styles.loadMoreText}>Load more</Text>
-                </Pressable>
-              )}
-            </>
-          )}
+                    <Pressable 
+                      onPress={() => toggleFavorite(restaurant.id)}
+                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    >
+                      <Heart
+                        size={22}
+                        color={isFavorite ? colors.error : colors.textMuted}
+                        fill={isFavorite ? colors.error : 'transparent'}
+                      />
+                    </Pressable>
+                  </View>
+                  <Text style={styles.restaurantCuisine}>{restaurant.cuisineType} • {restaurant.city}</Text>
+                  <View style={styles.restaurantMeta}>
+                    <View style={styles.metaItem}>
+                      <Clock size={14} color={colors.textMuted} />
+                      <Text style={styles.metaText}>{restaurant.waitingTime}</Text>
+                    </View>
+                    <View style={styles.metaDot} />
+                    <Text style={styles.openStatus}>
+                      <Text style={{ color: colors.success }}>Open</Text> till 11:59PM
+                    </Text>
+                  </View>
+                  <View style={styles.restaurantActions}>
+                    <Pressable style={styles.bookTableBtn}>
+                      <Text style={styles.bookTableText}>Book a table</Text>
+                    </Pressable>
+                    <Pressable style={styles.orderBtn}>
+                      <Text style={styles.orderBtnText}>Order</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              </Pressable>
+            );
+          })}
         </View>
       </ScrollView>
     </View>
   );
 }
-
-// ══════════════════════════════════════════════════════════
-// STYLES
-// ══════════════════════════════════════════════════════════
 
 const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   container: {
@@ -845,7 +713,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   },
   userName: {
     fontSize: 22,
-    fontWeight: '700',
+    fontWeight: '700' as const,
     color: colors.text,
     marginTop: 2,
   },
@@ -865,7 +733,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   },
   walletText: {
     fontSize: 14,
-    fontWeight: '700',
+    fontWeight: '700' as const,
     color: colors.primary,
   },
   notificationBtn: {
@@ -936,7 +804,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   },
   filterBadgeText: {
     fontSize: 10,
-    fontWeight: '700',
+    fontWeight: '700' as const,
     color: '#fff',
   },
   activeFiltersScroll: {
@@ -956,7 +824,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   },
   activeFilterText: {
     fontSize: 13,
-    fontWeight: '500',
+    fontWeight: '500' as const,
     color: colors.primary,
   },
   clearAllBtn: {
@@ -965,30 +833,8 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   },
   clearAllText: {
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: '600' as const,
     color: colors.error,
-  },
-  deniedBanner: {
-    marginHorizontal: 20,
-    marginVertical: 8,
-    backgroundColor: '#431407',
-    borderRadius: 10,
-    padding: 12,
-  },
-  deniedText: {
-    color: '#fdba74',
-    fontSize: 12,
-  },
-  toastBanner: {
-    marginHorizontal: 20,
-    marginVertical: 8,
-    backgroundColor: '#1e3a5f',
-    borderRadius: 10,
-    padding: 12,
-  },
-  toastText: {
-    color: '#93c5fd',
-    fontSize: 13,
   },
   modalContainer: {
     flex: 1,
@@ -1006,7 +852,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   },
   modalTitle: {
     fontSize: 20,
-    fontWeight: '700',
+    fontWeight: '700' as const,
     color: colors.text,
   },
   modalCloseBtn: {
@@ -1028,7 +874,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   },
   filterSectionTitle: {
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: '700' as const,
     color: colors.text,
     marginBottom: 16,
   },
@@ -1054,7 +900,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   },
   filterChipText: {
     fontSize: 14,
-    fontWeight: '500',
+    fontWeight: '500' as const,
     color: colors.text,
   },
   filterChipTextSelected: {
@@ -1095,7 +941,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   },
   clearFiltersBtnText: {
     fontSize: 15,
-    fontWeight: '600',
+    fontWeight: '600' as const,
     color: colors.text,
   },
   applyFiltersBtn: {
@@ -1107,7 +953,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   },
   applyFiltersBtnText: {
     fontSize: 15,
-    fontWeight: '700',
+    fontWeight: '700' as const,
     color: '#fff',
   },
   cashbackBanner: {
@@ -1133,7 +979,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   },
   cashbackTitle: {
     fontSize: 18,
-    fontWeight: '700',
+    fontWeight: '700' as const,
     color: '#fff',
   },
   cashbackSubtitle: {
@@ -1148,7 +994,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   },
   cashbackBtnText: {
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: '600' as const,
     color: '#fff',
   },
   section: {
@@ -1168,17 +1014,12 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 20,
-    fontWeight: '700',
+    fontWeight: '700' as const,
     color: colors.text,
-  },
-  countText: {
-    fontSize: 14,
-    fontWeight: '400',
-    color: colors.textMuted,
   },
   seeAll: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '600' as const,
     color: colors.primary,
   },
   spotlightScroll: {
@@ -1213,7 +1054,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   },
   spotlightBadgeText: {
     fontSize: 12,
-    fontWeight: '700',
+    fontWeight: '700' as const,
     color: '#fff',
   },
   spotlightInfo: {
@@ -1224,7 +1065,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   },
   spotlightName: {
     fontSize: 20,
-    fontWeight: '700',
+    fontWeight: '700' as const,
     color: '#fff',
     marginBottom: 4,
   },
@@ -1242,7 +1083,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   },
   prebookBtnText: {
     fontSize: 12,
-    fontWeight: '700',
+    fontWeight: '700' as const,
     color: colors.text,
   },
   quickActions: {
@@ -1275,7 +1116,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   },
   quickActionText: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '600' as const,
     color: colors.text,
     lineHeight: 20,
   },
@@ -1303,7 +1144,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   },
   categoryName: {
     fontSize: 11,
-    fontWeight: '500',
+    fontWeight: '500' as const,
     color: colors.text,
     textAlign: 'center',
     lineHeight: 14,
@@ -1337,7 +1178,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   },
   discountText: {
     fontSize: 12,
-    fontWeight: '700',
+    fontWeight: '700' as const,
     color: '#fff',
   },
   dealInfo: {
@@ -1353,7 +1194,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   },
   dealTitle: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '600' as const,
     color: '#fff',
     marginBottom: 6,
   },
@@ -1386,7 +1227,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   },
   cuisineName: {
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: '600' as const,
     color: '#fff',
     textAlign: 'center',
     textShadowColor: 'rgba(0,0,0,0.5)',
@@ -1423,7 +1264,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   },
   restaurantName: {
     fontSize: 17,
-    fontWeight: '700',
+    fontWeight: '700' as const,
     color: colors.text,
     flex: 1,
   },
@@ -1438,7 +1279,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   },
   ratingText: {
     fontSize: 12,
-    fontWeight: '700',
+    fontWeight: '700' as const,
     color: '#fff',
   },
   restaurantCuisine: {
@@ -1486,7 +1327,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   },
   bookTableText: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '600' as const,
     color: colors.primary,
   },
   orderBtn: {
@@ -1498,61 +1339,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   },
   orderBtnText: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '600' as const,
     color: '#fff',
-  },
-  emptySmall: {
-    color: colors.textMuted,
-    fontSize: 13,
-    paddingHorizontal: 20,
-    marginVertical: 8,
-  },
-  emptyBox: {
-    alignItems: 'center',
-    padding: 40,
-  },
-  emptyTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: colors.text,
-  },
-  emptySub: {
-    fontSize: 14,
-    color: colors.textMuted,
-    marginTop: 4,
-    textAlign: 'center',
-  },
-  clearBtn: {
-    marginTop: 12,
-    backgroundColor: colors.primary,
-    borderRadius: 10,
-    paddingVertical: 8,
-    paddingHorizontal: 20,
-  },
-  clearBtnText: {
-    color: '#fff',
-    fontWeight: '600',
-  },
-  errorBox: {
-    padding: 24,
-    alignItems: 'center',
-  },
-  errorText: {
-    color: colors.error,
-    fontSize: 14,
-  },
-  retryText: {
-    color: colors.primary,
-    fontSize: 14,
-    marginTop: 6,
-  },
-  loadMore: {
-    alignItems: 'center',
-    padding: 16,
-  },
-  loadMoreText: {
-    color: colors.primary,
-    fontSize: 14,
-    fontWeight: '600',
   },
 });
