@@ -4,11 +4,12 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { Slot } from 'expo-router';
 
-import { TRPCProvider } from '@/lib/trpc';
-import { AuthProvider } from '@/contexts/AuthContext';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+
 import { ThemeProvider, useTheme } from '@/contexts/ThemeContext';
+import { AuthProvider } from '@/contexts/AuthContext';
+import { TRPCProvider } from '@/lib/trpc';
 import { API_URL } from '@/lib/config';
 
 /* -----------------------------------------------------
@@ -16,6 +17,20 @@ import { API_URL } from '@/lib/config';
 ----------------------------------------------------- */
 
 SplashScreen.preventAutoHideAsync();
+
+/* -----------------------------------------------------
+   REACT QUERY CLIENT
+----------------------------------------------------- */
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 5 * 60 * 1000, // 5 minutes
+      retry: 2,
+      refetchOnWindowFocus: false,
+    },
+  },
+});
 
 /* -----------------------------------------------------
    DEV HEALTH CHECK BUTTON
@@ -116,13 +131,15 @@ export default function RootLayout() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <TRPCProvider>
-        <ThemeProvider>
-          <AuthProvider>
-            <RootLayoutNav />
-          </AuthProvider>
-        </ThemeProvider>
-      </TRPCProvider>
+      <QueryClientProvider client={queryClient}>
+        <TRPCProvider>
+          <ThemeProvider>
+            <AuthProvider>
+              <RootLayoutNav />
+            </AuthProvider>
+          </ThemeProvider>
+        </TRPCProvider>
+      </QueryClientProvider>
     </GestureHandlerRootView>
   );
 }
