@@ -1,28 +1,20 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { View, Text, Pressable, StyleSheet, ActivityIndicator, FlatList } from 'react-native';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter, useLocalSearchParams } from 'expo-router';
-import { apiFetch } from '@/lib/api/client';
-import { subscribeToOrder } from '@/lib/websocket';
+import { useRouter } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
+import { useOrders, useCreateOrder } from '@/hooks/useApi';
 import { useOrderSubscription } from '@/hooks/useOrderSubscription';
-import { ArrowLeft, Package, Clock } from 'lucide-react-native';
-import { Order } from '@/types';
+import { ArrowLeft, Package } from 'lucide-react-native';
 
 export default function OrdersScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { colors } = useTheme();
   const queryClient = useQueryClient();
-  const params = useLocalSearchParams<{ orderId?: string }>();
-  const orderId = params.orderId;
-  const [trackedStatus, setTrackedStatus] = useState<string>('pending');
 
-  const { data: orders, isLoading } = useQuery<Order[]>({
-    queryKey: ['orders'],
-    queryFn: () => apiFetch('/api/v1/orders'),
-  });
+  const { data: orders, isLoading } = useOrders();
 
   useOrderSubscription({
     onUpdate: (payload) => {
@@ -31,24 +23,16 @@ export default function OrdersScreen() {
     },
   });
 
-  useEffect(() => {
-    if (orderId) {
-      const unsubscribe = subscribeToOrder(orderId, setTrackedStatus);
-      return () => unsubscribe();
-    }
-  }, [orderId]);
-
-  const { mutate: createOrder, isPending } = useMutation({
-    mutationFn: (items: { menu_item_id: string; qty: number }[]) =>
-      apiFetch('/api/v1/orders', 'POST', { items }),
-    onSuccess: (data) => {
-      console.log('Order created:', data);
-      queryClient.invalidateQueries({ queryKey: ['orders'] });
-    },
-  });
+  const createOrderMutation = useCreateOrder();
 
   const handleCreateSampleOrder = () => {
-    createOrder([{ menu_item_id: '1', qty: 2 }]);
+    createOrderMutation.mutate({
+      restaurantId: '1',
+      items: [{ id: '1', name: 'Sample Item', price: 12.99, quantity: 2 }],
+      subtotal: 25.98,
+      total: 25.98,
+      orderType: 'pickup',
+    });
   };
 
   const getStatusColor = (status: string) => {
@@ -60,10 +44,10 @@ export default function OrdersScreen() {
     }
   };
 
-  const renderOrder = ({ item }: { item: Order }) => (
+  const renderOrder = ({ item }: { item: any }) => (
     <View style={[styles.orderCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
       <View style={styles.orderHeader}>
-        <Text style={[styles.orderId, { color: colors.text }]}>Order #{item.id.slice(0, 8)}</Text>
+        <Text style={[styles.orderId, { color: colors.text }]}>Order #{(item.id || '').slice(0, 8)}</Text>
         <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) + '20' }]}>
           <Text style={[styles.statusText, { color: getStatusColor(item.status) }]}>
             {item.status}
@@ -71,7 +55,7 @@ export default function OrdersScreen() {
         </View>
       </View>
       <Text style={[styles.orderTotal, { color: colors.textSecondary }]}>
-        ${item.total?.toFixed(2) || '0.00'}
+        ${(item.total ?? 0).toFixed(2)}
       </Text>
     </View>
   );
@@ -86,21 +70,12 @@ export default function OrdersScreen() {
         <View style={{ width: 40 }} />
       </View>
 
-      {orderId && (
-        <View style={[styles.trackingCard, { backgroundColor: colors.primaryLight }]}>
-          <Clock size={20} color={colors.primary} />
-          <Text style={[styles.trackingText, { color: colors.primary }]}>
-            Tracking Order: {trackedStatus}
-          </Text>
-        </View>
-      )}
-
       <Pressable
-        style={[styles.createButton, { backgroundColor: colors.primary, opacity: isPending ? 0.7 : 1 }]}
+        style={[styles.createButton, { backgroundColor: colors.primary, opacity: createOrderMutation.isPending ? 0.7 : 1 }]}
         onPress={handleCreateSampleOrder}
-        disabled={isPending}
+        disabled={createOrderMutation.isPending}
       >
-        {isPending ? (
+        {createOrderMutation.isPending ? (
           <ActivityIndicator color="#fff" />
         ) : (
           <Text style={styles.createButtonText}>Place Sample Order</Text>
@@ -113,7 +88,7 @@ export default function OrdersScreen() {
         </View>
       ) : (
         <FlatList
-          data={orders || []}
+          data={(orders as any[]) || []}
           keyExtractor={(item) => item.id}
           renderItem={renderOrder}
           contentContainerStyle={styles.listContent}
@@ -151,19 +126,6 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 20,
     fontWeight: '700' as const,
-  },
-  trackingCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginHorizontal: 16,
-    marginBottom: 16,
-    padding: 16,
-    borderRadius: 12,
-    gap: 12,
-  },
-  trackingText: {
-    fontSize: 14,
-    fontWeight: '600' as const,
   },
   createButton: {
     marginHorizontal: 16,

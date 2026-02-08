@@ -21,10 +21,14 @@ export default function CustomerLayout() {
           paddingBottom: Platform.OS === 'ios' ? 24 : 12,
           height: Platform.OS === 'ios' ? 88 : 68,
           elevation: 0,
-          shadowColor: colors.shadow,
-          shadowOffset: { width: 0, height: -4 },
-          shadowOpacity: 0.1,
-          shadowRadius: 12,
+          ...(Platform.OS === 'web'
+            ? { boxShadow: '0px -4px 12px rgba(0, 0, 0, 0.1)' } as any
+            : {
+                shadowColor: colors.shadow,
+                shadowOffset: { width: 0, height: -4 },
+                shadowOpacity: 0.1,
+                shadowRadius: 12,
+              }),
         },
         tabBarLabelStyle: {
           fontSize: 11,
@@ -117,6 +121,12 @@ export default function CustomerLayout() {
       />
       <Tabs.Screen
         name="referral"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="test"
         options={{
           href: null,
         }}

@@ -1,10 +1,9 @@
 import React, { useState } from 'react';
 import { View, Text, Pressable, TextInput, StyleSheet, ActivityIndicator } from 'react-native';
-import { useMutation } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { apiFetch } from '@/lib/api/client';
 import { useTheme } from '@/contexts/ThemeContext';
+import { useCreateTableBooking } from '@/hooks/useApi';
 import { CalendarDays, Users, ArrowLeft } from 'lucide-react-native';
 
 export default function BookingsScreen() {
@@ -14,22 +13,23 @@ export default function BookingsScreen() {
   const [date, setDate] = useState('');
   const [guests, setGuests] = useState('');
 
-  const { mutate: createBooking, isPending } = useMutation({
-    mutationFn: () => apiFetch('/api/v1/bookings', 'POST', { 
-      date, 
-      guests: parseInt(guests, 10) || 1 
-    }),
-    onSuccess: () => {
-      router.back();
-    },
-    onError: (error) => {
-      console.error('Booking failed:', error);
-    },
-  });
+  const createBookingMutation = useCreateTableBooking();
 
   const handleSubmit = () => {
     if (date && guests) {
-      createBooking();
+      createBookingMutation.mutate({
+        restaurantId: 'general',
+        date,
+        time: '19:00',
+        guests: parseInt(guests, 10) || 1,
+      }, {
+        onSuccess: () => {
+          router.back();
+        },
+        onError: (error) => {
+          console.error('Booking failed:', error);
+        },
+      });
     }
   };
 
@@ -68,11 +68,11 @@ export default function BookingsScreen() {
         </View>
 
         <Pressable
-          style={[styles.button, { backgroundColor: colors.primary, opacity: isPending ? 0.7 : 1 }]}
+          style={[styles.button, { backgroundColor: colors.primary, opacity: createBookingMutation.isPending ? 0.7 : 1 }]}
           onPress={handleSubmit}
-          disabled={isPending}
+          disabled={createBookingMutation.isPending}
         >
-          {isPending ? (
+          {createBookingMutation.isPending ? (
             <ActivityIndicator color="#fff" />
           ) : (
             <Text style={styles.buttonText}>Book Now</Text>

@@ -6,7 +6,8 @@ import {
   Pressable,
   Animated,
   Dimensions,
-  Alert
+  Alert,
+  Platform,
 } from 'react-native';
 import { useRouter, Href } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -31,12 +32,12 @@ export default function WelcomeScreen() {
       Animated.timing(fadeAnim, {
         toValue: 1,
         duration: 800,
-        useNativeDriver: true,
+        useNativeDriver: Platform.OS !== 'web',
       }),
       Animated.timing(slideAnim, {
         toValue: 0,
         duration: 600,
-        useNativeDriver: true,
+        useNativeDriver: Platform.OS !== 'web',
       }),
     ]).start();
   }, [fadeAnim, slideAnim]);

@@ -21,10 +21,14 @@ export default function RestaurantLayout() {
           paddingBottom: Platform.OS === 'ios' ? 24 : 12,
           height: Platform.OS === 'ios' ? 88 : 68,
           elevation: 0,
-          shadowColor: colors.shadow,
-          shadowOffset: { width: 0, height: -4 },
-          shadowOpacity: 0.1,
-          shadowRadius: 12,
+          ...(Platform.OS === 'web'
+            ? { boxShadow: '0px -4px 12px rgba(0, 0, 0, 0.1)' } as any
+            : {
+                shadowColor: colors.shadow,
+                shadowOffset: { width: 0, height: -4 },
+                shadowOpacity: 0.1,
+                shadowRadius: 12,
+              }),
         },
         tabBarLabelStyle: {
           fontSize: 11,
@@ -112,6 +116,12 @@ export default function RestaurantLayout() {
       />
       <Tabs.Screen
         name="book-call"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="orders"
         options={{
           href: null,
         }}

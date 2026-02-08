@@ -11,6 +11,7 @@ import {
   RefreshControl,
   Modal,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter, Href } from 'expo-router';
@@ -110,7 +111,7 @@ export default function CustomerHomeScreen() {
     Animated.timing(fadeAnim, {
       toValue: 1,
       duration: 500,
-      useNativeDriver: true,
+      useNativeDriver: Platform.OS !== 'web',
     }).start();
   }, [fadeAnim]);
 
@@ -118,7 +119,7 @@ export default function CustomerHomeScreen() {
     Animated.timing(filterAnim, {
       toValue: showFilters ? 1 : 0,
       duration: 300,
-      useNativeDriver: true,
+      useNativeDriver: Platform.OS !== 'web',
     }).start();
   }, [showFilters, filterAnim]);
 

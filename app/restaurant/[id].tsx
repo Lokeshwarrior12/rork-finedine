@@ -13,6 +13,7 @@ import {
   NativeSyntheticEvent,
   NativeScrollEvent,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter, useLocalSearchParams, Stack, Href } from 'expo-router';
@@ -58,22 +59,22 @@ const ConfettiPiece = ({ delay, startX }: { delay: number; startX: number }) => 
         Animated.timing(translateY, {
           toValue: 400,
           duration: 2000 + Math.random() * 1000,
-          useNativeDriver: true,
+          useNativeDriver: Platform.OS !== 'web',
         }),
         Animated.timing(translateX, {
           toValue: (Math.random() - 0.5) * 150,
           duration: 2000,
-          useNativeDriver: true,
+          useNativeDriver: Platform.OS !== 'web',
         }),
         Animated.timing(rotate, {
           toValue: 360 * (Math.random() > 0.5 ? 1 : -1),
           duration: 2000,
-          useNativeDriver: true,
+          useNativeDriver: Platform.OS !== 'web',
         }),
         Animated.timing(opacity, {
           toValue: 0,
           duration: 2500,
-          useNativeDriver: true,
+          useNativeDriver: Platform.OS !== 'web',
         }),
       ]),
     ]).start();
