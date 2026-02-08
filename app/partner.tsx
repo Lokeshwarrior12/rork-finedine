@@ -32,7 +32,7 @@ import {
 } from 'lucide-react-native';
 
 import { useAuth } from '@/contexts/AuthContext';
-import { trpc } from '@/lib/trpc';
+import { api } from '@/lib/api';
 import Colors from '@/constants/colors';
 
 const { width } = Dimensions.get('window');
