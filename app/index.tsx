@@ -52,16 +52,6 @@ export default function WelcomeScreen() {
     }
   }, [user, isLoading, router]);
 
-  async function testBackend() {
-    try {
-      const res = await fetch(`${API_URL}/health`);
-      const data = await res.json();
-      Alert.alert('Backend Connected ✅', JSON.stringify(data, null, 2));
-    } catch (e: any) {
-      Alert.alert('Backend Error ❌', e.message);
-    }
-  }
-
   if (isLoading) {
     return (
       <View style={[styles.loadingContainer, { paddingTop: insets.top }]}>
@@ -126,11 +116,6 @@ export default function WelcomeScreen() {
             </LinearGradient>
           </Pressable>
         </View>
-
-        {/* 🔥 BACKEND TEST BUTTON */}
-        <Pressable style={styles.debugButton} onPress={testBackend}>
-          <Text style={styles.debugText}>Test Backend Connection</Text>
-        </Pressable>
       </Animated.View>
     </View>
   );
