@@ -3,6 +3,7 @@ package cache
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"os"
 	"time"
@@ -10,81 +11,163 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-var (
-	RedisClient *redis.Client
-	ctx         = context.Background()
-)
+/*
+-----------------------------------------------------
+REDIS CLIENT WRAPPER
+-----------------------------------------------------
+- Safe for high concurrency
+- URL-based config
+- Optional global singleton
+*/
 
-// Initialize Redis connection
+type RedisClient struct {
+	client *redis.Client
+	ctx    context.Context
+}
+
+// Optional global instance (convenience)
+var Client *RedisClient
+
+/*
+-----------------------------------------------------
+INITIALIZATION
+-----------------------------------------------------
+*/
+
 func InitRedis() {
 	redisURL := os.Getenv("REDIS_URL")
 	if redisURL == "" {
-		redisURL = "localhost:6379"
+		redisURL = "redis://localhost:6379/0"
 	}
 
-	RedisClient = redis.NewClient(&redis.Options{
-		Addr:         redisURL,
-		Password:     os.Getenv("REDIS_PASSWORD"),
-		DB:           0,
-		PoolSize:     100, // Important for 1000+ concurrent users
-		MinIdleConns: 10,
-		MaxRetries:   3,
-	})
-
-	// Test connection
-	if err := RedisClient.Ping(ctx).Err(); err != nil {
+	rc, err := NewRedisClient(redisURL)
+	if err != nil {
 		log.Printf("⚠️  Redis connection failed: %v (continuing without cache)", err)
-	} else {
-		log.Println("✅ Redis connected successfully")
+		return
 	}
+
+	Client = rc
+	log.Println("✅ Redis connected successfully")
 }
 
-// Cache helpers
-func Set(key string, value interface{}, expiration time.Duration) error {
-	json, err := json.Marshal(value)
+func NewRedisClient(redisURL string) (*RedisClient, error) {
+	if redisURL == "" {
+		return nil, fmt.Errorf("redis URL is required")
+	}
+
+	opt, err := redis.ParseURL(redisURL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse Redis URL: %w", err)
+	}
+
+	// Performance tuning
+	opt.PoolSize = 100        // Handles 1000+ concurrent users
+	opt.MinIdleConns = 10
+	opt.MaxRetries = 3
+
+	client := redis.NewClient(opt)
+	ctx := context.Background()
+
+	// Health check
+	if err := client.Ping(ctx).Err(); err != nil {
+		return nil, fmt.Errorf("failed to ping Redis: %w", err)
+	}
+
+	return &RedisClient{
+		client: client,
+		ctx:    ctx,
+	}, nil
+}
+
+/*
+-----------------------------------------------------
+CACHE OPERATIONS
+-----------------------------------------------------
+*/
+
+func (r *RedisClient) Set(key string, value interface{}, expiration time.Duration) error {
+	data, err := json.Marshal(value)
 	if err != nil {
 		return err
 	}
-	return RedisClient.Set(ctx, key, json, expiration).Err()
+	return r.client.Set(r.ctx, key, data, expiration).Err()
 }
 
-func Get(key string, dest interface{}) error {
-	val, err := RedisClient.Get(ctx, key).Result()
+func (r *RedisClient) Get(key string, dest interface{}) error {
+	val, err := r.client.Get(r.ctx, key).Result()
+	if err == redis.Nil {
+		return fmt.Errorf("key not found: %s", key)
+	}
 	if err != nil {
 		return err
 	}
 	return json.Unmarshal([]byte(val), dest)
 }
 
-func Delete(key string) error {
-	return RedisClient.Del(ctx, key).Err()
+func (r *RedisClient) Delete(key string) error {
+	return r.client.Del(r.ctx, key).Err()
 }
 
-func Exists(key string) bool {
-	val, _ := RedisClient.Exists(ctx, key).Result()
-	return val > 0
+func (r *RedisClient) Exists(key string) (bool, error) {
+	val, err := r.client.Exists(r.ctx, key).Result()
+	return val > 0, err
 }
 
-// Pub/Sub for real-time updates
-func Publish(channel string, message interface{}) error {
-	json, err := json.Marshal(message)
+func (r *RedisClient) Incr(key string) error {
+	return r.client.Incr(r.ctx, key).Err()
+}
+
+func (r *RedisClient) Expire(key string, expiration time.Duration) error {
+	return r.client.Expire(r.ctx, key, expiration).Err()
+}
+
+/*
+-----------------------------------------------------
+PUB / SUB (REAL-TIME)
+-----------------------------------------------------
+*/
+
+func (r *RedisClient) Publish(channel string, message interface{}) error {
+	data, err := json.Marshal(message)
 	if err != nil {
 		return err
 	}
-	return RedisClient.Publish(ctx, channel, json).Err()
+	return r.client.Publish(r.ctx, channel, data).Err()
 }
 
-func Subscribe(channel string, handler func(message string)) {
-	pubsub := RedisClient.Subscribe(ctx, channel)
+func (r *RedisClient) Subscribe(channel string, handler func(message string)) {
+	pubsub := r.client.Subscribe(r.ctx, channel)
 	defer pubsub.Close()
 
-	ch := pubsub.Channel()
-	for msg := range ch {
+	for msg := range pubsub.Channel() {
 		handler(msg.Payload)
 	}
 }
 
-// Cache keys helpers
+/*
+-----------------------------------------------------
+HEALTH & LIFECYCLE
+-----------------------------------------------------
+*/
+
+func (r *RedisClient) Health() error {
+	return r.client.Ping(r.ctx).Err()
+}
+
+func (r *RedisClient) Close() error {
+	return r.client.Close()
+}
+
+func (r *RedisClient) GetClient() *redis.Client {
+	return r.client
+}
+
+/*
+-----------------------------------------------------
+CACHE KEY HELPERS
+-----------------------------------------------------
+*/
+
 func RestaurantKey(id string) string {
 	return "restaurant:" + id
 }
@@ -93,12 +176,12 @@ func RestaurantsListKey(filter string) string {
 	return "restaurants:list:" + filter
 }
 
-func OrderKey(id string) string {
-	return "order:" + id
-}
-
 func MenuKey(restaurantID string) string {
 	return "menu:" + restaurantID
+}
+
+func OrderKey(id string) string {
+	return "order:" + id
 }
 
 func DealsKey() string {
