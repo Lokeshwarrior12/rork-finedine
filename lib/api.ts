@@ -1,171 +1,50 @@
 // lib/api.ts
-// REST API client to replace tRPC
+// Unified REST API client (replaces tRPC)
 
 import Constants from 'expo-constants';
 
+// ============================================================================
+// CONFIG
+// ============================================================================
+
 const API_BASE_URL = __DEV__
-  ? 'http://localhost:8080/api/v1' // Change to your local IP for physical device testing
-  : Constants.expoConfig?.extra?.apiUrl || 'https://primedine.fly.dev/';
+  ? 'http://localhost:8080/api/v1' // Use local IP for physical device testing
+  : Constants.expoConfig?.extra?.apiUrl ||
+    'https://rork-finedine-api.fly.dev/api/v1';
 
-interface RequestOptions extends RequestInit {
-  requireAuth?: boolean;
+console.log('🌐 API Base URL:', API_BASE_URL);
+
+// ============================================================================
+// SHARED TYPES
+// ============================================================================
+
+export interface APIResponse<T> {
+  data: T;
+  cached?: boolean;
 }
 
-class APIClient {
-  private baseURL: string;
-  private authToken: string | null = null;
-
-  constructor(baseURL: string) {
-    this.baseURL = baseURL;
-  }
-
-  setAuthToken(token: string | null) {
-    this.authToken = token;
-  }
-
-  private async request<T>(
-    endpoint: string,
-    options: RequestOptions = {}
-  ): Promise<T> {
-    const { requireAuth = false, ...fetchOptions } = options;
-
-    const headers: HeadersInit = {
-      'Content-Type': 'application/json',
-      ...(fetchOptions.headers || {}),
-    };
-
-    if (requireAuth && this.authToken) {
-      headers['Authorization'] = `Bearer ${this.authToken}`;
-    }
-
-    const response = await fetch(`${this.baseURL}${endpoint}`, {
-      ...fetchOptions,
-      headers,
-    });
-
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: 'Unknown error' }));
-      throw new Error(error.error || `HTTP ${response.status}`);
-    }
-
-    return response.json();
-  }
-
-  // Restaurant APIs
-  async getRestaurants() {
-    return this.request<{ data: Restaurant[] }>('/restaurants');
-  }
-
-  async getRestaurant(id: string) {
-    return this.request<{ data: Restaurant }>(`/restaurants/${id}`);
-  }
-
-  async getRestaurantMenu(id: string) {
-    return this.request<{ data: MenuItem[] }>(`/restaurants/${id}/menu`);
-  }
-
-  // Order APIs
-  async createOrder(data: CreateOrderRequest) {
-    return this.request<{ data: Order }>('/orders', {
-      method: 'POST',
-      body: JSON.stringify(data),
-      requireAuth: true,
-    });
-  }
-
-  async getOrder(id: string) {
-    return this.request<{ data: Order }>(`/orders/${id}`, {
-      requireAuth: true,
-    });
-  }
-
-  async getUserOrders(userId: string) {
-    return this.request<{ data: Order[] }>(`/orders/user/${userId}`, {
-      requireAuth: true,
-    });
-  }
-
-  // User APIs
-  async getUserProfile() {
-    return this.request<{ data: User }>('/profile', {
-      requireAuth: true,
-    });
-  }
-
-  async updateUserProfile(data: Partial<User>) {
-    return this.request<{ data: User }>('/profile', {
-      method: 'PUT',
-      body: JSON.stringify(data),
-      requireAuth: true,
-    });
-  }
-
-  // Booking APIs
-  async createBooking(data: CreateBookingRequest) {
-    return this.request<{ data: Booking }>('/bookings', {
-      method: 'POST',
-      body: JSON.stringify(data),
-      requireAuth: true,
-    });
-  }
-
-  async getUserBookings(userId: string) {
-    return this.request<{ data: Booking[] }>(`/bookings/user/${userId}`, {
-      requireAuth: true,
-    });
-  }
-
-  // Favorites APIs
-  async addFavorite(restaurantId: string) {
-    return this.request<{ data: Favorite }>('/favorites', {
-      method: 'POST',
-      body: JSON.stringify({ restaurantId }),
-      requireAuth: true,
-    });
-  }
-
-  async getFavorites() {
-    return this.request<{ data: Favorite[] }>('/favorites', {
-      requireAuth: true,
-    });
-  }
-
-  async removeFavorite(restaurantId: string) {
-    return this.request<{ success: boolean }>(`/favorites/${restaurantId}`, {
-      method: 'DELETE',
-      requireAuth: true,
-    });
-  }
-
-  // Notification APIs
-  async getNotifications() {
-    return this.request<{ data: Notification[] }>('/notifications', {
-      requireAuth: true,
-    });
-  }
-
-  async markNotificationRead(id: string) {
-    return this.request<{ success: boolean }>(`/notifications/${id}/read`, {
-      method: 'PATCH',
-      requireAuth: true,
-    });
-  }
+export interface APIError {
+  error: string;
+  details?: string;
 }
 
-// Types
+// ============================================================================
+// DOMAIN MODELS
+// ============================================================================
+
 export interface Restaurant {
   id: string;
   name: string;
-  address: string;
-  phone: string;
-  email: string;
-  cuisineTypes: string[];
   description?: string;
+  address: string;
+  phone?: string;
+  email?: string;
+  cuisineTypes: string[];
   priceRange: number;
   rating: number;
   totalReviews: number;
   images: string[];
-  openingHours: Record<string, any>;
+  openingHours?: Record<string, any>;
   location?: {
     latitude: number;
     longitude: number;
@@ -176,9 +55,9 @@ export interface MenuItem {
   id: string;
   restaurantId: string;
   name: string;
-  description: string;
+  description?: string;
   price: number;
-  category: string;
+  category?: string;
   isVegetarian: boolean;
   isVegan: boolean;
   isGlutenFree: boolean;
@@ -186,35 +65,40 @@ export interface MenuItem {
   isAvailable: boolean;
 }
 
+export interface OrderItem {
+  menuItemId: string;
+  name: string;
+  quantity: number;
+  price: number;
+}
+
 export interface Order {
   id: string;
   userId: string;
   restaurantId: string;
   restaurantName?: string;
-  items: Array<{
-    menuItemId: string;
-    name: string;
-    quantity: number;
-    price: number;
-  }>;
+  items: OrderItem[];
   deliveryAddress: string;
   notes?: string;
   subtotal: number;
   tax: number;
   deliveryFee: number;
   total: number;
-  status: 'pending' | 'confirmed' | 'preparing' | 'ready' | 'delivered' | 'cancelled';
+  status:
+    | 'pending'
+    | 'confirmed'
+    | 'preparing'
+    | 'ready'
+    | 'delivered'
+    | 'cancelled';
+  paymentStatus?: 'pending' | 'paid' | 'failed' | 'refunded';
   createdAt: string;
   updatedAt: string;
 }
 
 export interface CreateOrderRequest {
   restaurantId: string;
-  items: Array<{
-    menuItemId: string;
-    quantity: number;
-    price: number;
-  }>;
+  items: OrderItem[];
   deliveryAddress: string;
   notes?: string;
 }
@@ -222,12 +106,12 @@ export interface CreateOrderRequest {
 export interface User {
   id: string;
   email: string;
-  name: string;
+  name?: string;
   phone?: string;
   address?: string;
   role: 'customer' | 'restaurant_owner' | 'admin';
   loyaltyPoints: number;
-  createdAt: string;
+  createdAt?: string;
 }
 
 export interface Booking {
@@ -266,8 +150,204 @@ export interface Notification {
   createdAt: string;
 }
 
-// Export singleton instance
-export const api = new APIClient(API_BASE_URL);
+// ============================================================================
+// API CLIENT
+// ============================================================================
 
-// Hook for React Query integration
+interface RequestOptions extends RequestInit {
+  requireAuth?: boolean;
+}
+
+class APIClient {
+  private authToken: string | null = null;
+
+  setAuthToken(token: string | null) {
+    this.authToken = token;
+    console.log('🔐 Auth token', token ? 'set' : 'cleared');
+  }
+
+  private async request<T>(
+    endpoint: string,
+    options: RequestOptions = {}
+  ): Promise<APIResponse<T>> {
+    const { requireAuth = false, ...fetchOptions } = options;
+
+    const headers: HeadersInit = {
+      'Content-Type': 'application/json',
+      ...(fetchOptions.headers || {}),
+    };
+
+    if (requireAuth && this.authToken) {
+      headers['Authorization'] = `Bearer ${this.authToken}`;
+    }
+
+    console.log('📡 API Request:', fetchOptions.method || 'GET', endpoint);
+
+    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+      ...fetchOptions,
+      headers,
+    });
+
+    if (!response.ok) {
+      const error: APIError = await response
+        .json()
+        .catch(() => ({ error: 'Unknown error' }));
+      console.error('❌ API Error:', endpoint, error);
+      throw new Error(error.error || `HTTP ${response.status}`);
+    }
+
+    const data = await response.json();
+    console.log('✅ API Response:', endpoint, data.cached ? '(cached)' : '');
+    return data;
+  }
+
+  // ============================================================================
+  // RESTAURANTS
+  // ============================================================================
+
+  getRestaurants() {
+    return this.request<Restaurant[]>('/restaurants');
+  }
+
+  getRestaurant(id: string) {
+    return this.request<Restaurant>(`/restaurants/${id}`);
+  }
+
+  getRestaurantMenu(id: string) {
+    return this.request<MenuItem[]>(`/restaurants/${id}/menu`);
+  }
+
+  // ============================================================================
+  // ORDERS
+  // ============================================================================
+
+  createOrder(data: CreateOrderRequest) {
+    return this.request<Order>('/orders', {
+      method: 'POST',
+      body: JSON.stringify(data),
+      requireAuth: true,
+    });
+  }
+
+  getOrder(id: string) {
+    return this.request<Order>(`/orders/${id}`, {
+      requireAuth: true,
+    });
+  }
+
+  getUserOrders(userId: string) {
+    return this.request<Order[]>(`/orders/user/${userId}`, {
+      requireAuth: true,
+    });
+  }
+
+  updateOrderStatus(id: string, status: Order['status']) {
+    return this.request<Order>(`/orders/${id}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
+      requireAuth: true,
+    });
+  }
+
+  // ============================================================================
+  // USER / PROFILE
+  // ============================================================================
+
+  getUserProfile() {
+    return this.request<User>('/profile', {
+      requireAuth: true,
+    });
+  }
+
+  updateUserProfile(data: Partial<User>) {
+    return this.request<User>('/profile', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+      requireAuth: true,
+    });
+  }
+
+  // ============================================================================
+  // BOOKINGS
+  // ============================================================================
+
+  createBooking(data: CreateBookingRequest) {
+    return this.request<Booking>('/bookings', {
+      method: 'POST',
+      body: JSON.stringify(data),
+      requireAuth: true,
+    });
+  }
+
+  getUserBookings(userId: string) {
+    return this.request<Booking[]>(`/bookings/user/${userId}`, {
+      requireAuth: true,
+    });
+  }
+
+  // ============================================================================
+  // FAVORITES
+  // ============================================================================
+
+  getFavorites() {
+    return this.request<Favorite[]>('/favorites', {
+      requireAuth: true,
+    });
+  }
+
+  addFavorite(restaurantId: string) {
+    return this.request<Favorite>('/favorites', {
+      method: 'POST',
+      body: JSON.stringify({ restaurantId }),
+      requireAuth: true,
+    });
+  }
+
+  removeFavorite(restaurantId: string) {
+    return this.request<{ success: boolean }>(
+      `/favorites/${restaurantId}`,
+      {
+        method: 'DELETE',
+        requireAuth: true,
+      }
+    );
+  }
+
+  // ============================================================================
+  // NOTIFICATIONS
+  // ============================================================================
+
+  getNotifications() {
+    return this.request<Notification[]>('/notifications', {
+      requireAuth: true,
+    });
+  }
+
+  markNotificationRead(id: string) {
+    return this.request<{ success: boolean }>(
+      `/notifications/${id}/read`,
+      {
+        method: 'PATCH',
+        requireAuth: true,
+      }
+    );
+  }
+
+  // ============================================================================
+  // HEALTH
+  // ============================================================================
+
+  async healthCheck() {
+    const response = await fetch(
+      `${API_BASE_URL.replace('/api/v1', '')}/health`
+    );
+    return response.json();
+  }
+}
+
+// ============================================================================
+// EXPORT SINGLETON
+// ============================================================================
+
+export const api = new APIClient();
 export const useAPI = () => api;
