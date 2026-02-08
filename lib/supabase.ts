@@ -33,14 +33,47 @@ export const isSupabaseConfigured = Boolean(
    Client-side Supabase (App)
 ────────────────────────────────────────────────────────── */
 
-export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-  auth: {
-    storage: AsyncStorage,
-    autoRefreshToken: true,
-    persistSession: true,
-    detectSessionInUrl: false,
-  },
-});
+export const supabase: SupabaseClient = isSupabaseConfigured
+  ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      auth: {
+        storage: AsyncStorage,
+        autoRefreshToken: true,
+        persistSession: true,
+        detectSessionInUrl: false,
+      },
+    })
+  : (new Proxy({} as SupabaseClient, {
+      get(_, prop) {
+        if (prop === 'auth') {
+          return {
+            getSession: async () => ({ data: { session: null }, error: null }),
+            getUser: async () => ({ data: { user: null }, error: null }),
+            onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
+            signInWithPassword: async () => ({ data: {}, error: { message: 'Supabase not configured' } }),
+            signUp: async () => ({ data: {}, error: { message: 'Supabase not configured' } }),
+            signOut: async () => ({ error: null }),
+          };
+        }
+        if (prop === 'from') {
+          return () => ({
+            select: () => ({ data: [], error: null, eq: () => ({ data: [], error: null, maybeSingle: async () => ({ data: null, error: null }), single: async () => ({ data: null, error: null }) }) }),
+            insert: () => ({ select: () => ({ single: async () => ({ data: null, error: { message: 'Supabase not configured' } }) }) }),
+            update: () => ({ eq: () => ({ select: () => ({ maybeSingle: async () => ({ data: null, error: { message: 'Supabase not configured' } }) }) }) }),
+            delete: () => ({ eq: () => ({ error: { message: 'Supabase not configured' } }) }),
+          });
+        }
+        if (prop === 'channel') {
+          return () => ({ on: () => ({ subscribe: () => ({}) }), subscribe: () => ({}) });
+        }
+        if (prop === 'removeChannel') {
+          return () => {};
+        }
+        if (prop === 'storage') {
+          return { from: () => ({ upload: async () => ({ data: null, error: { message: 'Not configured' } }), getPublicUrl: () => ({ data: { publicUrl: '' } }), remove: async () => ({ error: null }) }) };
+        }
+        return undefined;
+      },
+    }) as unknown as SupabaseClient);
 
 /* ──────────────────────────────────────────────────────────
    Server-side Supabase (Edge / Backend only)
@@ -48,6 +81,11 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
 ────────────────────────────────────────────────────────── */
 
 export function createServerSupabase(): SupabaseClient {
+  if (!isSupabaseConfigured) {
+    console.warn('createServerSupabase called but Supabase not configured');
+    return supabase;
+  }
+
   const serviceRoleKey =
     process.env.SUPABASE_SERVICE_ROLE_KEY || SUPABASE_ANON_KEY;
 

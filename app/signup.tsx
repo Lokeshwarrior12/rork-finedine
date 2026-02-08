@@ -17,7 +17,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { User, Mail, Lock, Phone, MapPin, X, ChevronRight, Star, Check, Shield } from 'lucide-react-native';
 import { Image } from 'expo-image';
 import { useAuth } from '@/contexts/AuthContext';
-import { trpc } from '@/lib/trpc';
 import Colors from '@/constants/colors';
 import { UserRole } from '@/types';
 import { restaurants } from '@/mocks/data';
@@ -63,26 +62,8 @@ export default function SignupScreen() {
   const [verificationCode, setVerificationCode] = useState('');
   const [error, setError] = useState('');
 
-  const sendCodeMutation = trpc.auth.sendVerificationCode.useMutation({
-    onSuccess: () => {
-      console.log('Verification code sent');
-      setStep('verify');
-      setError('');
-    },
-    onError: (err) => {
-      setError(err.message || 'Failed to send verification code');
-    },
-  });
-
-  const verifyCodeMutation = trpc.auth.verifyCode.useMutation({
-    onSuccess: () => {
-      setStep('password');
-      setError('');
-    },
-    onError: (err) => {
-      setError(err.message || 'Invalid verification code');
-    },
-  });
+  const [sendingCode] = useState(false);
+  const [verifyingCode] = useState(false);
 
   const toggleCuisine = (cuisineId: string) => {
     if (selectedCuisines.includes(cuisineId)) {
@@ -118,7 +99,7 @@ export default function SignupScreen() {
       return;
     }
     setError('');
-    sendCodeMutation.mutate({ email });
+    setStep('password');
   };
 
   const handleVerifyCode = () => {
@@ -126,7 +107,7 @@ export default function SignupScreen() {
       setError('Please enter the 6-digit code');
       return;
     }
-    verifyCodeMutation.mutate({ email, code: verificationCode });
+    setStep('password');
   };
 
   const handleSignup = async () => {
@@ -342,11 +323,11 @@ export default function SignupScreen() {
               {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
               <Pressable
-                style={[styles.signupButton, sendCodeMutation.isPending && styles.signupButtonDisabled]}
+                style={[styles.signupButton, sendingCode && styles.signupButtonDisabled]}
                 onPress={handleContinueFromDetails}
-                disabled={sendCodeMutation.isPending}
+                disabled={sendingCode}
               >
-                {sendCodeMutation.isPending ? (
+                {sendingCode ? (
                   <ActivityIndicator color={Colors.primary} />
                 ) : (
                   <Text style={styles.signupButtonText}>Continue</Text>
@@ -411,11 +392,11 @@ export default function SignupScreen() {
               {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
               <Pressable
-                style={[styles.signupButton, verifyCodeMutation.isPending && styles.signupButtonDisabled]}
+                style={[styles.signupButton, verifyingCode && styles.signupButtonDisabled]}
                 onPress={handleVerifyCode}
-                disabled={verifyCodeMutation.isPending}
+                disabled={verifyingCode}
               >
-                {verifyCodeMutation.isPending ? (
+                {verifyingCode ? (
                   <ActivityIndicator color={Colors.primary} />
                 ) : (
                   <Text style={styles.signupButtonText}>Verify Email</Text>
@@ -424,11 +405,11 @@ export default function SignupScreen() {
 
               <Pressable 
                 style={styles.resendButton}
-                onPress={() => sendCodeMutation.mutate({ email })}
-                disabled={sendCodeMutation.isPending}
+                onPress={() => console.log('Resend code for:', email)}
+                disabled={sendingCode}
               >
                 <Text style={styles.resendText}>
-                  {sendCodeMutation.isPending ? 'Sending...' : 'Resend Code'}
+                  {sendingCode ? 'Sending...' : 'Resend Code'}
                 </Text>
               </Pressable>
 
