@@ -1,12 +1,29 @@
-import React from 'react';
-import { View, Text, Pressable, StyleSheet, ActivityIndicator, FlatList } from 'react-native';
-import { useQueryClient } from '@tanstack/react-query';
+import React, { useState } from 'react';
+import {
+  View,
+  Text,
+  Pressable,
+  StyleSheet,
+  ActivityIndicator,
+  FlatList,
+  Alert,
+} from 'react-native';
+import { useQueryClient, useMutation } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { useTheme } from '@/contexts/ThemeContext';
-import { useOrders, useCreateOrder } from '@/hooks/useApi';
-import { useOrderSubscription } from '@/hooks/useOrderSubscription';
 import { ArrowLeft, Package } from 'lucide-react-native';
+
+import { useTheme } from '@/contexts/ThemeContext';
+import { useOrders } from '@/hooks/useApi';
+import { useOrderSubscription } from '@/hooks/useOrderSubscription';
+import { api } from '@/lib/api';
+
+type OrderItem = {
+  menuItemId: string;
+  name: string;
+  quantity: number;
+  price: number;
+};
 
 export default function OrdersScreen() {
   const insets = useSafeAreaInsets();
@@ -14,6 +31,7 @@ export default function OrdersScreen() {
   const { colors } = useTheme();
   const queryClient = useQueryClient();
 
+  /* ------------------ ORDERS LIST ------------------ */
   const { data: orders, isLoading } = useOrders();
 
   useOrderSubscription({
@@ -23,65 +41,131 @@ export default function OrdersScreen() {
     },
   });
 
-  const createOrderMutation = useCreateOrder();
+  /* ------------------ SAMPLE CART ------------------ */
+  const [cart] = useState<OrderItem[]>([
+    { menuItemId: '123', name: 'Pizza', quantity: 1, price: 12.99 },
+  ]);
 
-  const handleCreateSampleOrder = () => {
+  /* ------------------ CREATE ORDER ------------------ */
+  const createOrderMutation = useMutation({
+    mutationFn: (orderData: any) => api.createOrder(orderData),
+    onSuccess: (response) => {
+      Alert.alert('Success', 'Order placed successfully!');
+      console.log('Order ID:', response.data.id);
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
+    },
+    onError: (error: any) => {
+      Alert.alert('Error', error?.message || 'Something went wrong');
+    },
+  });
+
+  const handleCreateOrder = () => {
     createOrderMutation.mutate({
-      restaurantId: '1',
-      items: [{ id: '1', name: 'Sample Item', price: 12.99, quantity: 2 }],
-      subtotal: 25.98,
-      total: 25.98,
+      restaurantId: 'rest-123',
+      items: cart,
+      subtotal: cart.reduce(
+        (sum, item) => sum + item.price * item.quantity,
+        0
+      ),
+      total: cart.reduce(
+        (sum, item) => sum + item.price * item.quantity,
+        0
+      ),
       orderType: 'pickup',
+      notes: 'Extra napkins please',
     });
   };
 
+  /* ------------------ HELPERS ------------------ */
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'completed': return colors.success;
-      case 'preparing': return colors.warning;
-      case 'pending': return colors.textMuted;
-      default: return colors.primary;
+      case 'completed':
+        return colors.success;
+      case 'preparing':
+        return colors.warning;
+      case 'pending':
+        return colors.textMuted;
+      default:
+        return colors.primary;
     }
   };
 
   const renderOrder = ({ item }: { item: any }) => (
-    <View style={[styles.orderCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+    <View
+      style={[
+        styles.orderCard,
+        { backgroundColor: colors.surface, borderColor: colors.border },
+      ]}
+    >
       <View style={styles.orderHeader}>
-        <Text style={[styles.orderId, { color: colors.text }]}>Order #{(item.id || '').slice(0, 8)}</Text>
-        <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) + '20' }]}>
-          <Text style={[styles.statusText, { color: getStatusColor(item.status) }]}>
+        <Text style={[styles.orderId, { color: colors.text }]}>
+          Order #{(item.id || '').slice(0, 8)}
+        </Text>
+
+        <View
+          style={[
+            styles.statusBadge,
+            { backgroundColor: getStatusColor(item.status) + '20' },
+          ]}
+        >
+          <Text
+            style={[
+              styles.statusText,
+              { color: getStatusColor(item.status) },
+            ]}
+          >
             {item.status}
           </Text>
         </View>
       </View>
+
       <Text style={[styles.orderTotal, { color: colors.textSecondary }]}>
         ${(item.total ?? 0).toFixed(2)}
       </Text>
     </View>
   );
 
+  /* ------------------ UI ------------------ */
   return (
-    <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top }]}>
+    <View
+      style={[
+        styles.container,
+        { backgroundColor: colors.background, paddingTop: insets.top },
+      ]}
+    >
+      {/* Header */}
       <View style={styles.header}>
         <Pressable onPress={() => router.back()} style={styles.backButton}>
           <ArrowLeft size={24} color={colors.text} />
         </Pressable>
-        <Text style={[styles.title, { color: colors.text }]}>Your Orders</Text>
+
+        <Text style={[styles.title, { color: colors.text }]}>
+          Your Orders
+        </Text>
+
         <View style={{ width: 40 }} />
       </View>
 
+      {/* Create Order Button */}
       <Pressable
-        style={[styles.createButton, { backgroundColor: colors.primary, opacity: createOrderMutation.isPending ? 0.7 : 1 }]}
-        onPress={handleCreateSampleOrder}
+        style={[
+          styles.createButton,
+          {
+            backgroundColor: colors.primary,
+            opacity: createOrderMutation.isPending ? 0.7 : 1,
+          },
+        ]}
+        onPress={handleCreateOrder}
         disabled={createOrderMutation.isPending}
       >
         {createOrderMutation.isPending ? (
           <ActivityIndicator color="#fff" />
         ) : (
-          <Text style={styles.createButtonText}>Place Sample Order</Text>
+          <Text style={styles.createButtonText}>Place Order</Text>
         )}
       </Pressable>
 
+      {/* Orders List */}
       {isLoading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
@@ -95,7 +179,9 @@ export default function OrdersScreen() {
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
               <Package size={48} color={colors.textMuted} />
-              <Text style={[styles.emptyText, { color: colors.textMuted }]}>
+              <Text
+                style={[styles.emptyText, { color: colors.textMuted }]}
+              >
                 No orders yet
               </Text>
             </View>
@@ -106,6 +192,7 @@ export default function OrdersScreen() {
   );
 }
 
+/* ------------------ STYLES ------------------ */
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -125,7 +212,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 20,
-    fontWeight: '700' as const,
+    fontWeight: '700',
   },
   createButton: {
     marginHorizontal: 16,
@@ -138,7 +225,7 @@ const styles = StyleSheet.create({
   createButtonText: {
     color: '#fff',
     fontSize: 16,
-    fontWeight: '600' as const,
+    fontWeight: '600',
   },
   loadingContainer: {
     flex: 1,
@@ -163,7 +250,7 @@ const styles = StyleSheet.create({
   },
   orderId: {
     fontSize: 16,
-    fontWeight: '600' as const,
+    fontWeight: '600',
   },
   statusBadge: {
     paddingHorizontal: 12,
@@ -172,8 +259,8 @@ const styles = StyleSheet.create({
   },
   statusText: {
     fontSize: 12,
-    fontWeight: '600' as const,
-    textTransform: 'capitalize' as const,
+    fontWeight: '600',
+    textTransform: 'capitalize',
   },
   orderTotal: {
     fontSize: 14,
