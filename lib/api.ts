@@ -8,7 +8,7 @@ import Constants from 'expo-constants';
 // ============================================================================
 
 const API_BASE_URL = __DEV__
-  ? 'http://localhost:8080/api/v1' // Use local IP for physical device testing
+  ? 'http://localhost:8080/api/v1'
   : Constants.expoConfig?.extra?.apiUrl ||
     'https://rork-finedine-api.fly.dev/api/v1';
 
@@ -183,22 +183,26 @@ class APIClient {
 
     console.log('📡 API Request:', fetchOptions.method || 'GET', endpoint);
 
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-      ...fetchOptions,
-      headers,
-    });
+    try {
+      const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+        ...fetchOptions,
+        headers,
+      });
 
-    if (!response.ok) {
-      const error: APIError = await response
-        .json()
-        .catch(() => ({ error: 'Unknown error' }));
+      if (!response.ok) {
+        const error: APIError = await response
+          .json()
+          .catch(() => ({ error: 'Unknown error' }));
+        throw new Error(error.error || `HTTP ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log('✅ API Response:', endpoint, data.cached ? '(cached)' : '');
+      return data;
+    } catch (error) {
       console.error('❌ API Error:', endpoint, error);
-      throw new Error(error.error || `HTTP ${response.status}`);
+      throw error;
     }
-
-    const data = await response.json();
-    console.log('✅ API Response:', endpoint, data.cached ? '(cached)' : '');
-    return data;
   }
 
   // ============================================================================
