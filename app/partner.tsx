@@ -64,27 +64,47 @@ export default function PartnerScreen() {
   const [password, setPassword] = useState('');
   const [verificationCode, setVerificationCode] = useState('');
   const [error, setError] = useState('');
+  const [isLoadingCode, setIsLoadingCode] = useState(false);
+  const [isVerifyingCode, setIsVerifyingCode] = useState(false);
 
-const sendCodeMutation = trpc.auth.sendVerificationCode.useMutation({
-    onSuccess: () => {
-      console.log('Verification code sent');
+  const handleSendCode = async () => {
+    setIsLoadingCode(true);
+    setError('');
+    try {
+      // TODO: Implement actual API call when backend endpoint is ready
+      // await api.sendVerificationCode({ email });
+      
+      // For now, simulate success
+      console.log('Verification code would be sent to:', email);
       setStep('verify');
-      setError('');
-    },
-    onError: (err) => {
+    } catch (err: any) {
       setError(err.message || 'Failed to send verification code');
-    },
-  });
+    } finally {
+      setIsLoadingCode(false);
+    }
+  };
 
-  const verifyCodeMutation = trpc.auth.verifyCode.useMutation({
-    onSuccess: () => {
+  const handleVerifyCode = async () => {
+    if (verificationCode.length !== 6) {
+      setError('Please enter the 6-digit code');
+      return;
+    }
+    
+    setIsVerifyingCode(true);
+    setError('');
+    try {
+      // TODO: Implement actual API call when backend endpoint is ready
+      // await api.verifyCode({ email, code: verificationCode });
+      
+      // For now, simulate success
+      console.log('Verifying code:', verificationCode, 'for email:', email);
       setStep('signup');
-      setError('');
-    },
-    onError: (err) => {
+    } catch (err: any) {
       setError(err.message || 'Invalid verification code');
-    },
-  });
+    } finally {
+      setIsVerifyingCode(false);
+    }
+  };
 
   const handleContinueToVerify = () => {
     if (!restaurantName || !ownerName || !email || !phone) {
@@ -96,15 +116,7 @@ const sendCodeMutation = trpc.auth.sendVerificationCode.useMutation({
       return;
     }
     setError('');
-    sendCodeMutation.mutate({ email });
-  };
-
-  const handleVerifyCode = () => {
-    if (verificationCode.length !== 6) {
-      setError('Please enter the 6-digit code');
-      return;
-    }
-    verifyCodeMutation.mutate({ email, code: verificationCode });
+    handleSendCode();
   };
 
   const handleSignup = async () => {
@@ -240,9 +252,9 @@ const sendCodeMutation = trpc.auth.sendVerificationCode.useMutation({
         <Pressable 
           style={styles.primaryButton} 
           onPress={handleContinueToVerify}
-          disabled={sendCodeMutation.isPending}
+          disabled={isLoadingCode}
         >
-          {sendCodeMutation.isPending ? (
+          {isLoadingCode ? (
             <ActivityIndicator color="#1A1A2E" />
           ) : (
             <>
@@ -290,9 +302,9 @@ const sendCodeMutation = trpc.auth.sendVerificationCode.useMutation({
       <Pressable 
         style={styles.primaryButton} 
         onPress={handleVerifyCode}
-        disabled={verifyCodeMutation.isPending}
+        disabled={isVerifyingCode}
       >
-        {verifyCodeMutation.isPending ? (
+        {isVerifyingCode ? (
           <ActivityIndicator color="#1A1A2E" />
         ) : (
           <Text style={styles.primaryButtonText}>Verify Email</Text>
@@ -301,11 +313,11 @@ const sendCodeMutation = trpc.auth.sendVerificationCode.useMutation({
 
       <Pressable 
         style={styles.resendButton}
-        onPress={() => sendCodeMutation.mutate({ email })}
-        disabled={sendCodeMutation.isPending}
+        onPress={handleSendCode}
+        disabled={isLoadingCode}
       >
         <Text style={styles.resendText}>
-          {sendCodeMutation.isPending ? 'Sending...' : 'Resend Code'}
+          {isLoadingCode ? 'Sending...' : 'Resend Code'}
         </Text>
       </Pressable>
 
