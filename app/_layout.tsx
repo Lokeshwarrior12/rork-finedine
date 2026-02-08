@@ -4,9 +4,9 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { Slot } from 'expo-router';
 
-import { QueryClientProvider } from '@tanstack/react-query';
-import { queryClient } from '@/lib/trpc';
+import { TRPCProvider } from '@/lib/trpc';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { ThemeProvider, useTheme } from '@/contexts/ThemeContext';
 import { API_URL } from '@/lib/config';
@@ -116,13 +116,13 @@ export default function RootLayout() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <QueryClientProvider client={queryClient}>
+      <TRPCProvider>
         <ThemeProvider>
           <AuthProvider>
             <RootLayoutNav />
           </AuthProvider>
         </ThemeProvider>
-      </QueryClientProvider>
+      </TRPCProvider>
     </GestureHandlerRootView>
   );
 }
