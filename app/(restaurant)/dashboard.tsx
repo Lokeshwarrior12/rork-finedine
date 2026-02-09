@@ -8,10 +8,14 @@ import {
   Dimensions,
   Modal,
   Alert,
+  ActivityIndicator,
+  RefreshControl,
+  TouchableOpacity,
 } from 'react-native';
 import { useRouter, Href } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useQuery } from '@tanstack/react-query';
 import {
   Plus,
   Tag,
@@ -32,10 +36,15 @@ import {
   Check,
   Users,
   ShoppingBag,
+  DollarSign,
+  CheckCircle,
+  AlertCircle,
+  ArrowRight,
 } from 'lucide-react-native';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { deals } from '@/mocks/data';
+import { api } from '@/lib/api';
 
 const { width } = Dimensions.get('window');
 
@@ -57,6 +66,25 @@ const mockBookingRequests: BookingRequest[] = [
 
 const TABLE_OPTIONS = ['A1', 'A2', 'A3', 'B1', 'B2', 'B3', 'C1', 'C2', 'C3', '21', '22', '23', '24', '25'];
 
+function getTimeOfDay() {
+  const hour = new Date().getHours();
+  if (hour < 12) return 'Morning';
+  if (hour < 18) return 'Afternoon';
+  return 'Evening';
+}
+
+function getStatusColor(status: string) {
+  switch (status) {
+    case 'pending': return '#FF9800';
+    case 'confirmed':
+    case 'preparing': return '#2196F3';
+    case 'ready': return '#9C27B0';
+    case 'delivered': return '#4CAF50';
+    case 'cancelled': return '#FF3B30';
+    default: return '#999';
+  }
+}
+
 export default function DashboardScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -68,6 +96,37 @@ export default function DashboardScreen() {
   const [selectedBooking, setSelectedBooking] = useState<BookingRequest | null>(null);
   const [selectedTable, setSelectedTable] = useState('');
 
+  const restaurantId = user?.restaurantId || 'restaurant-123';
+
+  // Fetch restaurant details
+  const { data: restaurantData } = useQuery({
+    queryKey: ['restaurant', restaurantId],
+    queryFn: () => api.getRestaurant(restaurantId),
+    enabled: !!restaurantId,
+  });
+
+  // Fetch today's orders
+  const {
+    data: ordersData,
+    isLoading: ordersLoading,
+    refetch: refetchOrders,
+  } = useQuery({
+    queryKey: ['restaurant-orders', restaurantId],
+    queryFn: () => api.getRestaurantOrders(restaurantId),
+    enabled: !!restaurantId,
+    refetchInterval: 30000,
+  });
+
+  const restaurant = restaurantData?.data;
+  const orders = ordersData?.data || [];
+
+  // Calculate order stats
+  const pendingOrders = orders.filter((o) => o.status === 'pending').length;
+  const preparingOrders = orders.filter((o) => o.status === 'preparing').length;
+  const readyOrders = orders.filter((o) => o.status === 'ready').length;
+  const todayRevenue = orders.reduce((sum, o) => sum + o.total, 0);
+
+  // Calculate deal stats
   const restaurantDeals = deals.filter(d => d.restaurantId === user?.restaurantId);
   const activeOffers = restaurantDeals.filter(d => d.isActive).length;
   const totalCouponsToday = restaurantDeals.reduce((sum, d) => sum + d.claimedCoupons, 0);
@@ -76,50 +135,74 @@ export default function DashboardScreen() {
 
   const stats = [
     { 
-      label: 'Active Offers', 
-      value: activeOffers, 
-      icon: Tag, 
-      color: colors.primary,
-      bgColor: colors.primaryLight,
+      label: "Today's Revenue",
+      value: `$${todayRevenue.toFixed(2)}`,
+      icon: DollarSign, 
+      color: colors.success,
+      bgColor: colors.successLight,
       trend: '+12%',
       trendUp: true,
     },
     { 
-      label: 'Coupons Today', 
-      value: totalCouponsToday, 
-      icon: Ticket, 
-      color: colors.success,
-      bgColor: colors.successLight,
+      label: "Today's Orders",
+      value: orders.length, 
+      icon: ShoppingBag, 
+      color: colors.primary,
+      bgColor: colors.primaryLight,
       trend: '+8%',
       trendUp: true,
     },
     { 
-      label: 'Total Claimed', 
-      value: totalClaimed, 
-      icon: TrendingUp, 
+      label: 'Active Offers', 
+      value: activeOffers, 
+      icon: Tag, 
       color: colors.accent,
       bgColor: colors.accentLight,
-      trend: '+23%',
+      trend: '+12%',
       trendUp: true,
     },
     { 
-      label: 'Favorites', 
-      value: 156, 
-      icon: Heart, 
-      color: colors.error,
-      bgColor: colors.errorLight,
-      trend: '-2%',
-      trendUp: false,
+      label: 'Avg. Rating', 
+      value: restaurant?.rating?.toFixed(1) || '0.0', 
+      icon: TrendingUp, 
+      color: '#FFB800',
+      bgColor: '#FFB80020',
+      trend: '',
+      trendUp: true,
     },
   ];
 
   const quickActions = [
     { label: 'Scan QR', icon: QrCode, route: '/(restaurant)/scan', color: colors.success },
-    { label: 'Schedule', icon: CalendarDays, route: '/(restaurant)/schedule', color: colors.primary },
-    { label: 'Inventory', icon: Package, route: '/(restaurant)/inventory', color: colors.accent },
-    { label: 'Waste', icon: Trash2, route: '/(restaurant)/food-waste', color: colors.error },
-    { label: 'Menu', icon: UtensilsCrossed, route: '/(restaurant)/settings', color: colors.secondary },
-    { label: 'Orders', icon: ShoppingBag, route: '/(restaurant)/orders', color: '#8b5cf6' },
+    { label: 'Orders', icon: ShoppingBag, route: '/(restaurant)/orders', color: colors.primary },
+    { label: 'Schedule', icon: CalendarDays, route: '/(restaurant)/schedule', color: colors.accent },
+    { label: 'Inventory', icon: Package, route: '/(restaurant)/inventory', color: '#8b5cf6' },
+    { label: 'Menu', icon: UtensilsCrossed, route: '/(restaurant)/menu-management', color: colors.secondary },
+    { label: 'Analytics', icon: TrendingUp, route: '/(restaurant)/analytics', color: '#f59e0b' },
+  ];
+
+  const actionItems = [
+    {
+      icon: Package,
+      title: 'Pending Orders',
+      value: pendingOrders,
+      color: '#FF9800',
+      route: '/(restaurant)/orders?filter=pending',
+    },
+    {
+      icon: Clock,
+      title: 'Preparing',
+      value: preparingOrders,
+      color: '#2196F3',
+      route: '/(restaurant)/orders?filter=preparing',
+    },
+    {
+      icon: CheckCircle,
+      title: 'Ready for Pickup',
+      value: readyOrders,
+      color: '#4CAF50',
+      route: '/(restaurant)/orders?filter=ready',
+    },
   ];
 
   const recentActivity = [
@@ -167,6 +250,24 @@ export default function DashboardScreen() {
     }
   };
 
+  if (!user || user.role !== 'restaurant_owner') {
+    return (
+      <View style={styles.errorContainer}>
+        <AlertCircle size={64} color="#FF3B30" />
+        <Text style={styles.errorTitle}>Access Denied</Text>
+        <Text style={styles.errorMessage}>
+          You need a restaurant owner account to access this page.
+        </Text>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => router.replace('/')}
+        >
+          <Text style={styles.backButtonText}>Go Back</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
   const styles = createStyles(colors, isDark);
 
   return (
@@ -174,12 +275,19 @@ export default function DashboardScreen() {
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
+        refreshControl={
+          <RefreshControl
+            refreshing={false}
+            onRefresh={refetchOrders}
+            tintColor={colors.primary}
+          />
+        }
       >
         <View style={styles.header}>
           <View style={styles.headerTop}>
             <View>
-              <Text style={styles.welcomeText}>Welcome back,</Text>
-              <Text style={styles.userName}>{user?.name || 'Restaurant Owner'}</Text>
+              <Text style={styles.welcomeText}>Good {getTimeOfDay()}</Text>
+              <Text style={styles.userName}>{restaurant?.name || user?.name || 'Restaurant Owner'}</Text>
             </View>
             <Pressable 
               style={styles.notificationBtn}
@@ -258,6 +366,35 @@ export default function DashboardScreen() {
           </View>
         </View>
 
+        {/* Order Action Items */}
+        {(pendingOrders > 0 || preparingOrders > 0 || readyOrders > 0) && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Order Status</Text>
+            {actionItems.map((item, index) => (
+              item.value > 0 && (
+                <TouchableOpacity
+                  key={index}
+                  style={styles.orderActionCard}
+                  onPress={() => router.push(item.route as any)}
+                >
+                  <View style={styles.actionLeft}>
+                    <View style={[styles.orderActionIcon, { backgroundColor: item.color + '20' }]}>
+                      <item.icon size={24} color={item.color} />
+                    </View>
+                    <View>
+                      <Text style={styles.orderActionTitle}>{item.title}</Text>
+                      <Text style={styles.orderActionSubtitle}>
+                        {item.value} {item.value === 1 ? 'order' : 'orders'}
+                      </Text>
+                    </View>
+                  </View>
+                  <ArrowRight size={20} color={colors.textMuted} />
+                </TouchableOpacity>
+              )
+            ))}
+          </View>
+        )}
+
         {bookingRequests.filter(b => b.status === 'pending').length > 0 && (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
@@ -306,6 +443,61 @@ export default function DashboardScreen() {
             ))}
           </View>
         )}
+
+        {/* Recent Orders */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Recent Orders</Text>
+            <TouchableOpacity onPress={() => router.push('/(restaurant)/orders')}>
+              <Text style={styles.seeAll}>See All</Text>
+            </TouchableOpacity>
+          </View>
+
+          {ordersLoading ? (
+            <ActivityIndicator size="small" color={colors.primary} style={{ marginVertical: 20 }} />
+          ) : orders.length === 0 ? (
+            <View style={styles.emptyOrders}>
+              <Package size={48} color={colors.textMuted} />
+              <Text style={styles.emptyOrdersText}>No orders yet today</Text>
+            </View>
+          ) : (
+            orders.slice(0, 5).map((order) => (
+              <TouchableOpacity
+                key={order.id}
+                style={styles.orderCard}
+                onPress={() => router.push(`/(customer)/order/${order.id}`)}
+              >
+                <View style={styles.orderHeader}>
+                  <Text style={styles.orderId}>#{order.id.slice(0, 8)}</Text>
+                  <View
+                    style={[
+                      styles.orderStatus,
+                      { backgroundColor: getStatusColor(order.status) + '20' },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.orderStatusText,
+                        { color: getStatusColor(order.status) },
+                      ]}
+                    >
+                      {order.status.toUpperCase()}
+                    </Text>
+                  </View>
+                </View>
+                <Text style={styles.orderItems} numberOfLines={1}>
+                  {order.items.map((i) => `${i.quantity}x ${i.name}`).join(', ')}
+                </Text>
+                <View style={styles.orderFooter}>
+                  <Text style={styles.orderTime}>
+                    {new Date(order.createdAt).toLocaleTimeString()}
+                  </Text>
+                  <Text style={styles.orderTotal}>${order.total.toFixed(2)}</Text>
+                </View>
+              </TouchableOpacity>
+            ))
+          )}
+        </View>
 
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
@@ -459,6 +651,37 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+    backgroundColor: colors.background,
+  },
+  errorTitle: {
+    fontSize: 20,
+    fontWeight: '600' as const,
+    color: colors.text,
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  errorMessage: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginBottom: 24,
+  },
+  backButton: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  backButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600' as const,
   },
   header: {
     backgroundColor: colors.surface,
@@ -636,6 +859,39 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     color: colors.text,
     textAlign: 'center',
   },
+  orderActionCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.surface,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+  },
+  actionLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  orderActionIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  orderActionTitle: {
+    fontSize: 16,
+    fontWeight: '600' as const,
+    color: colors.text,
+    marginBottom: 2,
+  },
+  orderActionSubtitle: {
+    fontSize: 13,
+    color: colors.textSecondary,
+  },
   bookingCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -685,6 +941,62 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   },
   declineBtn: {
     backgroundColor: colors.error,
+  },
+  emptyOrders: {
+    alignItems: 'center',
+    padding: 32,
+  },
+  emptyOrdersText: {
+    fontSize: 14,
+    color: colors.textMuted,
+    marginTop: 12,
+  },
+  orderCard: {
+    backgroundColor: colors.surface,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+  },
+  orderHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  orderId: {
+    fontSize: 15,
+    fontWeight: '600' as const,
+    color: colors.text,
+  },
+  orderStatus: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  orderStatusText: {
+    fontSize: 11,
+    fontWeight: '700' as const,
+  },
+  orderItems: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    marginBottom: 12,
+  },
+  orderFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  orderTime: {
+    fontSize: 12,
+    color: colors.textMuted,
+  },
+  orderTotal: {
+    fontSize: 16,
+    fontWeight: '700' as const,
+    color: colors.text,
   },
   offerCard: {
     flexDirection: 'row',
