@@ -152,7 +152,7 @@ export default function InventoryScreen() {
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Update',
-          onPress: (newQty) => {
+          onPress: (newQty?: string) => {
             const qty = parseFloat(newQty || '0');
             if (!isNaN(qty) && qty >= 0) {
               updateMutation.mutate({

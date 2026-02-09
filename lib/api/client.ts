@@ -1,7 +1,7 @@
 import { config } from '../config';
 import { auth } from '../supabase';
 
-const API_URL = config.api.url;
+const API_URL = config.api.baseUrl;
 
 async function getAuthHeaders() {
   const session = await auth.getSession();

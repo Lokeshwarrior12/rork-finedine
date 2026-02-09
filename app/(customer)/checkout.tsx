@@ -64,12 +64,13 @@ export default function CheckoutScreen() {
     queryKey: ['profile'],
     queryFn: () => api.getUserProfile(),
     enabled: !!user,
-    onSuccess: (data) => {
-      if (data.data.address && !deliveryAddress) {
-        setDeliveryAddress(data.data.address);
-      }
-    },
   });
+
+  React.useEffect(() => {
+    if (profileData?.data?.address && !deliveryAddress) {
+      setDeliveryAddress(profileData.data.address);
+    }
+  }, [profileData]);
 
   // Create order mutation
   const createOrderMutation = useMutation({

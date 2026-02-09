@@ -61,7 +61,7 @@ export default function SettingsScreen() {
     queryFn: () => api.getRestaurant(restaurantId),
   });
 
-  const restaurant = restaurantData?.data || {};
+  const restaurant = restaurantData?.data ?? null;
 
   // Form state
   const [restaurantName, setRestaurantName] = useState('');
@@ -93,21 +93,22 @@ export default function SettingsScreen() {
   // Update form when restaurant data loads
   useEffect(() => {
     if (restaurant) {
-      setRestaurantName(restaurant.name || '');
-      setDescription(restaurant.description || '');
-      setCuisineType(restaurant.cuisineType || '');
-      setAddress(restaurant.address || '');
-      setCity(restaurant.city || '');
-      setPhone(restaurant.phone || '');
-      setEmail(restaurant.email || '');
-      setOpeningHours(restaurant.openingHours || '');
-      setAcceptsBooking(restaurant.acceptsBooking ?? true);
-      setBookingTerms(restaurant.bookingTerms || '');
-      setIsActive(restaurant.isActive ?? true);
-      setSelectedCategories(restaurant.categories || []);
-      setLogoImage(restaurant.logo || null);
-      setRestaurantImages(restaurant.images || []);
-      setMenuItems(restaurant.menuItems || []);
+      const r = restaurant as any;
+      setRestaurantName(r.name || '');
+      setDescription(r.description || '');
+      setCuisineType(r.cuisineType || '');
+      setAddress(r.address || '');
+      setCity(r.city || '');
+      setPhone(r.phone || '');
+      setEmail(r.email || '');
+      setOpeningHours(r.openingHours || '');
+      setAcceptsBooking(r.acceptsBooking ?? true);
+      setBookingTerms(r.bookingTerms || '');
+      setIsActive(r.isActive ?? true);
+      setSelectedCategories(r.categories || []);
+      setLogoImage(r.logo || null);
+      setRestaurantImages(r.images || []);
+      setMenuItems(r.menuItems || []);
     }
   }, [restaurant]);
 

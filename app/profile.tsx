@@ -12,7 +12,7 @@ export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { colors } = useTheme();
-  const { user, signOut } = useAuth();
+  const { user, logout: signOut } = useAuth();
 
   const { data: profile, isLoading } = useQuery({
     queryKey: ['profile'],

@@ -234,6 +234,8 @@ export default function DashboardScreen() {
     }
   };
 
+  const styles = createStyles(colors, isDark);
+
   if (!user || user.role !== 'restaurant_owner') {
     return (
       <View style={styles.errorContainer}>
@@ -251,8 +253,6 @@ export default function DashboardScreen() {
       </View>
     );
   }
-
-  const styles = createStyles(colors, isDark);
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -470,7 +470,7 @@ export default function DashboardScreen() {
                   </View>
                 </View>
                 <Text style={styles.orderItems} numberOfLines={1}>
-                  {order.items.map((i) => `${i.quantity}x ${i.name}`).join(', ')}
+                  {order.items.map((i: any) => `${i.quantity}x ${i.name}`).join(', ')}
                 </Text>
                 <View style={styles.orderFooter}>
                   <Text style={styles.orderTime}>

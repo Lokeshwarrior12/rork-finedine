@@ -100,11 +100,11 @@ export default function AnalyticsScreen() {
 
   const styles = createStyles(colors, isDark);
 
-  const maxRevenue = analytics.dailyTrend?.length > 0 
-    ? Math.max(...analytics.dailyTrend.map((d: any) => d.revenue))
+  const maxRevenue = (analytics.dailyTrend?.length ?? 0) > 0 
+    ? Math.max(...(analytics.dailyTrend ?? []).map((d: any) => d.revenue))
     : 1;
-  const maxPeakTransactions = analytics.peakHours?.length > 0
-    ? Math.max(...analytics.peakHours.map((h: any) => h.transactions))
+  const maxPeakTransactions = (analytics.peakHours?.length ?? 0) > 0
+    ? Math.max(...(analytics.peakHours ?? []).map((h: any) => h.transactions))
     : 1;
 
   const getImpactColor = (impact: string) => {
@@ -145,11 +145,11 @@ export default function AnalyticsScreen() {
     stats.forEach(stat => {
       report += `${stat.label}: ${stat.value} (${stat.trend})\n`;
     });
-    if (analytics.recommendations?.length > 0) {
+    if ((analytics.recommendations?.length ?? 0) > 0) {
       report += `\n💡 AI Recommendations\n`;
       report += `━━━━━━━━━━━━━━━━━━━━━━\n`;
-      analytics.recommendations.forEach((rec: SalesRecommendation, i: number) => {
-        report += `${i + 1}. ${rec.title}\n   ${rec.description}\n   Impact: ${rec.impact.toUpperCase()}\n\n`;
+      (analytics.recommendations ?? []).forEach((rec: any, i: number) => {
+        report += `${i + 1}. ${rec.title}\n   ${rec.description}\n   Impact: ${(rec.impact ?? '').toUpperCase()}\n\n`;
       });
     }
     return report;
@@ -235,7 +235,7 @@ export default function AnalyticsScreen() {
               </View>
             </View>
 
-            {analytics.recommendations.map((rec: SalesRecommendation, index: number) => {
+            {(analytics.recommendations ?? []).map((rec: any, index: number) => {
               const TypeIcon = getTypeIcon(rec.type);
               return (
                 <Pressable key={rec.id} style={styles.recommendationCard}>

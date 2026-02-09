@@ -285,7 +285,7 @@ export default function OrderTrackingScreen() {
                   order.paymentStatus === 'paid' && styles.paymentStatusTextPaid,
                 ]}
               >
-                {order.paymentStatus.toUpperCase()}
+                {(order.paymentStatus ?? 'pending').toUpperCase()}
               </Text>
             </View>
           </View>

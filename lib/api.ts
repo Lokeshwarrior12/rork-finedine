@@ -1,16 +1,6 @@
-// lib/api.ts
-// Complete REST API client for Rork-FineDine
+import { config } from './config';
 
-import Constants from 'expo-constants';
-
-// ============================================================================
-// CONFIG
-// ============================================================================
-
-const API_BASE_URL = __DEV__
-  ? 'http://localhost:8080/api/v1'
-  : Constants.expoConfig?.extra?.apiUrl ||
-    'https://rork-finedine-api.fly.dev/api/v1';
+const API_BASE_URL = config.api.baseUrl;
 
 console.log('🌐 API Base URL:', API_BASE_URL);
 
@@ -242,9 +232,8 @@ class APIClient {
   ): Promise<APIResponse<T>> {
     const { requireAuth = false, ...fetchOptions } = options;
 
-    const headers: HeadersInit = {
+    const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-      ...(fetchOptions.headers || {}),
     };
 
     if (requireAuth && this.authToken) {

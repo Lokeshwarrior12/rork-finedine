@@ -8,7 +8,7 @@ class WebSocketClient {
   private listeners: Map<string, Set<Function>> = new Map();
 
   connect(userId: string, clientId: string) {
-    const wsUrl = config.api.url.replace('http', 'ws');
+    const wsUrl = config.api.baseUrl.replace('http', 'ws');
     this.ws = new WebSocket(`${wsUrl}/ws?userId=${userId}&clientId=${clientId}`);
 
     this.ws.onopen = () => {

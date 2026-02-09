@@ -42,7 +42,8 @@ export default function SignupScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { role } = useLocalSearchParams<{ role: string }>();
-  const { signup, signupPending } = useAuth();
+  const { signUp } = useAuth();
+  const signupPending = false;
 
   const isRestaurant = role === 'restaurant_owner';
 
