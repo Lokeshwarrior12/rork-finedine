@@ -1,5 +1,5 @@
 // lib/api.ts
-// Unified REST API client (replaces tRPC)
+// Complete REST API client for Rork-FineDine
 
 import Constants from 'expo-constants';
 
@@ -37,18 +37,29 @@ export interface Restaurant {
   name: string;
   description?: string;
   address: string;
+  city?: string;
   phone?: string;
   email?: string;
-  cuisineTypes: string[];
-  priceRange: number;
-  rating: number;
-  totalReviews: number;
-  images: string[];
-  openingHours?: Record<string, any>;
+  cuisineType?: string;
+  cuisineTypes?: string[];
+  priceRange?: number;
+  rating?: number;
+  totalReviews?: number;
+  images?: string[];
+  logo?: string;
+  openingHours?: string | Record<string, any>;
   location?: {
     latitude: number;
     longitude: number;
   };
+  latitude?: number;
+  longitude?: number;
+  isActive?: boolean;
+  isApproved?: boolean;
+  acceptsBooking?: boolean;
+  bookingTerms?: string;
+  categories?: string[];
+  menuItems?: MenuItem[];
 }
 
 export interface MenuItem {
@@ -58,11 +69,12 @@ export interface MenuItem {
   description?: string;
   price: number;
   category?: string;
-  isVegetarian: boolean;
-  isVegan: boolean;
-  isGlutenFree: boolean;
-  images: string[];
-  isAvailable: boolean;
+  isVegetarian?: boolean;
+  isVegan?: boolean;
+  isGlutenFree?: boolean;
+  images?: string[];
+  image?: string;
+  isAvailable?: boolean;
 }
 
 export interface OrderItem {
@@ -110,7 +122,7 @@ export interface User {
   phone?: string;
   address?: string;
   role: 'customer' | 'restaurant_owner' | 'admin';
-  loyaltyPoints: number;
+  loyaltyPoints?: number;
   createdAt?: string;
 }
 
@@ -123,6 +135,7 @@ export interface Booking {
   guests: number;
   status: 'pending' | 'confirmed' | 'cancelled';
   specialRequests?: string;
+  createdAt?: string;
 }
 
 export interface CreateBookingRequest {
@@ -148,6 +161,63 @@ export interface Notification {
   type: 'order' | 'booking' | 'promotion' | 'system';
   isRead: boolean;
   createdAt: string;
+}
+
+export interface InventoryItem {
+  id: string;
+  restaurantId: string;
+  name: string;
+  quantity: number;
+  unit: string;
+  lowStockThreshold?: number;
+  lastUpdated?: string;
+}
+
+export interface AnalyticsData {
+  revenue: number;
+  transactions?: number;
+  orders?: number;
+  avgOrderValue: number;
+  redemptionRate?: number;
+  newCustomers: number;
+  topItems: Array<{
+    id?: string;
+    name: string;
+    sales: number;
+    revenue: number;
+  }>;
+  dailyTrend?: Array<{
+    date: string;
+    revenue: number;
+    transactions?: number;
+  }>;
+  revenueByDay?: Array<{
+    date: string;
+    revenue: number;
+  }>;
+  peakHours?: Array<{
+    hour: string;
+    transactions: number;
+    revenue: number;
+  }>;
+  offerTypeDistribution?: {
+    dinein: number;
+    takeout: number;
+    both: number;
+  };
+  discountPerformance?: Array<{
+    range: string;
+    conversions: number;
+    revenue: number;
+  }>;
+  recommendations?: Array<{
+    id: string;
+    type: string;
+    title: string;
+    description: string;
+    impact: string;
+    basedOn: string;
+  }>;
 }
 
 // ============================================================================
@@ -206,7 +276,7 @@ class APIClient {
   }
 
   // ============================================================================
-  // RESTAURANTS
+  // RESTAURANTS (Customer & Owner)
   // ============================================================================
 
   getRestaurants() {
@@ -221,8 +291,51 @@ class APIClient {
     return this.request<MenuItem[]>(`/restaurants/${id}/menu`);
   }
 
+  createRestaurant(data: Partial<Restaurant>) {
+    return this.request<Restaurant>('/restaurants', {
+      method: 'POST',
+      body: JSON.stringify(data),
+      requireAuth: true,
+    });
+  }
+
+  updateRestaurant(id: string, data: Partial<Restaurant>) {
+    return this.request<Restaurant>(`/restaurants/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+      requireAuth: true,
+    });
+  }
+
   // ============================================================================
-  // ORDERS
+  // MENU ITEMS (Restaurant Owner)
+  // ============================================================================
+
+  createMenuItem(restaurantId: string, data: Partial<MenuItem>) {
+    return this.request<MenuItem>(`/restaurants/${restaurantId}/menu`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+      requireAuth: true,
+    });
+  }
+
+  updateMenuItem(id: string, data: Partial<MenuItem>) {
+    return this.request<MenuItem>(`/menu-items/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+      requireAuth: true,
+    });
+  }
+
+  deleteMenuItem(id: string) {
+    return this.request<{ success: boolean }>(`/menu-items/${id}`, {
+      method: 'DELETE',
+      requireAuth: true,
+    });
+  }
+
+  // ============================================================================
+  // ORDERS (Customer & Owner)
   // ============================================================================
 
   createOrder(data: CreateOrderRequest) {
@@ -241,6 +354,12 @@ class APIClient {
 
   getUserOrders(userId: string) {
     return this.request<Order[]>(`/orders/user/${userId}`, {
+      requireAuth: true,
+    });
+  }
+
+  getRestaurantOrders(restaurantId: string) {
+    return this.request<Order[]>(`/restaurants/${restaurantId}/orders`, {
       requireAuth: true,
     });
   }
@@ -285,6 +404,20 @@ class APIClient {
 
   getUserBookings(userId: string) {
     return this.request<Booking[]>(`/bookings/user/${userId}`, {
+      requireAuth: true,
+    });
+  }
+
+  getRestaurantBookings(restaurantId: string) {
+    return this.request<Booking[]>(`/restaurants/${restaurantId}/bookings`, {
+      requireAuth: true,
+    });
+  }
+
+  updateBookingStatus(id: string, status: Booking['status']) {
+    return this.request<Booking>(`/bookings/${id}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
       requireAuth: true,
     });
   }
@@ -337,8 +470,71 @@ class APIClient {
     );
   }
 
+  markAllNotificationsRead() {
+    return this.request<{ success: boolean }>(
+      '/notifications/read-all',
+      {
+        method: 'PATCH',
+        requireAuth: true,
+      }
+    );
+  }
+
   // ============================================================================
-  // HEALTH
+  // INVENTORY (Restaurant Owner)
+  // ============================================================================
+
+  getRestaurantInventory(restaurantId: string) {
+    return this.request<InventoryItem[]>(
+      `/restaurants/${restaurantId}/inventory`,
+      {
+        requireAuth: true,
+      }
+    );
+  }
+
+  createInventoryItem(restaurantId: string, data: Partial<InventoryItem>) {
+    return this.request<InventoryItem>(
+      `/restaurants/${restaurantId}/inventory`,
+      {
+        method: 'POST',
+        body: JSON.stringify(data),
+        requireAuth: true,
+      }
+    );
+  }
+
+  updateInventoryItem(id: string, data: Partial<InventoryItem>) {
+    return this.request<InventoryItem>(`/inventory/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+      requireAuth: true,
+    });
+  }
+
+  deleteInventoryItem(id: string) {
+    return this.request<{ success: boolean }>(`/inventory/${id}`, {
+      method: 'DELETE',
+      requireAuth: true,
+    });
+  }
+
+  // ============================================================================
+  // ANALYTICS (Restaurant Owner)
+  // ============================================================================
+
+  getRestaurantAnalytics(restaurantId: string, period?: string) {
+    const query = period ? `?period=${period}` : '';
+    return this.request<AnalyticsData>(
+      `/restaurants/${restaurantId}/analytics${query}`,
+      {
+        requireAuth: true,
+      }
+    );
+  }
+
+  // ============================================================================
+  // HEALTH CHECK
   // ============================================================================
 
   async healthCheck() {
