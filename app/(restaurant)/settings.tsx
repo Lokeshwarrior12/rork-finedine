@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,11 +9,13 @@ import {
   Switch,
   Alert,
   Modal,
+  ActivityIndicator,
 } from 'react-native';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter, Href } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { 
   LogOut, 
   Save, 
@@ -26,9 +28,12 @@ import {
   Trash2,
   Check,
   DollarSign,
+  MapPin,
+  Mail,
 } from 'lucide-react-native';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
+import { api } from '@/lib/api';
 import { restaurantCategories } from '@/mocks/data';
 
 interface MenuItem {
@@ -42,37 +47,40 @@ interface MenuItem {
 
 const MENU_CATEGORIES = ['Appetizers', 'Main Course', 'Desserts', 'Beverages', 'Specials'];
 
-const mockMenuItems: MenuItem[] = [
-  { id: '1', name: 'Margherita Pizza', description: 'Classic tomato and mozzarella', price: '14.99', category: 'Main Course' },
-  { id: '2', name: 'Caesar Salad', description: 'Romaine, croutons, parmesan', price: '9.99', category: 'Appetizers' },
-  { id: '3', name: 'Tiramisu', description: 'Coffee-flavored Italian dessert', price: '7.99', category: 'Desserts' },
-];
-
 export default function SettingsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const queryClient = useQueryClient();
   const { logout } = useAuth();
   const { colors, isDark } = useTheme();
+  const restaurantId = 'restaurant-123'; // Replace with actual restaurant ID from context/auth
 
-  const [restaurantName, setRestaurantName] = useState('The Golden Fork');
-  const [description, setDescription] = useState('Experience fine dining with a modern twist.');
-  const [cuisineType, setCuisineType] = useState('Italian');
-  const [address, setAddress] = useState('123 Main Street');
-  const [city, setCity] = useState('New York');
-  const [phone, setPhone] = useState('+1 234 567 8900');
-  const [email, setEmail] = useState('info@goldenfork.com');
-  const [openingHours, setOpeningHours] = useState('11:00 AM - 11:00 PM');
+  // Fetch restaurant data
+  const { data: restaurantData, isLoading } = useQuery({
+    queryKey: ['restaurant', restaurantId],
+    queryFn: () => api.getRestaurant(restaurantId),
+  });
+
+  const restaurant = restaurantData?.data || {};
+
+  // Form state
+  const [restaurantName, setRestaurantName] = useState('');
+  const [description, setDescription] = useState('');
+  const [cuisineType, setCuisineType] = useState('');
+  const [address, setAddress] = useState('');
+  const [city, setCity] = useState('');
+  const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
+  const [openingHours, setOpeningHours] = useState('');
   const [acceptsBooking, setAcceptsBooking] = useState(true);
-  const [bookingTerms, setBookingTerms] = useState('Cancellation must be made 2 hours before.');
-  const [selectedCategories, setSelectedCategories] = useState<string[]>(['Luxury Dining', 'Family Friendly']);
+  const [bookingTerms, setBookingTerms] = useState('');
+  const [isActive, setIsActive] = useState(true);
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   
   const [logoImage, setLogoImage] = useState<string | null>(null);
-  const [restaurantImages, setRestaurantImages] = useState<string[]>([
-    'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=400',
-    'https://images.unsplash.com/photo-1552566626-52f8b828add9?w=400',
-  ]);
+  const [restaurantImages, setRestaurantImages] = useState<string[]>([]);
 
-  const [menuItems, setMenuItems] = useState<MenuItem[]>(mockMenuItems);
+  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [showMenuModal, setShowMenuModal] = useState(false);
   const [editingMenuItem, setEditingMenuItem] = useState<MenuItem | null>(null);
   const [menuForm, setMenuForm] = useState({
@@ -80,6 +88,39 @@ export default function SettingsScreen() {
     description: '',
     price: '',
     category: 'Main Course',
+  });
+
+  // Update form when restaurant data loads
+  useEffect(() => {
+    if (restaurant) {
+      setRestaurantName(restaurant.name || '');
+      setDescription(restaurant.description || '');
+      setCuisineType(restaurant.cuisineType || '');
+      setAddress(restaurant.address || '');
+      setCity(restaurant.city || '');
+      setPhone(restaurant.phone || '');
+      setEmail(restaurant.email || '');
+      setOpeningHours(restaurant.openingHours || '');
+      setAcceptsBooking(restaurant.acceptsBooking ?? true);
+      setBookingTerms(restaurant.bookingTerms || '');
+      setIsActive(restaurant.isActive ?? true);
+      setSelectedCategories(restaurant.categories || []);
+      setLogoImage(restaurant.logo || null);
+      setRestaurantImages(restaurant.images || []);
+      setMenuItems(restaurant.menuItems || []);
+    }
+  }, [restaurant]);
+
+  // Update restaurant mutation
+  const updateMutation = useMutation({
+    mutationFn: (data: any) => api.updateRestaurant(restaurantId, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['restaurant', restaurantId] });
+      Alert.alert('Success', 'Settings saved successfully!');
+    },
+    onError: () => {
+      Alert.alert('Error', 'Failed to update settings');
+    },
   });
 
   const styles = createStyles(colors, isDark);
@@ -238,16 +279,53 @@ export default function SettingsScreen() {
   };
 
   const handleSave = () => {
-    Alert.alert('Success', 'Settings saved successfully!');
+    const formData = {
+      name: restaurantName,
+      description,
+      cuisineType,
+      address,
+      city,
+      phone,
+      email,
+      openingHours,
+      acceptsBooking,
+      bookingTerms,
+      isActive,
+      categories: selectedCategories,
+      logo: logoImage,
+      images: restaurantImages,
+      menuItems,
+    };
+
+    updateMutation.mutate(formData);
   };
+
+  if (isLoading) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top, justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={[styles.formLabel, { marginTop: 16 }]}>Loading settings...</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
         <Text style={styles.title}>Settings</Text>
-        <Pressable style={styles.saveButton} onPress={handleSave}>
-          <Save size={18} color="#fff" />
-          <Text style={styles.saveButtonText}>Save</Text>
+        <Pressable 
+          style={styles.saveButton} 
+          onPress={handleSave}
+          disabled={updateMutation.isPending}
+        >
+          {updateMutation.isPending ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <>
+              <Save size={18} color="#fff" />
+              <Text style={styles.saveButtonText}>Save</Text>
+            </>
+          )}
         </Pressable>
       </View>
 
@@ -255,6 +333,7 @@ export default function SettingsScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 100 }]}
       >
+        {/* Restaurant Logo */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Restaurant Logo</Text>
           <View style={styles.logoSection}>
@@ -285,6 +364,7 @@ export default function SettingsScreen() {
           </View>
         </View>
 
+        {/* Restaurant Photos */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Restaurant Photos</Text>
           <ScrollView 
@@ -307,6 +387,7 @@ export default function SettingsScreen() {
           </ScrollView>
         </View>
 
+        {/* Menu Items */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <UtensilsCrossed size={20} color={colors.primary} />
@@ -344,6 +425,7 @@ export default function SettingsScreen() {
           })}
         </View>
 
+        {/* Basic Information */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Basic Information</Text>
           <View style={styles.card}>
@@ -353,6 +435,7 @@ export default function SettingsScreen() {
                 style={styles.formInput}
                 value={restaurantName}
                 onChangeText={setRestaurantName}
+                placeholder="Enter restaurant name"
                 placeholderTextColor={colors.placeholder}
               />
             </View>
@@ -362,9 +445,10 @@ export default function SettingsScreen() {
                 style={[styles.formInput, styles.formTextarea]}
                 value={description}
                 onChangeText={setDescription}
+                placeholder="Tell customers about your restaurant..."
+                placeholderTextColor={colors.placeholder}
                 multiline
                 numberOfLines={3}
-                placeholderTextColor={colors.placeholder}
               />
             </View>
             <View style={styles.formGroup}>
@@ -373,23 +457,29 @@ export default function SettingsScreen() {
                 style={styles.formInput}
                 value={cuisineType}
                 onChangeText={setCuisineType}
+                placeholder="e.g., Italian, Chinese, American"
                 placeholderTextColor={colors.placeholder}
               />
             </View>
           </View>
         </View>
 
+        {/* Location & Contact */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Location & Contact</Text>
           <View style={styles.card}>
             <View style={styles.formGroup}>
               <Text style={styles.formLabel}>Street Address</Text>
-              <TextInput
-                style={styles.formInput}
-                value={address}
-                onChangeText={setAddress}
-                placeholderTextColor={colors.placeholder}
-              />
+              <View style={styles.inputIcon}>
+                <MapPin size={18} color={colors.textSecondary} />
+                <TextInput
+                  style={styles.inputWithIcon}
+                  value={address}
+                  onChangeText={setAddress}
+                  placeholder="123 Main Street"
+                  placeholderTextColor={colors.placeholder}
+                />
+              </View>
             </View>
             <View style={styles.formGroup}>
               <Text style={styles.formLabel}>City</Text>
@@ -397,29 +487,38 @@ export default function SettingsScreen() {
                 style={styles.formInput}
                 value={city}
                 onChangeText={setCity}
+                placeholder="City name"
                 placeholderTextColor={colors.placeholder}
               />
             </View>
             <View style={styles.formGroup}>
               <Text style={styles.formLabel}>Phone</Text>
-              <TextInput
-                style={styles.formInput}
-                value={phone}
-                onChangeText={setPhone}
-                keyboardType="phone-pad"
-                placeholderTextColor={colors.placeholder}
-              />
+              <View style={styles.inputIcon}>
+                <Phone size={18} color={colors.textSecondary} />
+                <TextInput
+                  style={styles.inputWithIcon}
+                  value={phone}
+                  onChangeText={setPhone}
+                  placeholder="+1 234 567 8900"
+                  keyboardType="phone-pad"
+                  placeholderTextColor={colors.placeholder}
+                />
+              </View>
             </View>
             <View style={styles.formGroup}>
               <Text style={styles.formLabel}>Email</Text>
-              <TextInput
-                style={styles.formInput}
-                value={email}
-                onChangeText={setEmail}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                placeholderTextColor={colors.placeholder}
-              />
+              <View style={styles.inputIcon}>
+                <Mail size={18} color={colors.textSecondary} />
+                <TextInput
+                  style={styles.inputWithIcon}
+                  value={email}
+                  onChangeText={setEmail}
+                  placeholder="info@restaurant.com"
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  placeholderTextColor={colors.placeholder}
+                />
+              </View>
             </View>
             <View style={styles.formGroup}>
               <Text style={styles.formLabel}>Opening Hours</Text>
@@ -427,12 +526,14 @@ export default function SettingsScreen() {
                 style={styles.formInput}
                 value={openingHours}
                 onChangeText={setOpeningHours}
+                placeholder="11:00 AM - 11:00 PM"
                 placeholderTextColor={colors.placeholder}
               />
             </View>
           </View>
         </View>
 
+        {/* Restaurant Categories */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Restaurant Categories</Text>
           <View style={styles.categoriesGrid}>
@@ -456,11 +557,34 @@ export default function SettingsScreen() {
           </View>
         </View>
 
+        {/* Operations */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Operations</Text>
+          <View style={styles.card}>
+            <View style={styles.switchRow}>
+              <View>
+                <Text style={styles.switchLabel}>Restaurant Active</Text>
+                <Text style={styles.switchSubtext}>Accept new orders and bookings</Text>
+              </View>
+              <Switch
+                value={isActive}
+                onValueChange={setIsActive}
+                trackColor={{ false: colors.border, true: colors.primary }}
+                thumbColor="#fff"
+              />
+            </View>
+          </View>
+        </View>
+
+        {/* Table Booking */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Table Booking</Text>
           <View style={styles.card}>
             <View style={styles.switchRow}>
-              <Text style={styles.switchLabel}>Accept Table Reservations</Text>
+              <View>
+                <Text style={styles.switchLabel}>Accept Table Reservations</Text>
+                <Text style={styles.switchSubtext}>Allow customers to book tables</Text>
+              </View>
               <Switch
                 value={acceptsBooking}
                 onValueChange={setAcceptsBooking}
@@ -475,6 +599,7 @@ export default function SettingsScreen() {
                   style={[styles.formInput, styles.formTextarea]}
                   value={bookingTerms}
                   onChangeText={setBookingTerms}
+                  placeholder="e.g., Cancellation must be made 2 hours before..."
                   multiline
                   numberOfLines={3}
                   placeholderTextColor={colors.placeholder}
@@ -484,6 +609,7 @@ export default function SettingsScreen() {
           </View>
         </View>
 
+        {/* Support */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Support</Text>
           <Pressable 
@@ -501,6 +627,7 @@ export default function SettingsScreen() {
           </Pressable>
         </View>
 
+        {/* Sign Out */}
         <View style={styles.section}>
           <Pressable style={styles.logoutButton} onPress={handleLogout}>
             <LogOut size={20} color={colors.error} />
@@ -509,6 +636,7 @@ export default function SettingsScreen() {
         </View>
       </ScrollView>
 
+      {/* Menu Item Modal */}
       <Modal visible={showMenuModal} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
@@ -551,7 +679,7 @@ export default function SettingsScreen() {
                 <View style={styles.priceInput}>
                   <DollarSign size={18} color={colors.textSecondary} />
                   <TextInput
-                    style={[styles.formInput, { flex: 1, marginBottom: 0 }]}
+                    style={[styles.formInput, { flex: 1, marginBottom: 0, borderWidth: 0 }]}
                     placeholder="0.00"
                     placeholderTextColor={colors.placeholder}
                     keyboardType="decimal-pad"
@@ -616,7 +744,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   },
   title: {
     fontSize: 24,
-    fontWeight: '700' as const,
+    fontWeight: '700',
     color: colors.text,
   },
   saveButton: {
@@ -630,7 +758,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   },
   saveButtonText: {
     fontSize: 14,
-    fontWeight: '600' as const,
+    fontWeight: '600',
     color: '#fff',
   },
   scrollContent: {
@@ -648,7 +776,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 16,
-    fontWeight: '600' as const,
+    fontWeight: '600',
     color: colors.text,
     marginBottom: 12,
   },
@@ -705,7 +833,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   },
   logoInfoTitle: {
     fontSize: 16,
-    fontWeight: '600' as const,
+    fontWeight: '600',
     color: colors.text,
     marginBottom: 4,
   },
@@ -724,7 +852,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   },
   changeLogoBtnText: {
     fontSize: 13,
-    fontWeight: '600' as const,
+    fontWeight: '600',
     color: colors.primary,
   },
   imagesScrollContent: {
@@ -762,7 +890,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   },
   addImageText: {
     fontSize: 12,
-    fontWeight: '500' as const,
+    fontWeight: '500',
     color: colors.primary,
     marginTop: 4,
   },
@@ -778,7 +906,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   },
   addMenuBtnText: {
     fontSize: 14,
-    fontWeight: '600' as const,
+    fontWeight: '600',
     color: '#fff',
   },
   menuCategory: {
@@ -786,7 +914,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   },
   menuCategoryTitle: {
     fontSize: 14,
-    fontWeight: '600' as const,
+    fontWeight: '600',
     color: colors.textSecondary,
     marginBottom: 8,
   },
@@ -806,7 +934,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   },
   menuItemName: {
     fontSize: 14,
-    fontWeight: '600' as const,
+    fontWeight: '600',
     color: colors.text,
   },
   menuItemDesc: {
@@ -816,7 +944,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   },
   menuItemPrice: {
     fontSize: 15,
-    fontWeight: '700' as const,
+    fontWeight: '700',
     color: colors.primary,
   },
   card: {
@@ -831,7 +959,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   },
   formLabel: {
     fontSize: 13,
-    fontWeight: '500' as const,
+    fontWeight: '500',
     color: colors.textSecondary,
     marginBottom: 6,
   },
@@ -848,6 +976,22 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   formTextarea: {
     minHeight: 80,
     textAlignVertical: 'top',
+  },
+  inputIcon: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.inputBackground,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+    gap: 8,
+  },
+  inputWithIcon: {
+    flex: 1,
+    paddingVertical: 12,
+    fontSize: 15,
+    color: colors.text,
   },
   priceInput: {
     flexDirection: 'row',
@@ -878,7 +1022,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   },
   categoryOptionText: {
     fontSize: 13,
-    fontWeight: '500' as const,
+    fontWeight: '500',
     color: colors.textSecondary,
   },
   categoryOptionTextActive: {
@@ -892,7 +1036,13 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   },
   switchLabel: {
     fontSize: 15,
+    fontWeight: '600',
     color: colors.text,
+    marginBottom: 2,
+  },
+  switchSubtext: {
+    fontSize: 12,
+    color: colors.textSecondary,
   },
   categoriesGrid: {
     flexDirection: 'row',
@@ -913,7 +1063,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   },
   categoryChipText: {
     fontSize: 13,
-    fontWeight: '500' as const,
+    fontWeight: '500',
     color: colors.text,
   },
   categoryChipTextActive: {
@@ -932,7 +1082,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   },
   logoutText: {
     fontSize: 16,
-    fontWeight: '600' as const,
+    fontWeight: '600',
     color: colors.error,
   },
   supportCard: {
@@ -958,7 +1108,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   },
   supportTitle: {
     fontSize: 16,
-    fontWeight: '600' as const,
+    fontWeight: '600',
     color: colors.text,
   },
   supportDesc: {
@@ -986,7 +1136,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   },
   modalTitle: {
     fontSize: 18,
-    fontWeight: '700' as const,
+    fontWeight: '700',
     color: colors.text,
   },
   saveMenuBtn: {
@@ -1002,7 +1152,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   },
   saveMenuBtnText: {
     fontSize: 15,
-    fontWeight: '600' as const,
+    fontWeight: '600',
     color: '#fff',
   },
 });
