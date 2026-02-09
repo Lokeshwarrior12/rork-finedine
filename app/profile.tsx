@@ -22,9 +22,15 @@ export default function ProfileScreen() {
 
   const displayProfile = profile || user;
 
-  const handleLogout = async () => {
-    await signOut();
-    router.replace('/');
+  const handleSignOut = async () => {
+    try {
+      await signOut();
+      Alert.alert('Success', 'Signed out successfully');
+      router.replace('/login');
+    } catch (error) {
+      Alert.alert('Error', 'Failed to sign out');
+      console.error(error);
+    }
   };
 
   return (
@@ -59,6 +65,16 @@ export default function ProfileScreen() {
             <Text style={[styles.value, { color: colors.text }]}>
               {displayProfile?.email || 'Not set'}
             </Text>
+          </View>
+          <View style={styles.container}>
+            <Text style={styles.title}>Profile</Text>
+            {user && (
+          <>
+            <Text>Email: {user.email}</Text>
+            <Text>User ID: {user.id}</Text>
+          </>
+        )}
+            <Button title="Sign Out" onPress={handleSignOut} />
           </View>
 
           <View style={[styles.pointsCard, { backgroundColor: colors.primaryLight }]}>
