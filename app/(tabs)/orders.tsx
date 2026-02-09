@@ -1,86 +1,275 @@
-import { useEffect, useState } from 'react';
-import { View, Text, FlatList, StyleSheet, ActivityIndicator } from 'react-native';
-import { orderAPI } from '@/lib/api/client';
-import { wsClient } from '@/lib/websocket';
-import { auth } from '@/lib/supabase';
+// app/(tabs)/orders.tsx
+// User Orders History Screen
 
-interface OrderItem {
-  id: string;
-  order_number?: string;
-  status: string;
-  total: number;
-}
+import React, { useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  FlatList,
+  TouchableOpacity,
+  ActivityIndicator,
+  RefreshControl,
+} from 'react-native';
+import { useRouter } from 'expo-router';
+import { useQuery } from '@tanstack/react-query';
+import {
+  Clock,
+  CheckCircle,
+  XCircle,
+  Package,
+  ChevronRight,
+} from 'lucide-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+import { api, Order } from '@/lib/api';
+import { useAuth } from '@/contexts/AuthContext';
+import Colors from '@/constants/colors';
+
+type OrderFilter = 'all' | 'active' | 'completed' | 'cancelled';
 
 export default function OrdersScreen() {
-  const [orders, setOrders] = useState<OrderItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const { user } = useAuth();
 
-  useEffect(() => {
-    loadOrders();
-    setupRealtimeUpdates();
-  }, []);
+  const [filter, setFilter] = useState<OrderFilter>('all');
 
-  const loadOrders = async () => {
-    try {
-      const response = await orderAPI.getAll() as { data?: OrderItem[] } | OrderItem[];
-      const data = Array.isArray(response) ? response : (response?.data || []);
-      setOrders(data);
-    } catch (error) {
-      console.error('Failed to load orders:', error);
-    } finally {
-      setLoading(false);
+  // Fetch user orders
+  const {
+    data: ordersData,
+    isLoading,
+    error,
+    refetch,
+  } = useQuery({
+    queryKey: ['orders', user?.id],
+    queryFn: () => api.getUserOrders(user!.id),
+    enabled: !!user,
+  });
+
+  const orders = ordersData?.data || [];
+
+  // Filter orders
+  const filteredOrders = orders.filter((order) => {
+    if (filter === 'all') return true;
+    if (filter === 'active')
+      return ['pending', 'confirmed', 'preparing', 'ready'].includes(order.status);
+    if (filter === 'completed') return order.status === 'delivered';
+    if (filter === 'cancelled') return order.status === 'cancelled';
+    return true;
+  });
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'pending':
+        return '#FFA500';
+      case 'confirmed':
+      case 'preparing':
+        return '#2196F3';
+      case 'ready':
+        return '#9C27B0';
+      case 'delivered':
+        return '#4CAF50';
+      case 'cancelled':
+        return '#FF3B30';
+      default:
+        return '#999';
     }
   };
 
-  const setupRealtimeUpdates = async () => {
-    const user = await auth.getUser();
-    if (!user) return;
-
-    // Connect WebSocket
-    wsClient.connect(user.id, 'client-' + Date.now());
-
-    wsClient.on('order_update', (payload: { order_id: string; status: string }) => {
-      console.log('Order updated:', payload);
-      
-      setOrders(prev => prev.map(order => 
-        order.id === payload.order_id 
-          ? { ...order, status: payload.status }
-          : order
-      ));
-    });
-
-    // Cleanup on unmount
-    return () => {
-      wsClient.disconnect();
-    };
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case 'delivered':
+        return CheckCircle;
+      case 'cancelled':
+        return XCircle;
+      default:
+        return Package;
+    }
   };
 
-  if (loading) {
+  const renderOrderCard = ({ item }: { item: Order }) => {
+    const StatusIcon = getStatusIcon(item.status);
+    const statusColor = getStatusColor(item.status);
+
     return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" />
+      <TouchableOpacity
+        style={styles.orderCard}
+        onPress={() => router.push(`/(customer)/order/${item.id}`)}
+      >
+        <View style={styles.orderHeader}>
+          <View style={styles.orderHeaderLeft}>
+            <View style={[styles.statusIcon, { backgroundColor: statusColor + '20' }]}>
+              <StatusIcon size={20} color={statusColor} />
+            </View>
+            <View>
+              <Text style={styles.orderId}>Order #{item.id.slice(0, 8)}</Text>
+              <Text style={styles.orderDate}>
+                {new Date(item.createdAt).toLocaleDateString()}
+              </Text>
+            </View>
+          </View>
+          <ChevronRight size={20} color="#ccc" />
+        </View>
+
+        <View style={styles.orderBody}>
+          <Text style={styles.orderItems} numberOfLines={2}>
+            {item.items.map((i) => `${i.quantity}x ${i.name}`).join(', ')}
+          </Text>
+        </View>
+
+        <View style={styles.orderFooter}>
+          <View style={[styles.statusBadge, { backgroundColor: statusColor + '20' }]}>
+            <Text style={[styles.statusText, { color: statusColor }]}>
+              {item.status.charAt(0).toUpperCase() + item.status.slice(1)}
+            </Text>
+          </View>
+          <Text style={styles.orderTotal}>${item.total.toFixed(2)}</Text>
+        </View>
+      </TouchableOpacity>
+    );
+  };
+
+  if (!user) {
+    return (
+      <View style={styles.emptyContainer}>
+        <Text style={styles.emptyTitle}>Please Login</Text>
+        <Text style={styles.emptyMessage}>Login to view your orders</Text>
+        <TouchableOpacity
+          style={styles.loginButton}
+          onPress={() => router.push('/login')}
+        >
+          <Text style={styles.loginButtonText}>Login</Text>
+        </TouchableOpacity>
       </View>
     );
   }
 
   return (
     <View style={styles.container}>
-      <FlatList
-        data={orders}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <View style={styles.orderCard}>
-            <Text style={styles.orderNumber}>{item.order_number || `Order #${item.id.slice(0, 8)}`}</Text>
-            <Text style={styles.status}>Status: {item.status}</Text>
-            <Text style={styles.total}>Total: ${item.total?.toFixed(2) || '0.00'}</Text>
-          </View>
-        )}
-        ListEmptyComponent={
-          <View style={styles.centered}>
-            <Text>No orders found</Text>
-          </View>
-        }
-      />
+      {/* Header */}
+      <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
+        <Text style={styles.headerTitle}>My Orders</Text>
+      </View>
+
+      {/* Filter Tabs */}
+      <View style={styles.filterContainer}>
+        <TouchableOpacity
+          style={[styles.filterTab, filter === 'all' && styles.filterTabActive]}
+          onPress={() => setFilter('all')}
+        >
+          <Text
+            style={[
+              styles.filterTabText,
+              filter === 'all' && styles.filterTabTextActive,
+            ]}
+          >
+            All
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.filterTab, filter === 'active' && styles.filterTabActive]}
+          onPress={() => setFilter('active')}
+        >
+          <Text
+            style={[
+              styles.filterTabText,
+              filter === 'active' && styles.filterTabTextActive,
+            ]}
+          >
+            Active
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[
+            styles.filterTab,
+            filter === 'completed' && styles.filterTabActive,
+          ]}
+          onPress={() => setFilter('completed')}
+        >
+          <Text
+            style={[
+              styles.filterTabText,
+              filter === 'completed' && styles.filterTabTextActive,
+            ]}
+          >
+            Completed
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[
+            styles.filterTab,
+            filter === 'cancelled' && styles.filterTabActive,
+          ]}
+          onPress={() => setFilter('cancelled')}
+        >
+          <Text
+            style={[
+              styles.filterTabText,
+              filter === 'cancelled' && styles.filterTabTextActive,
+            ]}
+          >
+            Cancelled
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Orders List */}
+      {isLoading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={Colors.primary} />
+          <Text style={styles.loadingText}>Loading orders...</Text>
+        </View>
+      ) : error ? (
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorTitle}>Failed to Load Orders</Text>
+          <Text style={styles.errorMessage}>
+            {error instanceof Error ? error.message : 'Something went wrong'}
+          </Text>
+          <TouchableOpacity style={styles.retryButton} onPress={() => refetch()}>
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      ) : filteredOrders.length === 0 ? (
+        <View style={styles.emptyContainer}>
+          <Package size={64} color="#ccc" />
+          <Text style={styles.emptyTitle}>No Orders Yet</Text>
+          <Text style={styles.emptyMessage}>
+            {filter === 'all'
+              ? 'Start ordering from your favorite restaurants'
+              : `No ${filter} orders found`}
+          </Text>
+          {filter === 'all' && (
+            <TouchableOpacity
+              style={styles.exploreButton}
+              onPress={() => router.push('/(tabs)')}
+            >
+              <Text style={styles.exploreButtonText}>Explore Restaurants</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      ) : (
+        <FlatList
+          data={filteredOrders}
+          keyExtractor={(item) => item.id}
+          renderItem={renderOrderCard}
+          contentContainerStyle={[
+            styles.listContent,
+            { paddingBottom: insets.bottom + 16 },
+          ]}
+          refreshControl={
+            <RefreshControl
+              refreshing={false}
+              onRefresh={refetch}
+              tintColor={Colors.primary}
+            />
+          }
+          showsVerticalScrollIndicator={false}
+        />
+      )}
     </View>
   );
 }
@@ -90,29 +279,193 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#fff',
   },
-  centered: {
+  header: {
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  headerTitle: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: '#333',
+  },
+  filterContainer: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  filterTab: {
+    flex: 1,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+    backgroundColor: '#f5f5f5',
+    alignItems: 'center',
+  },
+  filterTabActive: {
+    backgroundColor: Colors.primary,
+  },
+  filterTabText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#666',
+  },
+  filterTabTextActive: {
+    color: '#fff',
+  },
+  loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
   },
-  orderCard: {
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-  },
-  orderNumber: {
-    fontSize: 16,
-    fontWeight: '600' as const,
-    marginBottom: 4,
-  },
-  status: {
+  loadingText: {
+    marginTop: 12,
     fontSize: 14,
     color: '#666',
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  errorTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 8,
+  },
+  errorMessage: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 24,
+  },
+  retryButton: {
+    backgroundColor: Colors.primary,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  emptyTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#333',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  emptyMessage: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 24,
+  },
+  loginButton: {
+    backgroundColor: Colors.primary,
+    paddingHorizontal: 32,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  loginButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  exploreButton: {
+    backgroundColor: Colors.primary,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  exploreButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  listContent: {
+    padding: 16,
+  },
+  orderCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#f0f0f0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  orderHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  orderHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  statusIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  orderId: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#333',
     marginBottom: 2,
   },
-  total: {
-    fontSize: 14,
-    fontWeight: '500' as const,
+  orderDate: {
+    fontSize: 12,
+    color: '#999',
+  },
+  orderBody: {
+    marginBottom: 12,
+  },
+  orderItems: {
+    fontSize: 13,
+    color: '#666',
+    lineHeight: 18,
+  },
+  orderFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  statusBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+  },
+  statusText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  orderTotal: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#333',
   },
 });
