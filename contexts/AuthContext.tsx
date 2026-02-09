@@ -9,43 +9,50 @@ import React, {
   ReactNode,
 } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Session } from '@supabase/supabase-js';
+import { Session, User as SupabaseUser } from '@supabase/supabase-js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { User, UserRole, CardDetails } from '@/types';
-
-export type { User, UserRole, CardDetails };
 
 /* -------------------------------------------------------------------------- */
 /*                               Context Types                                */
 /* -------------------------------------------------------------------------- */
 
+interface SignupCredentials {
+  email: string;
+  password: string;
+  name?: string;
+  phone?: string;
+  role?: UserRole;
+}
+
+interface LoginCredentials {
+  email: string;
+  password: string;
+}
+
 export interface AuthContextValue {
-  session: Session | null;
   user: User | null;
-  profile: User | null;
-  isLoading: boolean;
-  isAuthenticated: boolean;
+  session: Session | null;
+  loading: boolean;
   error: string | null;
 
-  // Auth actions
-  signIn: (email: string, password: string) => Promise<{ error?: string }>;
-  signUp: (
-    email: string,
-    password: string,
-    name?: string,
-    role?: UserRole | 'user'
-  ) => Promise<{ error?: string }>;
-  logout: () => Promise<void>;
+  /** Auth */
+  signIn: (credentials: LoginCredentials) => Promise<void>;
+  signInPending: boolean;
 
-  // Profile
+  signup: (credentials: SignupCredentials) => Promise<void>;
+  signupPending: boolean;
+
+  signOut: () => Promise<void>;
+  refreshSession: () => Promise<void>;
+
+  /** Profile helpers */
   updateProfile: (data: Partial<User>) => Promise<void>;
-
-  // Local helpers
   toggleFavorite: (restaurantId: string) => void;
   addPoints: (points: number) => void;
   updateUser: (updates: Partial<User>) => void;
 
-  // Token
+  /** Token helper */
   getToken: () => Promise<string | null>;
 }
 
@@ -61,8 +68,7 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 const FAVORITES_KEY = 'user_favorites';
 const POINTS_KEY = 'user_points';
-const TOKEN_KEY = 'authToken';
-const USER_KEY = 'userData';
+const USER_KEY = 'user_profile';
 
 /* -------------------------------------------------------------------------- */
 /*                              Provider Component                             */
@@ -71,22 +77,23 @@ const USER_KEY = 'userData';
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const [signInPending, setSignInPending] = useState(false);
+  const [signupPending, setSignupPending] = useState(false);
+
   /* ------------------------------------------------------------------------ */
-  /*                        Load stored backend auth                           */
+  /*                            Load Stored Profile                            */
   /* ------------------------------------------------------------------------ */
 
-  const loadStoredAuth = async () => {
+  const loadStoredProfile = async () => {
     try {
-      const storedUser = await AsyncStorage.getItem(USER_KEY);
-
-      if (storedUser) {
-        setUser(JSON.parse(storedUser));
-      }
+      const stored = await AsyncStorage.getItem(USER_KEY);
+      if (stored) setUser(JSON.parse(stored));
     } catch (err) {
-      console.error('[Auth] Failed loading stored auth:', err);
+      console.warn('[Auth] Failed to load stored profile:', err);
     }
   };
 
@@ -98,7 +105,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let mounted = true;
 
     const init = async () => {
-      await loadStoredAuth();
+      await loadStoredProfile();
 
       const {
         data: { session },
@@ -109,29 +116,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(session);
 
       if (session?.user) {
-        await fetchProfile(session.user.id);
+        await fetchProfile(session.user);
       }
 
-      setIsLoading(false);
+      setLoading(false);
     };
 
     init();
 
-    const { data: listener } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
-        setSession(session);
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      setSession(session);
 
-        if (session?.user) {
-          await fetchProfile(session.user.id);
-        } else {
-          setUser(null);
-        }
+      if (session?.user) {
+        await fetchProfile(session.user);
+      } else {
+        setUser(null);
+        await AsyncStorage.removeItem(USER_KEY);
       }
-    );
+    });
 
     return () => {
       mounted = false;
-      listener.subscription.unsubscribe();
+      subscription.unsubscribe();
     };
   }, []);
 
@@ -139,14 +147,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   /*                               Fetch Profile                               */
   /* ------------------------------------------------------------------------ */
 
-  const fetchProfile = async (userId: string) => {
+  const fetchProfile = async (authUser: SupabaseUser) => {
     try {
       setError(null);
 
       const { data, error: dbError } = await supabase
         .from('users')
         .select('*')
-        .eq('id', userId)
+        .eq('id', authUser.id)
         .single();
 
       if (dbError && dbError.code !== 'PGRST116') {
@@ -156,12 +164,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const storedFavorites = await AsyncStorage.getItem(FAVORITES_KEY);
       const storedPoints = await AsyncStorage.getItem(POINTS_KEY);
 
-      const authUser = session?.user;
-
       const profile: User = {
-        id: userId,
-        name: data?.name || authUser?.user_metadata?.name || 'User',
-        email: data?.email || authUser?.email || '',
+        id: authUser.id,
+        name: data?.name || authUser.user_metadata?.name || 'User',
+        email: data?.email || authUser.email || '',
         phone: data?.phone || '',
         address: data?.address || '',
         role: data?.role || 'customer',
@@ -169,9 +175,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         favorites: storedFavorites
           ? JSON.parse(storedFavorites)
           : data?.favorites || [],
-        photo: data?.photo || authUser?.user_metadata?.avatar_url,
+        photo: data?.photo || authUser.user_metadata?.avatar_url,
         restaurantId: data?.restaurant_id,
-        cardDetails: data?.card_details,
+        cardDetails: data?.card_details as CardDetails | undefined,
       };
 
       setUser(profile);
@@ -183,88 +189,90 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   /* ------------------------------------------------------------------------ */
-  /*                                Auth Actions                               */
+  /*                                AUTH ACTIONS                               */
   /* ------------------------------------------------------------------------ */
 
-  const signIn = async (email: string, password: string) => {
+  const signIn = async ({ email, password }: LoginCredentials) => {
+    setSignInPending(true);
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
-      if (error) return { error: error.message };
+      if (error) throw error;
 
-      return {};
-    } catch (err: any) {
-      return { error: err.message };
+      setSession(data.session);
+      if (data.user) await fetchProfile(data.user);
+    } finally {
+      setSignInPending(false);
     }
   };
 
-  const signUp = async (
-    email: string,
-    password: string,
-    name?: string,
-    role: UserRole | 'user' = 'customer'
-  ) => {
+  const signup = async ({
+    email,
+    password,
+    name,
+    phone,
+    role = 'customer',
+  }: SignupCredentials) => {
+    setSignupPending(true);
     try {
-      const normalizedRole: UserRole = role === 'user' ? 'customer' : role;
-
-      const { error } = await supabase.auth.signUp({
+      const { data, error } = await supabase.auth.signUp({
         email,
         password,
-        options: { data: { name, role: normalizedRole } },
+        options: { data: { name, phone, role } },
       });
 
-      if (error) return { error: error.message };
+      if (error) throw error;
 
-      return {};
-    } catch (err: any) {
-      return { error: err.message };
+      setSession(data.session);
+      if (data.user) await fetchProfile(data.user);
+    } finally {
+      setSignupPending(false);
     }
   };
 
-  const logout = async () => {
-    await supabase.auth.signOut();
-    await AsyncStorage.multiRemove([TOKEN_KEY, USER_KEY]);
+  const signOut = async () => {
+    const { error } = await supabase.auth.signOut();
+    if (error) throw error;
+
     setSession(null);
     setUser(null);
+
+    await AsyncStorage.multiRemove([USER_KEY, FAVORITES_KEY, POINTS_KEY]);
+  };
+
+  const refreshSession = async () => {
+    const {
+      data: { session },
+      error,
+    } = await supabase.auth.refreshSession();
+
+    if (error) throw error;
+
+    setSession(session);
+    if (session?.user) await fetchProfile(session.user);
   };
 
   /* ------------------------------------------------------------------------ */
-  /*                             Profile Updates                               */
+  /*                             PROFILE HELPERS                               */
   /* ------------------------------------------------------------------------ */
 
   const updateProfile = async (data: Partial<User>) => {
-    try {
-      if (!user) throw new Error('No user logged in');
+    if (!user) throw new Error('No user logged in');
 
-      const updateData: Record<string, unknown> = {};
-      if (data.name !== undefined) updateData.name = data.name;
-      if (data.phone !== undefined) updateData.phone = data.phone;
-      if (data.address !== undefined) updateData.address = data.address;
+    const { error } = await supabase
+      .from('users')
+      .update(data)
+      .eq('id', user.id);
 
-      const { error: dbError } = await supabase
-        .from('users')
-        .update(updateData)
-        .eq('id', user.id);
+    if (error) throw error;
 
-      if (dbError) {
-        console.warn('[Auth] Supabase update failed:', dbError);
-      }
-
-      const updatedUser = { ...user, ...data } as User;
-      setUser(updatedUser);
-      await AsyncStorage.setItem(USER_KEY, JSON.stringify(updatedUser));
-    } catch (err) {
-      console.error('[Auth] Update profile failed:', err);
-      throw err;
-    }
+    const updated = { ...user, ...data };
+    setUser(updated);
+    await AsyncStorage.setItem(USER_KEY, JSON.stringify(updated));
   };
-
-  /* ------------------------------------------------------------------------ */
-  /*                           Local State Helpers                             */
-  /* ------------------------------------------------------------------------ */
 
   const toggleFavorite = useCallback((restaurantId: string) => {
     setUser((prev) => {
@@ -294,13 +302,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   /* ------------------------------------------------------------------------ */
-  /*                                Token Helper                               */
+  /*                                TOKEN HELPER                               */
   /* ------------------------------------------------------------------------ */
 
   const getToken = async (): Promise<string | null> => {
-    const token = await AsyncStorage.getItem(TOKEN_KEY);
-    if (token) return token;
-
     const {
       data: { session },
     } = await supabase.auth.getSession();
@@ -309,39 +314,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   /* ------------------------------------------------------------------------ */
-  /*                                  Provider                                 */
+  /*                                  PROVIDER                                 */
   /* ------------------------------------------------------------------------ */
 
-  return (
-    <AuthContext.Provider
-      value={{
-        session,
-        user,
-        profile: user,
-        isLoading,
-        isAuthenticated: !!session?.user || !!user,
-        error,
-        signIn,
-        signUp,
-        logout,
-        updateProfile,
-        toggleFavorite,
-        addPoints,
-        updateUser,
-        getToken,
-      }}
-    >
-      {children}
-    </AuthContext.Provider>
-  );
+  const value: AuthContextValue = {
+    user,
+    session,
+    loading,
+    error,
+    signIn,
+    signInPending,
+    signup,
+    signupPending,
+    signOut,
+    refreshSession,
+    updateProfile,
+    toggleFavorite,
+    addPoints,
+    updateUser,
+    getToken,
+  };
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 /* -------------------------------------------------------------------------- */
-/*                                    Hook                                    */
+/*                                    HOOK                                    */
 /* -------------------------------------------------------------------------- */
 
-export function useAuth() {
+export const useAuth = () => {
   const context = useContext(AuthContext);
   if (!context) throw new Error('useAuth must be used within AuthProvider');
   return context;
-}
+};
