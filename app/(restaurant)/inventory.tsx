@@ -8,10 +8,14 @@ import {
   TextInput,
   Modal,
   Alert,
+  ActivityIndicator,
+  FlatList,
+  TouchableOpacity,
 } from 'react-native';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Plus,
   Search,
@@ -28,6 +32,8 @@ import {
   Image as ImageIcon,
 } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
+import { useAuth } from '@/contexts/AuthContext';
+import { api } from '@/lib/api';
 
 interface InventoryItem {
   id: string;
@@ -35,87 +41,22 @@ interface InventoryItem {
   category: string;
   quantity: number;
   unit: string;
-  minStock: number;
+  minStock?: number;
+  lowStockThreshold?: number;
   price: number;
   image?: string;
-  lastUpdated: string;
+  lastUpdated?: string;
+  updatedAt?: string;
 }
-
-const mockInventory: InventoryItem[] = [
-  {
-    id: '1',
-    name: 'Chicken Breast',
-    category: 'Meat',
-    quantity: 25,
-    unit: 'kg',
-    minStock: 10,
-    price: 8.99,
-    image: 'https://images.unsplash.com/photo-1604503468506-a8da13d82791?w=200',
-    lastUpdated: '2026-01-22',
-  },
-  {
-    id: '2',
-    name: 'Olive Oil',
-    category: 'Oils & Sauces',
-    quantity: 8,
-    unit: 'bottles',
-    minStock: 5,
-    price: 12.50,
-    image: 'https://images.unsplash.com/photo-1474979266404-7eaacbcd87c5?w=200',
-    lastUpdated: '2026-01-21',
-  },
-  {
-    id: '3',
-    name: 'Pasta (Spaghetti)',
-    category: 'Dry Goods',
-    quantity: 3,
-    unit: 'kg',
-    minStock: 15,
-    price: 3.99,
-    image: 'https://images.unsplash.com/photo-1551462147-37885acc36f1?w=200',
-    lastUpdated: '2026-01-20',
-  },
-  {
-    id: '4',
-    name: 'Tomatoes',
-    category: 'Vegetables',
-    quantity: 18,
-    unit: 'kg',
-    minStock: 10,
-    price: 2.49,
-    image: 'https://images.unsplash.com/photo-1546470427-227c7b5f08c8?w=200',
-    lastUpdated: '2026-01-22',
-  },
-  {
-    id: '5',
-    name: 'Mozzarella Cheese',
-    category: 'Dairy',
-    quantity: 12,
-    unit: 'kg',
-    minStock: 8,
-    price: 15.99,
-    image: 'https://images.unsplash.com/photo-1486297678162-eb2a19b0a32d?w=200',
-    lastUpdated: '2026-01-21',
-  },
-  {
-    id: '6',
-    name: 'Fresh Basil',
-    category: 'Herbs',
-    quantity: 2,
-    unit: 'bunches',
-    minStock: 5,
-    price: 1.99,
-    image: 'https://images.unsplash.com/photo-1618164436241-4473940d1f5c?w=200',
-    lastUpdated: '2026-01-22',
-  },
-];
 
 const categories = ['All', 'Meat', 'Vegetables', 'Dairy', 'Dry Goods', 'Oils & Sauces', 'Herbs'];
 
 export default function InventoryScreen() {
   const insets = useSafeAreaInsets();
   const { colors, isDark } = useTheme();
-  const [inventory, setInventory] = useState<InventoryItem[]>(mockInventory);
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [modalVisible, setModalVisible] = useState(false);
@@ -130,16 +71,75 @@ export default function InventoryScreen() {
     image: '',
   });
 
-  const styles = createStyles(colors, isDark);
+  const restaurantId = user?.restaurantId || 'restaurant-123';
 
-  const lowStockItems = inventory.filter(item => item.quantity < item.minStock);
-  const totalValue = inventory.reduce((sum, item) => sum + (item.quantity * item.price), 0);
+  // Fetch inventory
+  const { 
+    data: inventoryData, 
+    isLoading,
+    error,
+    refetch,
+  } = useQuery({
+    queryKey: ['inventory', restaurantId],
+    queryFn: () => api.getRestaurantInventory(restaurantId),
+    enabled: !!restaurantId,
+  });
 
-  const filteredInventory = inventory.filter(item => {
+  // Update inventory item mutation
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Partial<InventoryItem> }) =>
+      api.updateInventoryItem(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['inventory', restaurantId] });
+      setModalVisible(false);
+      Alert.alert('Success', 'Item updated successfully');
+    },
+    onError: (error: any) => {
+      Alert.alert('Error', error.message || 'Failed to update item');
+    },
+  });
+
+  // Create inventory item mutation
+  const createMutation = useMutation({
+    mutationFn: (data: Partial<InventoryItem>) =>
+      api.createInventoryItem(restaurantId, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['inventory', restaurantId] });
+      setModalVisible(false);
+      Alert.alert('Success', 'Item added successfully');
+    },
+    onError: (error: any) => {
+      Alert.alert('Error', error.message || 'Failed to add item');
+    },
+  });
+
+  // Delete inventory item mutation
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => api.deleteInventoryItem(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['inventory', restaurantId] });
+      Alert.alert('Success', 'Item deleted successfully');
+    },
+    onError: (error: any) => {
+      Alert.alert('Error', error.message || 'Failed to delete item');
+    },
+  });
+
+  const inventory = inventoryData?.data || [];
+  const lowStockItems = inventory.filter((item: InventoryItem) => 
+    item.quantity < (item.minStock || item.lowStockThreshold || 5)
+  );
+  const totalValue = inventory.reduce((sum: number, item: InventoryItem) => 
+    sum + (item.quantity * (item.price || 0)), 0
+  );
+
+  const filteredInventory = inventory.filter((item: InventoryItem) => {
     const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesCategory = selectedCategory === 'All' || item.category === selectedCategory;
     return matchesSearch && matchesCategory;
   });
+
+  const styles = createStyles(colors, isDark);
 
   const handleAddItem = () => {
     setEditingItem(null);
@@ -162,8 +162,8 @@ export default function InventoryScreen() {
       category: item.category,
       quantity: item.quantity.toString(),
       unit: item.unit,
-      minStock: item.minStock.toString(),
-      price: item.price.toString(),
+      minStock: (item.minStock || item.lowStockThreshold || 5).toString(),
+      price: (item.price || 0).toString(),
       image: item.image || '',
     });
     setModalVisible(true);
@@ -178,9 +178,33 @@ export default function InventoryScreen() {
         { 
           text: 'Delete', 
           style: 'destructive',
-          onPress: () => setInventory(prev => prev.filter(item => item.id !== id))
+          onPress: () => deleteMutation.mutate(id),
         },
       ]
+    );
+  };
+
+  const handleUpdateQuantity = (item: InventoryItem) => {
+    Alert.prompt(
+      'Update Quantity',
+      `Current: ${item.quantity} ${item.unit}`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Update',
+          onPress: (newQty) => {
+            const qty = parseFloat(newQty || '0');
+            if (!isNaN(qty) && qty >= 0) {
+              updateMutation.mutate({
+                id: item.id,
+                data: { quantity: qty },
+              });
+            }
+          },
+        },
+      ],
+      'plain-text',
+      item.quantity.toString()
     );
   };
 
@@ -233,32 +257,66 @@ export default function InventoryScreen() {
       return;
     }
 
-    const newItem: InventoryItem = {
-      id: editingItem?.id || `item_${Date.now()}`,
+    const itemData = {
       name: formData.name,
       category: formData.category,
       quantity: parseFloat(formData.quantity),
       unit: formData.unit,
       minStock: parseFloat(formData.minStock) || 5,
+      lowStockThreshold: parseFloat(formData.minStock) || 5,
       price: parseFloat(formData.price),
       image: formData.image || undefined,
-      lastUpdated: new Date().toISOString().split('T')[0],
     };
 
     if (editingItem) {
-      setInventory(prev => prev.map(item => item.id === editingItem.id ? newItem : item));
+      updateMutation.mutate({
+        id: editingItem.id,
+        data: itemData,
+      });
     } else {
-      setInventory(prev => [newItem, ...prev]);
+      createMutation.mutate(itemData);
     }
-
-    setModalVisible(false);
   };
 
   const getStockStatus = (item: InventoryItem) => {
-    if (item.quantity < item.minStock) return 'low';
-    if (item.quantity < item.minStock * 1.5) return 'medium';
+    const threshold = item.minStock || item.lowStockThreshold || 5;
+    if (item.quantity < threshold) return 'low';
+    if (item.quantity < threshold * 1.5) return 'medium';
     return 'good';
   };
+
+  if (isLoading) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>Inventory</Text>
+        </View>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={styles.loadingText}>Loading inventory...</Text>
+        </View>
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>Inventory</Text>
+        </View>
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorTitle}>Failed to Load Inventory</Text>
+          <Text style={styles.errorMessage}>
+            {error instanceof Error ? error.message : 'Something went wrong'}
+          </Text>
+          <TouchableOpacity style={styles.retryButton} onPress={() => refetch()}>
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -312,7 +370,7 @@ export default function InventoryScreen() {
           <TextInput
             style={styles.searchInput}
             placeholder="Search inventory..."
-            placeholderTextColor={colors.placeholder}
+            placeholderTextColor={colors.textMuted}
             value={searchQuery}
             onChangeText={setSearchQuery}
           />
@@ -346,10 +404,17 @@ export default function InventoryScreen() {
         </ScrollView>
 
         <View style={styles.inventoryList}>
-          {filteredInventory.map((item) => {
+          {filteredInventory.map((item: InventoryItem) => {
             const stockStatus = getStockStatus(item);
+            const threshold = item.minStock || item.lowStockThreshold || 5;
             return (
-              <View key={item.id} style={styles.inventoryCard}>
+              <View 
+                key={item.id} 
+                style={[
+                  styles.inventoryCard,
+                  stockStatus === 'low' && styles.lowStockCard,
+                ]}
+              >
                 <Image
                   source={{ uri: item.image || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=200' }}
                   style={styles.itemImage}
@@ -378,24 +443,32 @@ export default function InventoryScreen() {
                   </View>
                   <Text style={styles.itemCategory}>{item.category}</Text>
                   <View style={styles.itemMeta}>
-                    <Text style={styles.itemPrice}>${item.price.toFixed(2)}/{item.unit}</Text>
-                    <Text style={styles.itemUpdated}>Updated {item.lastUpdated}</Text>
+                    <Text style={styles.itemPrice}>${(item.price || 0).toFixed(2)}/{item.unit}</Text>
+                    <Text style={styles.itemUpdated}>
+                      Updated {item.lastUpdated || item.updatedAt || 'N/A'}
+                    </Text>
                   </View>
                   <View style={styles.stockProgress}>
                     <View 
                       style={[
                         styles.stockProgressBar,
                         { 
-                          width: `${Math.min((item.quantity / (item.minStock * 2)) * 100, 100)}%`,
+                          width: `${Math.min((item.quantity / (threshold * 2)) * 100, 100)}%`,
                           backgroundColor: stockStatus === 'low' ? colors.error : 
                             stockStatus === 'medium' ? colors.warning : colors.success,
                         },
                       ]} 
                     />
                   </View>
-                  <Text style={styles.minStockText}>Min stock: {item.minStock} {item.unit}</Text>
+                  <Text style={styles.minStockText}>Min stock: {threshold} {item.unit}</Text>
                 </View>
                 <View style={styles.itemActions}>
+                  <Pressable 
+                    style={styles.actionBtn}
+                    onPress={() => handleUpdateQuantity(item)}
+                  >
+                    <Package size={18} color={colors.primary} />
+                  </Pressable>
                   <Pressable 
                     style={styles.actionBtn}
                     onPress={() => handleEditItem(item)}
@@ -412,6 +485,15 @@ export default function InventoryScreen() {
               </View>
             );
           })}
+          {filteredInventory.length === 0 && (
+            <View style={styles.emptyState}>
+              <Package size={48} color={colors.textMuted} />
+              <Text style={styles.emptyTitle}>No items found</Text>
+              <Text style={styles.emptyText}>
+                {searchQuery ? 'Try a different search term' : 'Add your first inventory item'}
+              </Text>
+            </View>
+          )}
         </View>
       </ScrollView>
 
@@ -465,7 +547,7 @@ export default function InventoryScreen() {
                 <TextInput
                   style={styles.formInput}
                   placeholder="Enter item name"
-                  placeholderTextColor={colors.placeholder}
+                  placeholderTextColor={colors.textMuted}
                   value={formData.name}
                   onChangeText={(text) => setFormData({ ...formData, name: text })}
                 />
@@ -502,7 +584,7 @@ export default function InventoryScreen() {
                   <TextInput
                     style={styles.formInput}
                     placeholder="0"
-                    placeholderTextColor={colors.placeholder}
+                    placeholderTextColor={colors.textMuted}
                     keyboardType="numeric"
                     value={formData.quantity}
                     onChangeText={(text) => setFormData({ ...formData, quantity: text })}
@@ -513,7 +595,7 @@ export default function InventoryScreen() {
                   <TextInput
                     style={styles.formInput}
                     placeholder="kg"
-                    placeholderTextColor={colors.placeholder}
+                    placeholderTextColor={colors.textMuted}
                     value={formData.unit}
                     onChangeText={(text) => setFormData({ ...formData, unit: text })}
                   />
@@ -526,7 +608,7 @@ export default function InventoryScreen() {
                   <TextInput
                     style={styles.formInput}
                     placeholder="5"
-                    placeholderTextColor={colors.placeholder}
+                    placeholderTextColor={colors.textMuted}
                     keyboardType="numeric"
                     value={formData.minStock}
                     onChangeText={(text) => setFormData({ ...formData, minStock: text })}
@@ -537,7 +619,7 @@ export default function InventoryScreen() {
                   <TextInput
                     style={styles.formInput}
                     placeholder="0.00"
-                    placeholderTextColor={colors.placeholder}
+                    placeholderTextColor={colors.textMuted}
                     keyboardType="decimal-pad"
                     value={formData.price}
                     onChangeText={(text) => setFormData({ ...formData, price: text })}
@@ -545,11 +627,21 @@ export default function InventoryScreen() {
                 </View>
               </View>
 
-              <Pressable style={styles.saveBtn} onPress={handleSaveItem}>
-                <Check size={20} color="#fff" />
-                <Text style={styles.saveBtnText}>
-                  {editingItem ? 'Update Item' : 'Add Item'}
-                </Text>
+              <Pressable 
+                style={styles.saveBtn} 
+                onPress={handleSaveItem}
+                disabled={updateMutation.isPending || createMutation.isPending}
+              >
+                {(updateMutation.isPending || createMutation.isPending) ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <>
+                    <Check size={20} color="#fff" />
+                    <Text style={styles.saveBtnText}>
+                      {editingItem ? 'Update Item' : 'Add Item'}
+                    </Text>
+                  </>
+                )}
               </Pressable>
             </ScrollView>
           </View>
@@ -592,6 +684,45 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     fontSize: 14,
     fontWeight: '600' as const,
     color: '#fff',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: colors.textSecondary,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  errorTitle: {
+    fontSize: 18,
+    fontWeight: '600' as const,
+    color: colors.text,
+    marginBottom: 8,
+  },
+  errorMessage: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginBottom: 24,
+  },
+  retryButton: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600' as const,
   },
   statsRow: {
     flexDirection: 'row',
@@ -699,6 +830,10 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.cardBorder,
   },
+  lowStockCard: {
+    borderWidth: 2,
+    borderColor: colors.warning,
+  },
   itemImage: {
     width: 70,
     height: 70,
@@ -788,6 +923,22 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  emptyState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+    gap: 12,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: '600' as const,
+    color: colors.text,
+  },
+  emptyText: {
+    fontSize: 14,
+    color: colors.textMuted,
+    textAlign: 'center',
+  },
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
@@ -870,7 +1021,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     marginBottom: 8,
   },
   formInput: {
-    backgroundColor: colors.inputBackground,
+    backgroundColor: colors.inputBackground || colors.backgroundSecondary,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: 12,
