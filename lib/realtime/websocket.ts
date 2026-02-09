@@ -9,7 +9,7 @@ interface WebSocketConfig {
 const config: WebSocketConfig = {
   baseUrl: __DEV__
     ? 'http://localhost:8080'
-    : Constants.expoConfig?.extra?.apiUrl?.replace('/api/v1', '') || 'https://your-api.fly.dev',
+    : Constants.expoConfig?.extra?.apiUrl?.replace('/api/v1', '') || 'https://primedine.fly.dev/',
   
   // WebSocket URL (ws:// or wss://)
   wsUrl: __DEV__
