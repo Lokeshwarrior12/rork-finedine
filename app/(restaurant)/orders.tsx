@@ -19,7 +19,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   ChevronLeft,
   ShoppingBag,
@@ -36,12 +36,10 @@ import {
   CircleX,
   Search,
   User,
-  Filter,
-  Truck,
 } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
-import { api } from '@/lib/api';
+import { useRestaurantOrders, useUpdateOrderStatus } from '@/hooks/useApi';
 import { supabase } from '@/lib/supabase';
 
 const { width } = Dimensions.get('window');
@@ -121,32 +119,16 @@ export default function OrdersScreen() {
 
   const restaurantId = user?.restaurantId || 'restaurant-123';
 
-  // Fetch restaurant orders
   const {
-    data: ordersData,
+    data: ordersRaw,
     isLoading,
     error,
     refetch,
-  } = useQuery({
-    queryKey: ['restaurant-orders', restaurantId],
-    queryFn: () => api.getRestaurantOrders(restaurantId),
-    enabled: !!restaurantId,
-    refetchInterval: 15000, // Refresh every 15 seconds
-  });
+  } = useRestaurantOrders(restaurantId);
 
-  // Update order status mutation
-  const updateStatusMutation = useMutation({
-    mutationFn: ({ orderId, status }: { orderId: string; status: OrderStatus }) =>
-      api.updateOrderStatus(orderId, status),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['restaurant-orders', restaurantId] });
-    },
-    onError: (error: any) => {
-      Alert.alert('Update Failed', error.message || 'Failed to update order status');
-    },
-  });
+  const updateStatusMutation = useUpdateOrderStatus();
 
-  const orders = ordersData?.data || [];
+  const orders = (ordersRaw || []) as Order[];
 
   // Real-time subscription for new orders
   useEffect(() => {
@@ -231,7 +213,7 @@ export default function OrdersScreen() {
 
   const handleAcceptOrder = (order: Order) => {
     updateStatusMutation.mutate(
-      { orderId: order.id, status: 'accepted' },
+      { orderId: order.id, status: 'accepted', restaurantId },
       {
         onSuccess: () => {
           setShowOrderModal(false);
@@ -252,7 +234,7 @@ export default function OrdersScreen() {
           style: 'destructive',
           onPress: () => {
             updateStatusMutation.mutate(
-              { orderId: order.id, status: 'rejected' },
+              { orderId: order.id, status: 'rejected', restaurantId },
               {
                 onSuccess: () => {
                   setShowOrderModal(false);
@@ -267,7 +249,7 @@ export default function OrdersScreen() {
 
   const handleUpdateStatus = (order: Order, newStatus: OrderStatus) => {
     updateStatusMutation.mutate(
-      { orderId: order.id, status: newStatus },
+      { orderId: order.id, status: newStatus, restaurantId },
       {
         onSuccess: () => {
           setShowOrderModal(false);

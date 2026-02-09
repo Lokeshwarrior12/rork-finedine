@@ -15,7 +15,7 @@ import {
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+
 import {
   Plus,
   Search,
@@ -33,7 +33,7 @@ import {
 } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
-import { api } from '@/lib/api';
+import { useInventory, useCreateInventoryItem, useUpdateInventoryItem, useDeleteInventoryItem } from '@/hooks/useApi';
 
 interface InventoryItem {
   id: string;
@@ -55,8 +55,6 @@ export default function InventoryScreen() {
   const insets = useSafeAreaInsets();
   const { colors, isDark } = useTheme();
   const { user } = useAuth();
-  const queryClient = useQueryClient();
-
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [modalVisible, setModalVisible] = useState(false);
@@ -71,61 +69,20 @@ export default function InventoryScreen() {
     image: '',
   });
 
-  const restaurantId = user?.restaurantId || 'restaurant-123';
+  const restaurantId = user?.restaurantId || '';
 
-  // Fetch inventory
   const { 
-    data: inventoryData, 
+    data: inventoryRaw, 
     isLoading,
     error,
     refetch,
-  } = useQuery({
-    queryKey: ['inventory', restaurantId],
-    queryFn: () => api.getRestaurantInventory(restaurantId),
-    enabled: !!restaurantId,
-  });
+  } = useInventory(restaurantId);
 
-  // Update inventory item mutation
-  const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: Partial<InventoryItem> }) =>
-      api.updateInventoryItem(id, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['inventory', restaurantId] });
-      setModalVisible(false);
-      Alert.alert('Success', 'Item updated successfully');
-    },
-    onError: (error: any) => {
-      Alert.alert('Error', error.message || 'Failed to update item');
-    },
-  });
+  const updateMutation = useUpdateInventoryItem();
+  const createMutation = useCreateInventoryItem();
+  const deleteMutation = useDeleteInventoryItem();
 
-  // Create inventory item mutation
-  const createMutation = useMutation({
-    mutationFn: (data: Partial<InventoryItem>) =>
-      api.createInventoryItem(restaurantId, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['inventory', restaurantId] });
-      setModalVisible(false);
-      Alert.alert('Success', 'Item added successfully');
-    },
-    onError: (error: any) => {
-      Alert.alert('Error', error.message || 'Failed to add item');
-    },
-  });
-
-  // Delete inventory item mutation
-  const deleteMutation = useMutation({
-    mutationFn: (id: string) => api.deleteInventoryItem(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['inventory', restaurantId] });
-      Alert.alert('Success', 'Item deleted successfully');
-    },
-    onError: (error: any) => {
-      Alert.alert('Error', error.message || 'Failed to delete item');
-    },
-  });
-
-  const inventory = inventoryData?.data || [];
+  const inventory = (inventoryRaw || []) as InventoryItem[];
   const lowStockItems = inventory.filter((item: InventoryItem) => 
     item.quantity < (item.minStock || item.lowStockThreshold || 5)
   );
@@ -178,7 +135,10 @@ export default function InventoryScreen() {
         { 
           text: 'Delete', 
           style: 'destructive',
-          onPress: () => deleteMutation.mutate(id),
+          onPress: () => deleteMutation.mutate(
+            { id, restaurantId },
+            { onError: (err) => Alert.alert('Error', err.message) }
+          ),
         },
       ]
     );
@@ -197,7 +157,8 @@ export default function InventoryScreen() {
             if (!isNaN(qty) && qty >= 0) {
               updateMutation.mutate({
                 id: item.id,
-                data: { quantity: qty },
+                restaurantId,
+                quantity: qty,
               });
             }
           },
@@ -271,10 +232,36 @@ export default function InventoryScreen() {
     if (editingItem) {
       updateMutation.mutate({
         id: editingItem.id,
-        data: itemData,
+        restaurantId,
+        name: itemData.name,
+        category: itemData.category,
+        quantity: itemData.quantity,
+        unit: itemData.unit,
+        minStock: itemData.minStock,
+        costPerUnit: itemData.price,
+      }, {
+        onSuccess: () => {
+          setModalVisible(false);
+          Alert.alert('Success', 'Item updated successfully');
+        },
+        onError: (err) => Alert.alert('Error', err.message),
       });
     } else {
-      createMutation.mutate(itemData);
+      createMutation.mutate({
+        restaurantId,
+        name: itemData.name,
+        category: itemData.category,
+        quantity: itemData.quantity,
+        unit: itemData.unit,
+        minStock: itemData.minStock,
+        costPerUnit: itemData.price,
+      }, {
+        onSuccess: () => {
+          setModalVisible(false);
+          Alert.alert('Success', 'Item added successfully');
+        },
+        onError: (err) => Alert.alert('Error', err.message),
+      });
     }
   };
 

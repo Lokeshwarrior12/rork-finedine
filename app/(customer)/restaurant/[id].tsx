@@ -1,6 +1,3 @@
-// app/(customer)/restaurant/[id].tsx
-// Restaurant Detail Page with Menu, Reviews, and Add to Cart
-
 import React, { useState } from 'react';
 import {
   View,
@@ -10,11 +7,8 @@ import {
   Image,
   TouchableOpacity,
   ActivityIndicator,
-  Pressable,
-  Dimensions,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { 
   ArrowLeft, 
   Star, 
@@ -29,14 +23,26 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { api, Restaurant, MenuItem } from '@/lib/api';
+import { useRestaurant, useMenuItems } from '@/hooks/useApi';
 import { useAuth } from '@/contexts/AuthContext';
 import Colors from '@/constants/colors';
 
-const { width } = Dimensions.get('window');
+interface MenuItemData {
+  id: string;
+  restaurantId: string;
+  name: string;
+  description?: string;
+  price: number;
+  category?: string;
+  image?: string;
+  isAvailable?: boolean;
+  isVegetarian?: boolean;
+  isVegan?: boolean;
+  isGlutenFree?: boolean;
+}
 
 interface CartItem {
-  menuItem: MenuItem;
+  menuItem: MenuItemData;
   quantity: number;
 }
 
@@ -44,64 +50,24 @@ export default function RestaurantDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const queryClient = useQueryClient();
-  const { user } = useAuth();
+  const { user, toggleFavorite } = useAuth();
 
   const [cart, setCart] = useState<CartItem[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
 
-  // Fetch restaurant details
-  const { data: restaurantData, isLoading: restaurantLoading, error: restaurantError } = useQuery({
-    queryKey: ['restaurant', id],
-    queryFn: () => api.getRestaurant(id!),
-    enabled: !!id,
-  });
+  const { data: restaurant, isLoading: restaurantLoading, error: restaurantError } = useRestaurant(id);
+  const { data: menuItems, isLoading: menuLoading } = useMenuItems(id);
 
-  // Fetch menu items
-  const { data: menuData, isLoading: menuLoading } = useQuery({
-    queryKey: ['menu', id],
-    queryFn: () => api.getRestaurantMenu(id!),
-    enabled: !!id,
-  });
+  const isFavorite = user?.favorites?.includes(id || '') ?? false;
+  const allMenuItems = (menuItems || []) as MenuItemData[];
 
-  // Fetch user favorites
-  const { data: favoritesData } = useQuery({
-    queryKey: ['favorites'],
-    queryFn: () => api.getFavorites(),
-    enabled: !!user,
-  });
+  const categories = ['All', ...new Set(allMenuItems.map((item) => item.category || 'Other'))];
 
-  // Add to favorites mutation
-  const addFavoriteMutation = useMutation({
-    mutationFn: (restaurantId: string) => api.addFavorite(restaurantId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['favorites'] });
-    },
-  });
-
-  // Remove from favorites mutation
-  const removeFavoriteMutation = useMutation({
-    mutationFn: (restaurantId: string) => api.removeFavorite(restaurantId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['favorites'] });
-    },
-  });
-
-  const restaurant = restaurantData?.data;
-  const menuItems = menuData?.data || [];
-  const favorites = favoritesData?.data || [];
-  const isFavorite = favorites.some((fav) => fav.id === id);
-
-  // Get unique categories
-  const categories = ['All', ...new Set(menuItems.map((item) => item.category || 'Other'))];
-
-  // Filter menu items by category
   const filteredItems = selectedCategory === 'All'
-    ? menuItems
-    : menuItems.filter((item) => item.category === selectedCategory);
+    ? allMenuItems
+    : allMenuItems.filter((item) => item.category === selectedCategory);
 
-  // Cart functions
-  const addToCart = (menuItem: MenuItem) => {
+  const addToCart = (menuItem: MenuItemData) => {
     setCart((prev) => {
       const existing = prev.find((item) => item.menuItem.id === menuItem.id);
       if (existing) {
@@ -141,22 +107,7 @@ export default function RestaurantDetailScreen() {
       router.push('/login');
       return;
     }
-    if (isFavorite) {
-      removeFavoriteMutation.mutate(id!);
-    } else {
-      addFavoriteMutation.mutate(id!);
-    }
-  };
-
-  const handleGoToCart = () => {
-    // Navigate to cart with data
-    router.push({
-      pathname: '/(customer)/cart',
-      params: { 
-        restaurantId: id,
-        cartData: JSON.stringify(cart),
-      },
-    });
+    if (id) toggleFavorite(id);
   };
 
   if (restaurantLoading || menuLoading) {
@@ -185,7 +136,6 @@ export default function RestaurantDetailScreen() {
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}>
-        {/* Header Image */}
         <View style={styles.headerImage}>
           {restaurant.images && restaurant.images.length > 0 ? (
             <Image source={{ uri: restaurant.images[0] }} style={styles.image} />
@@ -196,7 +146,6 @@ export default function RestaurantDetailScreen() {
             />
           )}
           
-          {/* Back button */}
           <TouchableOpacity
             style={[styles.headerButton, { top: insets.top + 10, left: 16 }]}
             onPress={() => router.back()}
@@ -204,11 +153,9 @@ export default function RestaurantDetailScreen() {
             <ArrowLeft size={24} color="#fff" />
           </TouchableOpacity>
 
-          {/* Favorite button */}
           <TouchableOpacity
             style={[styles.headerButton, { top: insets.top + 10, right: 16 }]}
             onPress={handleToggleFavorite}
-            disabled={addFavoriteMutation.isPending || removeFavoriteMutation.isPending}
           >
             <Heart 
               size={24} 
@@ -218,38 +165,26 @@ export default function RestaurantDetailScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Restaurant Info */}
         <View style={styles.infoSection}>
           <Text style={styles.restaurantName}>{restaurant.name}</Text>
           
           <View style={styles.statsRow}>
             <View style={styles.statItem}>
               <Star size={16} color="#FFB800" fill="#FFB800" />
-              <Text style={styles.statText}>{restaurant.rating.toFixed(1)}</Text>
-              <Text style={styles.statSubtext}>({restaurant.totalReviews})</Text>
+              <Text style={styles.statText}>{(restaurant.rating ?? 0).toFixed(1)}</Text>
+              <Text style={styles.statSubtext}>({restaurant.reviewCount ?? 0})</Text>
             </View>
             <View style={styles.statDivider} />
             <View style={styles.statItem}>
-              <Text style={styles.statText}>{'$'.repeat(restaurant.priceRange)}</Text>
-              <Text style={styles.statSubtext}>Price</Text>
+              <Text style={styles.statText}>{restaurant.cuisineType}</Text>
             </View>
             <View style={styles.statDivider} />
             <View style={styles.statItem}>
               <Clock size={16} color="#666" />
-              <Text style={styles.statText}>30-45</Text>
+              <Text style={styles.statText}>{restaurant.waitingTime || '15-30'}</Text>
               <Text style={styles.statSubtext}>min</Text>
             </View>
           </View>
-
-          {restaurant.cuisineTypes && restaurant.cuisineTypes.length > 0 && (
-            <View style={styles.cuisineContainer}>
-              {restaurant.cuisineTypes.map((cuisine, index) => (
-                <View key={index} style={styles.cuisineTag}>
-                  <Text style={styles.cuisineText}>{cuisine}</Text>
-                </View>
-              ))}
-            </View>
-          )}
 
           <View style={styles.detailRow}>
             <MapPin size={16} color="#666" />
@@ -268,117 +203,133 @@ export default function RestaurantDetailScreen() {
           )}
         </View>
 
-        {/* Menu Categories */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.categoriesScroll}
-          contentContainerStyle={styles.categoriesContent}
-        >
-          {categories.map((category) => (
-            <TouchableOpacity
-              key={category}
-              style={[
-                styles.categoryButton,
-                selectedCategory === category && styles.categoryButtonActive,
-              ]}
-              onPress={() => setSelectedCategory(category)}
+        {allMenuItems.length > 0 && (
+          <>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.categoriesScroll}
+              contentContainerStyle={styles.categoriesContent}
             >
-              <Text
-                style={[
-                  styles.categoryText,
-                  selectedCategory === category && styles.categoryTextActive,
-                ]}
-              >
-                {category}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
+              {categories.map((category) => (
+                <TouchableOpacity
+                  key={category}
+                  style={[
+                    styles.categoryButton,
+                    selectedCategory === category && styles.categoryButtonActive,
+                  ]}
+                  onPress={() => setSelectedCategory(category)}
+                >
+                  <Text
+                    style={[
+                      styles.categoryText,
+                      selectedCategory === category && styles.categoryTextActive,
+                    ]}
+                  >
+                    {category}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
 
-        {/* Menu Items */}
-        <View style={styles.menuSection}>
-          <Text style={styles.menuTitle}>Menu</Text>
-          {filteredItems.length === 0 ? (
-            <Text style={styles.emptyText}>No items in this category</Text>
-          ) : (
-            filteredItems.map((item) => {
-              const quantity = getItemQuantity(item.id);
-              return (
-                <View key={item.id} style={styles.menuItem}>
-                  <View style={styles.menuItemInfo}>
-                    <Text style={styles.menuItemName}>{item.name}</Text>
-                    {item.description && (
-                      <Text style={styles.menuItemDescription} numberOfLines={2}>
-                        {item.description}
-                      </Text>
-                    )}
-                    <View style={styles.menuItemFooter}>
-                      <Text style={styles.menuItemPrice}>${item.price.toFixed(2)}</Text>
-                      <View style={styles.menuItemBadges}>
-                        {item.isVegetarian && (
-                          <View style={styles.badge}>
-                            <Text style={styles.badgeText}>🌱</Text>
-                          </View>
+            <View style={styles.menuSection}>
+              <Text style={styles.menuTitle}>Menu</Text>
+              {filteredItems.length === 0 ? (
+                <Text style={styles.emptyText}>No items in this category</Text>
+              ) : (
+                filteredItems.map((item) => {
+                  const quantity = getItemQuantity(item.id);
+                  return (
+                    <View key={item.id} style={styles.menuItem}>
+                      <View style={styles.menuItemInfo}>
+                        <Text style={styles.menuItemName}>{item.name}</Text>
+                        {item.description && (
+                          <Text style={styles.menuItemDescription} numberOfLines={2}>
+                            {item.description}
+                          </Text>
                         )}
-                        {item.isVegan && (
-                          <View style={styles.badge}>
-                            <Text style={styles.badgeText}>V</Text>
+                        <View style={styles.menuItemFooter}>
+                          <Text style={styles.menuItemPrice}>${(item.price ?? 0).toFixed(2)}</Text>
+                          <View style={styles.menuItemBadges}>
+                            {item.isVegetarian && (
+                              <View style={styles.badge}>
+                                <Text style={styles.badgeText}>🌱</Text>
+                              </View>
+                            )}
+                            {item.isVegan && (
+                              <View style={styles.badge}>
+                                <Text style={styles.badgeText}>V</Text>
+                              </View>
+                            )}
                           </View>
-                        )}
+                        </View>
                       </View>
-                    </View>
-                  </View>
 
-                  {item.images && item.images.length > 0 && (
-                    <Image source={{ uri: item.images[0] }} style={styles.menuItemImage} />
-                  )}
+                      {item.image && (
+                        <Image source={{ uri: item.image }} style={styles.menuItemImage} />
+                      )}
 
-                  {item.isAvailable ? (
-                    quantity > 0 ? (
-                      <View style={styles.quantityControl}>
-                        <TouchableOpacity
-                          style={styles.quantityButton}
-                          onPress={() => removeFromCart(item.id)}
-                        >
-                          <Minus size={16} color={Colors.primary} />
-                        </TouchableOpacity>
-                        <Text style={styles.quantityText}>{quantity}</Text>
-                        <TouchableOpacity
-                          style={styles.quantityButton}
-                          onPress={() => addToCart(item)}
-                        >
-                          <Plus size={16} color={Colors.primary} />
-                        </TouchableOpacity>
-                      </View>
-                    ) : (
-                      <TouchableOpacity
-                        style={styles.addButton}
-                        onPress={() => addToCart(item)}
-                      >
-                        <Plus size={20} color="#fff" />
-                      </TouchableOpacity>
-                    )
-                  ) : (
-                    <View style={styles.unavailableBadge}>
-                      <Text style={styles.unavailableText}>Unavailable</Text>
+                      {item.isAvailable !== false ? (
+                        quantity > 0 ? (
+                          <View style={styles.quantityControl}>
+                            <TouchableOpacity
+                              style={styles.quantityButton}
+                              onPress={() => removeFromCart(item.id)}
+                            >
+                              <Minus size={16} color={Colors.primary} />
+                            </TouchableOpacity>
+                            <Text style={styles.quantityText}>{quantity}</Text>
+                            <TouchableOpacity
+                              style={styles.quantityButton}
+                              onPress={() => addToCart(item)}
+                            >
+                              <Plus size={16} color={Colors.primary} />
+                            </TouchableOpacity>
+                          </View>
+                        ) : (
+                          <TouchableOpacity
+                            style={styles.addButton}
+                            onPress={() => addToCart(item)}
+                          >
+                            <Plus size={20} color="#fff" />
+                          </TouchableOpacity>
+                        )
+                      ) : (
+                        <View style={styles.unavailableBadge}>
+                          <Text style={styles.unavailableText}>Unavailable</Text>
+                        </View>
+                      )}
                     </View>
-                  )}
-                </View>
-              );
-            })
-          )}
-        </View>
+                  );
+                })
+              )}
+            </View>
+          </>
+        )}
+
+        {allMenuItems.length === 0 && (
+          <View style={styles.menuSection}>
+            <Text style={styles.menuTitle}>Menu</Text>
+            <Text style={styles.emptyText}>No menu items available yet</Text>
+          </View>
+        )}
       </ScrollView>
 
-      {/* Cart Footer */}
       {cartItemCount > 0 && (
         <View style={[styles.cartFooter, { paddingBottom: insets.bottom + 16 }]}>
           <View style={styles.cartInfo}>
             <Text style={styles.cartItemCount}>{cartItemCount} items</Text>
             <Text style={styles.cartTotal}>${cartTotal.toFixed(2)}</Text>
           </View>
-          <TouchableOpacity style={styles.viewCartButton} onPress={handleGoToCart}>
+          <TouchableOpacity style={styles.viewCartButton} onPress={() => {
+            router.push({
+              pathname: '/(customer)/checkout' as any,
+              params: { 
+                restaurantId: id,
+                cartData: JSON.stringify(cart),
+              },
+            });
+          }}>
             <Text style={styles.viewCartText}>View Cart</Text>
             <ShoppingCart size={20} color="#fff" />
           </TouchableOpacity>
@@ -413,14 +364,14 @@ const styles = StyleSheet.create({
   },
   errorTitle: {
     fontSize: 20,
-    fontWeight: '600',
+    fontWeight: '600' as const,
     color: '#333',
     marginBottom: 8,
   },
   errorMessage: {
     fontSize: 14,
     color: '#666',
-    textAlign: 'center',
+    textAlign: 'center' as const,
     marginBottom: 24,
   },
   backButton: {
@@ -432,12 +383,12 @@ const styles = StyleSheet.create({
   backButtonText: {
     color: '#fff',
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '600' as const,
   },
   headerImage: {
     width: '100%',
     height: 250,
-    position: 'relative',
+    position: 'relative' as const,
   },
   image: {
     width: '100%',
@@ -448,13 +399,13 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   headerButton: {
-    position: 'absolute',
+    position: 'absolute' as const,
     width: 40,
     height: 40,
     borderRadius: 20,
     backgroundColor: 'rgba(0,0,0,0.5)',
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
   infoSection: {
     padding: 16,
@@ -463,18 +414,18 @@ const styles = StyleSheet.create({
   },
   restaurantName: {
     fontSize: 24,
-    fontWeight: '700',
+    fontWeight: '700' as const,
     color: '#333',
     marginBottom: 12,
   },
   statsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     marginBottom: 12,
   },
   statItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     gap: 4,
   },
   statDivider: {
@@ -485,32 +436,16 @@ const styles = StyleSheet.create({
   },
   statText: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '600' as const,
     color: '#333',
   },
   statSubtext: {
     fontSize: 12,
     color: '#666',
   },
-  cuisineContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 12,
-  },
-  cuisineTag: {
-    backgroundColor: '#f0f0f0',
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  cuisineText: {
-    fontSize: 12,
-    color: '#666',
-  },
   detailRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     gap: 8,
     marginBottom: 8,
   },
@@ -546,7 +481,7 @@ const styles = StyleSheet.create({
   },
   categoryText: {
     fontSize: 14,
-    fontWeight: '500',
+    fontWeight: '500' as const,
     color: '#666',
   },
   categoryTextActive: {
@@ -557,22 +492,22 @@ const styles = StyleSheet.create({
   },
   menuTitle: {
     fontSize: 20,
-    fontWeight: '700',
+    fontWeight: '700' as const,
     color: '#333',
     marginBottom: 16,
   },
   emptyText: {
     fontSize: 14,
     color: '#666',
-    textAlign: 'center',
+    textAlign: 'center' as const,
     marginTop: 24,
   },
   menuItem: {
-    flexDirection: 'row',
+    flexDirection: 'row' as const,
     paddingVertical: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#f0f0f0',
-    position: 'relative',
+    position: 'relative' as const,
   },
   menuItemInfo: {
     flex: 1,
@@ -580,7 +515,7 @@ const styles = StyleSheet.create({
   },
   menuItemName: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '600' as const,
     color: '#333',
     marginBottom: 4,
   },
@@ -591,17 +526,17 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   menuItemFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
   },
   menuItemPrice: {
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: '700' as const,
     color: Colors.primary,
   },
   menuItemBadges: {
-    flexDirection: 'row',
+    flexDirection: 'row' as const,
     gap: 4,
   },
   badge: {
@@ -612,7 +547,7 @@ const styles = StyleSheet.create({
   },
   badgeText: {
     fontSize: 10,
-    fontWeight: '600',
+    fontWeight: '600' as const,
   },
   menuItemImage: {
     width: 80,
@@ -620,22 +555,22 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   addButton: {
-    position: 'absolute',
+    position: 'absolute' as const,
     right: 0,
     bottom: 16,
     width: 32,
     height: 32,
     borderRadius: 16,
     backgroundColor: Colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
   quantityControl: {
-    position: 'absolute',
+    position: 'absolute' as const,
     right: 0,
     bottom: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     backgroundColor: '#f5f5f5',
     borderRadius: 20,
     paddingHorizontal: 4,
@@ -645,17 +580,17 @@ const styles = StyleSheet.create({
     height: 28,
     borderRadius: 14,
     backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
   quantityText: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '600' as const,
     color: '#333',
     marginHorizontal: 12,
   },
   unavailableBadge: {
-    position: 'absolute',
+    position: 'absolute' as const,
     right: 0,
     bottom: 16,
     backgroundColor: '#f0f0f0',
@@ -668,7 +603,7 @@ const styles = StyleSheet.create({
     color: '#999',
   },
   cartFooter: {
-    position: 'absolute',
+    position: 'absolute' as const,
     bottom: 0,
     left: 0,
     right: 0,
@@ -676,9 +611,9 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: '#f0f0f0',
     padding: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -2 },
     shadowOpacity: 0.1,
@@ -695,12 +630,12 @@ const styles = StyleSheet.create({
   },
   cartTotal: {
     fontSize: 20,
-    fontWeight: '700',
+    fontWeight: '700' as const,
     color: '#333',
   },
   viewCartButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     backgroundColor: Colors.primary,
     paddingHorizontal: 24,
     paddingVertical: 12,
@@ -709,7 +644,7 @@ const styles = StyleSheet.create({
   },
   viewCartText: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '600' as const,
     color: '#fff',
   },
 });

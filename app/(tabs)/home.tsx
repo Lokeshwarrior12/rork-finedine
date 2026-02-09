@@ -1,6 +1,5 @@
-// app/(tabs)/index.tsx
-import { api, Restaurant } from '@/lib/api';
-import { useQuery } from '@tanstack/react-query';
+import { useRestaurants } from '@/hooks/useApi';
+import { Restaurant } from '@/types';
 import { 
   View, 
   Text, 
@@ -12,20 +11,17 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 import { useState } from 'react';
+import Colors from '@/constants/colors';
 
 export default function HomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
 
   const { 
-    data, 
+    data: restaurants, 
     isLoading, 
     error,
     refetch 
-  } = useQuery({
-    queryKey: ['restaurants'],
-    queryFn: () => api.getRestaurants(),
-    staleTime: 5 * 60 * 1000,
-  });
+  } = useRestaurants();
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -36,7 +32,7 @@ export default function HomeScreen() {
   if (isLoading && !refreshing) {
     return (
       <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#007AFF" />
+        <ActivityIndicator size="large" color={Colors.primary} />
         <Text style={styles.loadingText}>Loading restaurants...</Text>
       </View>
     );
@@ -45,12 +41,9 @@ export default function HomeScreen() {
   if (error) {
     return (
       <View style={styles.centerContainer}>
-        <Text style={styles.errorTitle}>⚠️ Connection Error</Text>
+        <Text style={styles.errorTitle}>Something went wrong</Text>
         <Text style={styles.errorMessage}>
           {error instanceof Error ? error.message : 'Failed to load restaurants'}
-        </Text>
-        <Text style={styles.errorHint}>
-          Make sure your backend is running at localhost:8080
         </Text>
         <TouchableOpacity 
           style={styles.retryButton}
@@ -62,9 +55,9 @@ export default function HomeScreen() {
     );
   }
 
-  const restaurants = data?.data || [];
+  const restaurantList = restaurants || [];
 
-  if (restaurants.length === 0) {
+  if (restaurantList.length === 0) {
     return (
       <View style={styles.centerContainer}>
         <Text style={styles.emptyTitle}>No Restaurants Found</Text>
@@ -80,12 +73,12 @@ export default function HomeScreen() {
       <Text style={styles.header}>Discover Restaurants</Text>
       
       <FlatList
-        data={restaurants}
+        data={restaurantList}
         keyExtractor={(item) => item.id}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />
         }
-        renderItem={({ item }) => (
+        renderItem={({ item }: { item: Restaurant }) => (
           <TouchableOpacity
             style={styles.restaurantCard}
             onPress={() => router.push(`/restaurant/${item.id}` as any)}
@@ -93,28 +86,24 @@ export default function HomeScreen() {
             <View style={styles.restaurantInfo}>
               <Text style={styles.restaurantName}>{item.name}</Text>
               
-              {item.cuisineTypes && item.cuisineTypes.length > 0 && (
+              {item.cuisineType && (
                 <View style={styles.cuisineContainer}>
-                  {item.cuisineTypes.slice(0, 2).map((cuisine, index) => (
-                    <View key={index} style={styles.cuisineTag}>
-                      <Text style={styles.cuisineText}>{cuisine}</Text>
-                    </View>
-                  ))}
+                  <View style={styles.cuisineTag}>
+                    <Text style={styles.cuisineText}>{item.cuisineType}</Text>
+                  </View>
                 </View>
               )}
               
               <Text style={styles.restaurantAddress}>{item.address}</Text>
               
               <View style={styles.statsRow}>
-                <Text style={styles.rating}>⭐ {item.rating.toFixed(1)}</Text>
+                <Text style={styles.rating}>⭐ {(item.rating ?? 0).toFixed(1)}</Text>
                 <Text style={styles.reviews}>
-                  ({item.totalReviews} reviews)
+                  ({item.reviewCount ?? 0} reviews)
                 </Text>
-                <View style={styles.priceRange}>
-                  <Text style={styles.priceText}>
-                    {'$'.repeat(item.priceRange)}
-                  </Text>
-                </View>
+                {item.city && (
+                  <Text style={styles.cityText}>{item.city}</Text>
+                )}
               </View>
             </View>
           </TouchableOpacity>
@@ -139,7 +128,7 @@ const styles = StyleSheet.create({
   },
   header: {
     fontSize: 28,
-    fontWeight: 'bold',
+    fontWeight: 'bold' as const,
     padding: 16,
     paddingTop: 60,
     backgroundColor: '#fff',
@@ -151,24 +140,18 @@ const styles = StyleSheet.create({
   },
   errorTitle: {
     fontSize: 24,
-    fontWeight: 'bold',
-    color: '#FF3B30',
+    fontWeight: 'bold' as const,
+    color: Colors.error,
     marginBottom: 8,
   },
   errorMessage: {
     fontSize: 16,
     color: '#333',
-    textAlign: 'center',
-    marginBottom: 4,
-  },
-  errorHint: {
-    fontSize: 14,
-    color: '#999',
-    textAlign: 'center',
+    textAlign: 'center' as const,
     marginBottom: 20,
   },
   retryButton: {
-    backgroundColor: '#007AFF',
+    backgroundColor: Colors.primary,
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
@@ -176,11 +159,11 @@ const styles = StyleSheet.create({
   retryButtonText: {
     color: '#fff',
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '600' as const,
   },
   emptyTitle: {
     fontSize: 20,
-    fontWeight: 'bold',
+    fontWeight: 'bold' as const,
     color: '#333',
     marginBottom: 8,
   },
@@ -207,11 +190,11 @@ const styles = StyleSheet.create({
   },
   restaurantName: {
     fontSize: 20,
-    fontWeight: 'bold',
+    fontWeight: 'bold' as const,
     color: '#333',
   },
   cuisineContainer: {
-    flexDirection: 'row',
+    flexDirection: 'row' as const,
     gap: 6,
   },
   cuisineTag: {
@@ -229,29 +212,23 @@ const styles = StyleSheet.create({
     color: '#666',
   },
   statsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     gap: 8,
   },
   rating: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '600' as const,
     color: '#FF9500',
   },
   reviews: {
     fontSize: 14,
     color: '#999',
   },
-  priceRange: {
-    marginLeft: 'auto',
-    backgroundColor: '#34C759',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 4,
-  },
-  priceText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#fff',
+  cityText: {
+    marginLeft: 'auto' as const,
+    fontSize: 13,
+    color: Colors.primary,
+    fontWeight: '500' as const,
   },
 });

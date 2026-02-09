@@ -1,12 +1,10 @@
 import React from 'react';
 import { View, Text, FlatList, StyleSheet, ActivityIndicator, Pressable } from 'react-native';
-import { useQuery } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Image } from 'expo-image';
-import { apiFetch } from '@/lib/api/client';
 import { useTheme } from '@/contexts/ThemeContext';
-import { restaurants as mockRestaurants } from '@/mocks/data';
+import { useRestaurants } from '@/hooks/useApi';
 import { Star, MapPin, Clock } from 'lucide-react-native';
 import { Restaurant } from '@/types';
 
@@ -15,19 +13,9 @@ export default function DiscoveryScreen() {
   const router = useRouter();
   const { colors } = useTheme();
 
-  const { data, isLoading } = useQuery<Restaurant[]>({
-    queryKey: ['restaurants'],
-    queryFn: async () => {
-      try {
-        const result = await apiFetch<Restaurant[]>('/api/v1/restaurants');
-        return result;
-      } catch {
-        return mockRestaurants;
-      }
-    },
-  });
+  const { data: restaurantList, isLoading } = useRestaurants();
 
-  const restaurantList = data || mockRestaurants;
+  const restaurants = restaurantList || [];
 
   const renderRestaurant = ({ item }: { item: Restaurant }) => (
     <Pressable
@@ -46,7 +34,7 @@ export default function DiscoveryScreen() {
           </Text>
           <View style={[styles.ratingBadge, { backgroundColor: colors.primary }]}>
             <Star size={12} color="#fff" fill="#fff" />
-            <Text style={styles.ratingText}>{item.rating}</Text>
+            <Text style={styles.ratingText}>{item.rating ?? 0}</Text>
           </View>
         </View>
         <Text style={[styles.cuisine, { color: colors.textSecondary }]}>
@@ -62,7 +50,7 @@ export default function DiscoveryScreen() {
           <View style={styles.metaItem}>
             <Clock size={14} color={colors.textMuted} />
             <Text style={[styles.metaText, { color: colors.textMuted }]}>
-              {item.waitingTime}
+              {item.waitingTime || 'N/A'}
             </Text>
           </View>
         </View>
@@ -84,7 +72,7 @@ export default function DiscoveryScreen() {
         <Text style={[styles.title, { color: colors.text }]}>Discover Restaurants</Text>
       </View>
       <FlatList
-        data={restaurantList}
+        data={restaurants}
         keyExtractor={(item) => item.id}
         renderItem={renderRestaurant}
         contentContainerStyle={styles.listContent}
@@ -124,7 +112,7 @@ const styles = StyleSheet.create({
   },
   card: {
     borderRadius: 16,
-    overflow: 'hidden',
+    overflow: 'hidden' as const,
     borderWidth: 1,
     marginBottom: 16,
   },

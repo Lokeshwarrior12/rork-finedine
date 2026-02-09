@@ -1,28 +1,35 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TextInput, Pressable, Alert } from 'react-native';
 import { useAuth } from '@/contexts/AuthContext';
-import { useMutation } from '@tanstack/react-query';
+import { useUpdateProfile } from '@/hooks/useApi';
 import { User, Mail, Phone, MapPin, LogOut, Save } from 'lucide-react-native';
+import Colors from '@/constants/colors';
 
 export default function ProfileScreen() {
-  const { user, logout, updateProfile } = useAuth();
+  const { user, logout, updateUser } = useAuth();
   
   const [name, setName] = useState(user?.name || '');
   const [phone, setPhone] = useState(user?.phone || '');
   const [address, setAddress] = useState(user?.address || '');
 
-  const updateMutation = useMutation({
-    mutationFn: () => updateProfile({ name, phone, address }),
-    onSuccess: () => {
-      Alert.alert('Success', 'Profile updated successfully');
-    },
-    onError: () => {
-      Alert.alert('Error', 'Failed to update profile');
-    },
-  });
+  const updateProfileMutation = useUpdateProfile();
 
   const handleSave = () => {
-    updateMutation.mutate();
+    if (!user) return;
+    
+    updateProfileMutation.mutate(
+      { userId: user.id, name, phone, address },
+      {
+        onSuccess: () => {
+          updateUser({ name, phone, address });
+          Alert.alert('Success', 'Profile updated successfully');
+        },
+        onError: (err) => {
+          console.error('[Profile] Update failed:', err);
+          Alert.alert('Error', 'Failed to update profile');
+        },
+      }
+    );
   };
 
   const handleLogout = () => {
@@ -91,10 +98,10 @@ export default function ProfileScreen() {
             </View>
           </View>
 
-          <Pressable style={styles.saveButton} onPress={handleSave} disabled={updateMutation.isPending}>
+          <Pressable style={styles.saveButton} onPress={handleSave} disabled={updateProfileMutation.isPending}>
             <Save size={18} color="#fff" />
             <Text style={styles.saveButtonText}>
-              {updateMutation.isPending ? 'Saving...' : 'Save Changes'}
+              {updateProfileMutation.isPending ? 'Saving...' : 'Save Changes'}
             </Text>
           </Pressable>
         </View>
@@ -102,7 +109,7 @@ export default function ProfileScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Account</Text>
           <Pressable style={styles.logoutButton} onPress={handleLogout}>
-            <LogOut size={20} color="#E63946" />
+            <LogOut size={20} color={Colors.error} />
             <Text style={styles.logoutText}>Sign Out</Text>
           </Pressable>
         </View>
@@ -114,12 +121,12 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f5f5f5' },
   header: { backgroundColor: '#fff', padding: 20, paddingTop: 60, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },
-  title: { fontSize: 28, fontWeight: '700', color: '#333' },
+  title: { fontSize: 28, fontWeight: '700' as const, color: '#333' },
   content: { padding: 16 },
   section: { backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 16 },
-  sectionTitle: { fontSize: 18, fontWeight: '700', color: '#333', marginBottom: 16 },
+  sectionTitle: { fontSize: 18, fontWeight: '700' as const, color: '#333', marginBottom: 16 },
   inputGroup: { marginBottom: 16 },
-  label: { fontSize: 13, fontWeight: '600', color: '#666', marginBottom: 8 },
+  label: { fontSize: 13, fontWeight: '600' as const, color: '#666', marginBottom: 8 },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -134,22 +141,22 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#E63946',
+    backgroundColor: Colors.primary,
     paddingVertical: 14,
     borderRadius: 12,
     gap: 8,
     marginTop: 8,
   },
-  saveButtonText: { fontSize: 16, fontWeight: '600', color: '#fff' },
+  saveButtonText: { fontSize: 16, fontWeight: '600' as const, color: '#fff' },
   logoutButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#E63946',
+    borderColor: Colors.error,
     paddingVertical: 14,
     borderRadius: 12,
     gap: 8,
   },
-  logoutText: { fontSize: 16, fontWeight: '600', color: '#E63946' },
+  logoutText: { fontSize: 16, fontWeight: '600' as const, color: Colors.error },
 });

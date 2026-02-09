@@ -1,6 +1,3 @@
-// app/(tabs)/favorites.tsx
-// User Favorites/Saved Restaurants Screen
-
 import React from 'react';
 import {
   View,
@@ -13,57 +10,44 @@ import {
   RefreshControl,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Heart,
   Star,
   MapPin,
-  Trash2,
 } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 
-import { api, Restaurant } from '@/lib/api';
+import { useFavoriteRestaurants } from '@/hooks/useApi';
 import { useAuth } from '@/contexts/AuthContext';
 import Colors from '@/constants/colors';
+import { Restaurant } from '@/types';
 
 export default function FavoritesScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const queryClient = useQueryClient();
-  const { user } = useAuth();
+  const { user, toggleFavorite } = useAuth();
 
-  // Fetch favorites
+  const favoriteIds = user?.favorites || [];
+
   const {
-    data: favoritesData,
+    data: favorites,
     isLoading,
     error,
     refetch,
-  } = useQuery({
-    queryKey: ['favorites'],
-    queryFn: () => api.getFavorites(),
-    enabled: !!user,
-  });
+  } = useFavoriteRestaurants(favoriteIds);
 
-  // Remove from favorites mutation
-  const removeFavoriteMutation = useMutation({
-    mutationFn: (restaurantId: string) => api.removeFavorite(restaurantId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['favorites'] });
-    },
-  });
-
-  const favorites = favoritesData?.data || [];
+  const restaurantList = favorites || [];
 
   const handleRemoveFavorite = (restaurantId: string) => {
-    removeFavoriteMutation.mutate(restaurantId);
+    toggleFavorite(restaurantId);
   };
 
   const renderFavoriteCard = ({ item }: { item: Restaurant }) => {
     return (
       <TouchableOpacity
         style={styles.favoriteCard}
-        onPress={() => router.push(`/(customer)/restaurant/${item.id}`)}
+        onPress={() => router.push(`/restaurant/${item.id}` as any)}
       >
         <View style={styles.imageContainer}>
           {item.images && item.images.length > 0 ? (
@@ -91,13 +75,11 @@ export default function FavoritesScreen() {
             {item.name}
           </Text>
 
-          {item.cuisineTypes && item.cuisineTypes.length > 0 && (
+          {item.cuisineType && (
             <View style={styles.cuisineContainer}>
-              {item.cuisineTypes.slice(0, 2).map((cuisine, index) => (
-                <View key={index} style={styles.cuisineTag}>
-                  <Text style={styles.cuisineText}>{cuisine}</Text>
-                </View>
-              ))}
+              <View style={styles.cuisineTag}>
+                <Text style={styles.cuisineText}>{item.cuisineType}</Text>
+              </View>
             </View>
           )}
 
@@ -111,14 +93,8 @@ export default function FavoritesScreen() {
           <View style={styles.statsRow}>
             <View style={styles.statItem}>
               <Star size={14} color="#FFB800" fill="#FFB800" />
-              <Text style={styles.statText}>{item.rating.toFixed(1)}</Text>
-              <Text style={styles.statSubtext}>({item.totalReviews})</Text>
-            </View>
-            <View style={styles.statDivider} />
-            <View style={styles.statItem}>
-              <Text style={styles.priceRange}>
-                {'$'.repeat(item.priceRange)}
-              </Text>
+              <Text style={styles.statText}>{(item.rating ?? 0).toFixed(1)}</Text>
+              <Text style={styles.statSubtext}>({item.reviewCount ?? 0})</Text>
             </View>
           </View>
         </View>
@@ -146,15 +122,13 @@ export default function FavoritesScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
         <Text style={styles.headerTitle}>Favorites</Text>
         <Text style={styles.headerSubtitle}>
-          {favorites.length} {favorites.length === 1 ? 'restaurant' : 'restaurants'}
+          {restaurantList.length} {restaurantList.length === 1 ? 'restaurant' : 'restaurants'}
         </Text>
       </View>
 
-      {/* Favorites List */}
       {isLoading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={Colors.primary} />
@@ -170,7 +144,7 @@ export default function FavoritesScreen() {
             <Text style={styles.retryButtonText}>Retry</Text>
           </TouchableOpacity>
         </View>
-      ) : favorites.length === 0 ? (
+      ) : restaurantList.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Heart size={64} color="#ccc" />
           <Text style={styles.emptyTitle}>No Favorites Yet</Text>
@@ -186,7 +160,7 @@ export default function FavoritesScreen() {
         </View>
       ) : (
         <FlatList
-          data={favorites}
+          data={restaurantList}
           keyExtractor={(item) => item.id}
           renderItem={renderFavoriteCard}
           numColumns={2}
@@ -222,7 +196,7 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     fontSize: 28,
-    fontWeight: '700',
+    fontWeight: '700' as const,
     color: '#333',
     marginBottom: 4,
   },
@@ -248,14 +222,14 @@ const styles = StyleSheet.create({
   },
   errorTitle: {
     fontSize: 18,
-    fontWeight: '600',
+    fontWeight: '600' as const,
     color: '#333',
     marginBottom: 8,
   },
   errorMessage: {
     fontSize: 14,
     color: '#666',
-    textAlign: 'center',
+    textAlign: 'center' as const,
     marginBottom: 24,
   },
   retryButton: {
@@ -267,7 +241,7 @@ const styles = StyleSheet.create({
   retryButtonText: {
     color: '#fff',
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '600' as const,
   },
   emptyContainer: {
     flex: 1,
@@ -277,7 +251,7 @@ const styles = StyleSheet.create({
   },
   emptyTitle: {
     fontSize: 20,
-    fontWeight: '600',
+    fontWeight: '600' as const,
     color: '#333',
     marginTop: 16,
     marginBottom: 8,
@@ -285,7 +259,7 @@ const styles = StyleSheet.create({
   emptyMessage: {
     fontSize: 14,
     color: '#666',
-    textAlign: 'center',
+    textAlign: 'center' as const,
     marginBottom: 24,
   },
   loginButton: {
@@ -297,7 +271,7 @@ const styles = StyleSheet.create({
   loginButtonText: {
     color: '#fff',
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '600' as const,
   },
   exploreButton: {
     backgroundColor: Colors.primary,
@@ -308,13 +282,13 @@ const styles = StyleSheet.create({
   exploreButtonText: {
     color: '#fff',
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '600' as const,
   },
   listContent: {
     padding: 12,
   },
   columnWrapper: {
-    justifyContent: 'space-between',
+    justifyContent: 'space-between' as const,
   },
   favoriteCard: {
     flex: 1,
@@ -322,7 +296,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginBottom: 12,
     marginHorizontal: 4,
-    overflow: 'hidden',
+    overflow: 'hidden' as const,
     borderWidth: 1,
     borderColor: '#f0f0f0',
     shadowColor: '#000',
@@ -332,7 +306,7 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   imageContainer: {
-    position: 'relative',
+    position: 'relative' as const,
     width: '100%',
     height: 120,
   },
@@ -345,15 +319,15 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   favoriteButton: {
-    position: 'absolute',
+    position: 'absolute' as const,
     top: 8,
     right: 8,
     width: 32,
     height: 32,
     borderRadius: 16,
     backgroundColor: 'rgba(255,255,255,0.9)',
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.2,
@@ -365,13 +339,13 @@ const styles = StyleSheet.create({
   },
   restaurantName: {
     fontSize: 15,
-    fontWeight: '600',
+    fontWeight: '600' as const,
     color: '#333',
     marginBottom: 6,
   },
   cuisineContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexDirection: 'row' as const,
+    flexWrap: 'wrap' as const,
     gap: 4,
     marginBottom: 6,
   },
@@ -386,8 +360,8 @@ const styles = StyleSheet.create({
     color: '#666',
   },
   addressRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     gap: 4,
     marginBottom: 8,
   },
@@ -397,32 +371,21 @@ const styles = StyleSheet.create({
     color: '#666',
   },
   statsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
   },
   statItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     gap: 3,
-  },
-  statDivider: {
-    width: 1,
-    height: 12,
-    backgroundColor: '#ddd',
-    marginHorizontal: 8,
   },
   statText: {
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: '600' as const,
     color: '#333',
   },
   statSubtext: {
     fontSize: 11,
     color: '#999',
-  },
-  priceRange: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: Colors.primary,
   },
 });

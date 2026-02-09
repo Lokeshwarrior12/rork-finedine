@@ -10,7 +10,6 @@ import React, {
 } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Session } from '@supabase/supabase-js';
-import { api } from '@/lib/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { User, UserRole, CardDetails } from '@/types';
 
@@ -81,11 +80,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const loadStoredAuth = async () => {
     try {
-      const token = await AsyncStorage.getItem(TOKEN_KEY);
       const storedUser = await AsyncStorage.getItem(USER_KEY);
 
-      if (token && storedUser) {
-        api.setAuthToken(token);
+      if (storedUser) {
         setUser(JSON.parse(storedUser));
       }
     } catch (err) {
@@ -198,22 +195,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (error) return { error: error.message };
 
-      // Optional backend login sync
-      const response = await fetch(
-        `${process.env.EXPO_PUBLIC_API_URL}/auth/login`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, password }),
-        }
-      );
-
-      if (response.ok) {
-        const data = await response.json();
-        await AsyncStorage.setItem(TOKEN_KEY, data.token);
-        api.setAuthToken(data.token);
-      }
-
       return {};
     } catch (err: any) {
       return { error: err.message };
@@ -246,7 +227,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = async () => {
     await supabase.auth.signOut();
     await AsyncStorage.multiRemove([TOKEN_KEY, USER_KEY]);
-    api.setAuthToken(null);
     setSession(null);
     setUser(null);
   };
@@ -257,9 +237,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const updateProfile = async (data: Partial<User>) => {
     try {
-      const response = await api.updateUserProfile(data);
-      const updatedUser = { ...user, ...response.data } as User;
+      if (!user) throw new Error('No user logged in');
 
+      const updateData: Record<string, unknown> = {};
+      if (data.name !== undefined) updateData.name = data.name;
+      if (data.phone !== undefined) updateData.phone = data.phone;
+      if (data.address !== undefined) updateData.address = data.address;
+
+      const { error: dbError } = await supabase
+        .from('users')
+        .update(updateData)
+        .eq('id', user.id);
+
+      if (dbError) {
+        console.warn('[Auth] Supabase update failed:', dbError);
+      }
+
+      const updatedUser = { ...user, ...data } as User;
       setUser(updatedUser);
       await AsyncStorage.setItem(USER_KEY, JSON.stringify(updatedUser));
     } catch (err) {

@@ -1,6 +1,3 @@
-// app/(tabs)/orders.tsx
-// User Orders History Screen
-
 import React, { useState } from 'react';
 import {
   View,
@@ -12,9 +9,7 @@ import {
   RefreshControl,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useQuery } from '@tanstack/react-query';
 import {
-  Clock,
   CheckCircle,
   XCircle,
   Package,
@@ -22,11 +17,20 @@ import {
 } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { api, Order } from '@/lib/api';
+import { useOrders } from '@/hooks/useApi';
 import { useAuth } from '@/contexts/AuthContext';
 import Colors from '@/constants/colors';
 
 type OrderFilter = 'all' | 'active' | 'completed' | 'cancelled';
+
+interface OrderData {
+  id: string;
+  status: string;
+  createdAt: string;
+  items: Array<{ name: string; quantity: number }>;
+  total: number;
+  [key: string]: unknown;
+}
 
 export default function OrdersScreen() {
   const router = useRouter();
@@ -35,27 +39,21 @@ export default function OrdersScreen() {
 
   const [filter, setFilter] = useState<OrderFilter>('all');
 
-  // Fetch user orders
   const {
     data: ordersData,
     isLoading,
     error,
     refetch,
-  } = useQuery({
-    queryKey: ['orders', user?.id],
-    queryFn: () => api.getUserOrders(user!.id),
-    enabled: !!user,
-  });
+  } = useOrders();
 
-  const orders = ordersData?.data || [];
+  const orders = (ordersData || []) as OrderData[];
 
-  // Filter orders
   const filteredOrders = orders.filter((order) => {
     if (filter === 'all') return true;
     if (filter === 'active')
-      return ['pending', 'confirmed', 'preparing', 'ready'].includes(order.status);
-    if (filter === 'completed') return order.status === 'delivered';
-    if (filter === 'cancelled') return order.status === 'cancelled';
+      return ['pending', 'accepted', 'preparing', 'ready'].includes(order.status);
+    if (filter === 'completed') return order.status === 'completed';
+    if (filter === 'cancelled') return order.status === 'cancelled' || order.status === 'rejected';
     return true;
   });
 
@@ -63,14 +61,15 @@ export default function OrdersScreen() {
     switch (status) {
       case 'pending':
         return '#FFA500';
-      case 'confirmed':
+      case 'accepted':
       case 'preparing':
         return '#2196F3';
       case 'ready':
         return '#9C27B0';
-      case 'delivered':
+      case 'completed':
         return '#4CAF50';
       case 'cancelled':
+      case 'rejected':
         return '#FF3B30';
       default:
         return '#999';
@@ -79,23 +78,25 @@ export default function OrdersScreen() {
 
   const getStatusIcon = (status: string) => {
     switch (status) {
-      case 'delivered':
+      case 'completed':
         return CheckCircle;
       case 'cancelled':
+      case 'rejected':
         return XCircle;
       default:
         return Package;
     }
   };
 
-  const renderOrderCard = ({ item }: { item: Order }) => {
+  const renderOrderCard = ({ item }: { item: OrderData }) => {
     const StatusIcon = getStatusIcon(item.status);
     const statusColor = getStatusColor(item.status);
+    const itemsList = Array.isArray(item.items) ? item.items : [];
 
     return (
       <TouchableOpacity
         style={styles.orderCard}
-        onPress={() => router.push(`/(customer)/order/${item.id}`)}
+        onPress={() => router.push(`/(customer)/order/${item.id}` as any)}
       >
         <View style={styles.orderHeader}>
           <View style={styles.orderHeaderLeft}>
@@ -105,7 +106,7 @@ export default function OrdersScreen() {
             <View>
               <Text style={styles.orderId}>Order #{item.id.slice(0, 8)}</Text>
               <Text style={styles.orderDate}>
-                {new Date(item.createdAt).toLocaleDateString()}
+                {item.createdAt ? new Date(item.createdAt).toLocaleDateString() : 'N/A'}
               </Text>
             </View>
           </View>
@@ -114,7 +115,7 @@ export default function OrdersScreen() {
 
         <View style={styles.orderBody}>
           <Text style={styles.orderItems} numberOfLines={2}>
-            {item.items.map((i) => `${i.quantity}x ${i.name}`).join(', ')}
+            {itemsList.map((i) => `${i.quantity}x ${i.name}`).join(', ') || 'No items'}
           </Text>
         </View>
 
@@ -124,7 +125,7 @@ export default function OrdersScreen() {
               {item.status.charAt(0).toUpperCase() + item.status.slice(1)}
             </Text>
           </View>
-          <Text style={styles.orderTotal}>${item.total.toFixed(2)}</Text>
+          <Text style={styles.orderTotal}>${(item.total ?? 0).toFixed(2)}</Text>
         </View>
       </TouchableOpacity>
     );
@@ -147,77 +148,29 @@ export default function OrdersScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
         <Text style={styles.headerTitle}>My Orders</Text>
       </View>
 
-      {/* Filter Tabs */}
       <View style={styles.filterContainer}>
-        <TouchableOpacity
-          style={[styles.filterTab, filter === 'all' && styles.filterTabActive]}
-          onPress={() => setFilter('all')}
-        >
-          <Text
-            style={[
-              styles.filterTabText,
-              filter === 'all' && styles.filterTabTextActive,
-            ]}
+        {(['all', 'active', 'completed', 'cancelled'] as OrderFilter[]).map((f) => (
+          <TouchableOpacity
+            key={f}
+            style={[styles.filterTab, filter === f && styles.filterTabActive]}
+            onPress={() => setFilter(f)}
           >
-            All
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.filterTab, filter === 'active' && styles.filterTabActive]}
-          onPress={() => setFilter('active')}
-        >
-          <Text
-            style={[
-              styles.filterTabText,
-              filter === 'active' && styles.filterTabTextActive,
-            ]}
-          >
-            Active
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[
-            styles.filterTab,
-            filter === 'completed' && styles.filterTabActive,
-          ]}
-          onPress={() => setFilter('completed')}
-        >
-          <Text
-            style={[
-              styles.filterTabText,
-              filter === 'completed' && styles.filterTabTextActive,
-            ]}
-          >
-            Completed
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[
-            styles.filterTab,
-            filter === 'cancelled' && styles.filterTabActive,
-          ]}
-          onPress={() => setFilter('cancelled')}
-        >
-          <Text
-            style={[
-              styles.filterTabText,
-              filter === 'cancelled' && styles.filterTabTextActive,
-            ]}
-          >
-            Cancelled
-          </Text>
-        </TouchableOpacity>
+            <Text
+              style={[
+                styles.filterTabText,
+                filter === f && styles.filterTabTextActive,
+              ]}
+            >
+              {f.charAt(0).toUpperCase() + f.slice(1)}
+            </Text>
+          </TouchableOpacity>
+        ))}
       </View>
 
-      {/* Orders List */}
       {isLoading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={Colors.primary} />
@@ -287,7 +240,7 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     fontSize: 28,
-    fontWeight: '700',
+    fontWeight: '700' as const,
     color: '#333',
   },
   filterContainer: {
@@ -311,7 +264,7 @@ const styles = StyleSheet.create({
   },
   filterTabText: {
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: '600' as const,
     color: '#666',
   },
   filterTabTextActive: {
@@ -335,14 +288,14 @@ const styles = StyleSheet.create({
   },
   errorTitle: {
     fontSize: 18,
-    fontWeight: '600',
+    fontWeight: '600' as const,
     color: '#333',
     marginBottom: 8,
   },
   errorMessage: {
     fontSize: 14,
     color: '#666',
-    textAlign: 'center',
+    textAlign: 'center' as const,
     marginBottom: 24,
   },
   retryButton: {
@@ -354,7 +307,7 @@ const styles = StyleSheet.create({
   retryButtonText: {
     color: '#fff',
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '600' as const,
   },
   emptyContainer: {
     flex: 1,
@@ -364,7 +317,7 @@ const styles = StyleSheet.create({
   },
   emptyTitle: {
     fontSize: 20,
-    fontWeight: '600',
+    fontWeight: '600' as const,
     color: '#333',
     marginTop: 16,
     marginBottom: 8,
@@ -372,7 +325,7 @@ const styles = StyleSheet.create({
   emptyMessage: {
     fontSize: 14,
     color: '#666',
-    textAlign: 'center',
+    textAlign: 'center' as const,
     marginBottom: 24,
   },
   loginButton: {
@@ -384,7 +337,7 @@ const styles = StyleSheet.create({
   loginButtonText: {
     color: '#fff',
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '600' as const,
   },
   exploreButton: {
     backgroundColor: Colors.primary,
@@ -395,7 +348,7 @@ const styles = StyleSheet.create({
   exploreButtonText: {
     color: '#fff',
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '600' as const,
   },
   listContent: {
     padding: 16,
@@ -433,7 +386,7 @@ const styles = StyleSheet.create({
   },
   orderId: {
     fontSize: 15,
-    fontWeight: '600',
+    fontWeight: '600' as const,
     color: '#333',
     marginBottom: 2,
   },
@@ -461,11 +414,11 @@ const styles = StyleSheet.create({
   },
   statusText: {
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: '600' as const,
   },
   orderTotal: {
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: '700' as const,
     color: '#333',
   },
 });

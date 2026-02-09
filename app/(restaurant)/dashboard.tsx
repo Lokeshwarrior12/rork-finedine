@@ -15,12 +15,10 @@ import {
 import { useRouter, Href } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useQuery } from '@tanstack/react-query';
+
 import {
   Plus,
   Tag,
-  Ticket,
-  Heart,
   TrendingUp,
   Clock,
   ChevronRight,
@@ -30,7 +28,6 @@ import {
   ArrowDownRight,
   QrCode,
   CalendarDays,
-  Trash2,
   UtensilsCrossed,
   X,
   Check,
@@ -43,8 +40,7 @@ import {
 } from 'lucide-react-native';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
-import { deals } from '@/mocks/data';
-import { api } from '@/lib/api';
+import { useRestaurant, useRestaurantOrders, useRestaurantDeals } from '@/hooks/useApi';
 
 const { width } = Dimensions.get('window');
 
@@ -98,27 +94,18 @@ export default function DashboardScreen() {
 
   const restaurantId = user?.restaurantId || 'restaurant-123';
 
-  // Fetch restaurant details
-  const { data: restaurantData } = useQuery({
-    queryKey: ['restaurant', restaurantId],
-    queryFn: () => api.getRestaurant(restaurantId),
-    enabled: !!restaurantId,
-  });
+  const { data: restaurant } = useRestaurant(restaurantId);
 
-  // Fetch today's orders
   const {
-    data: ordersData,
+    data: ordersRaw,
     isLoading: ordersLoading,
     refetch: refetchOrders,
-  } = useQuery({
-    queryKey: ['restaurant-orders', restaurantId],
-    queryFn: () => api.getRestaurantOrders(restaurantId),
-    enabled: !!restaurantId,
-    refetchInterval: 30000,
-  });
+  } = useRestaurantOrders(restaurantId);
 
-  const restaurant = restaurantData?.data;
-  const orders = ordersData?.data || [];
+  const { data: restaurantDealsData } = useRestaurantDeals(restaurantId);
+
+  const orders = (ordersRaw || []) as any[];
+  const restaurantDeals = (restaurantDealsData || []) as any[];
 
   // Calculate order stats
   const pendingOrders = orders.filter((o) => o.status === 'pending').length;
@@ -126,11 +113,8 @@ export default function DashboardScreen() {
   const readyOrders = orders.filter((o) => o.status === 'ready').length;
   const todayRevenue = orders.reduce((sum, o) => sum + o.total, 0);
 
-  // Calculate deal stats
-  const restaurantDeals = deals.filter(d => d.restaurantId === user?.restaurantId);
-  const activeOffers = restaurantDeals.filter(d => d.isActive).length;
-  const totalCouponsToday = restaurantDeals.reduce((sum, d) => sum + d.claimedCoupons, 0);
-  const totalClaimed = restaurantDeals.reduce((sum, d) => sum + d.claimedCoupons, 0);
+  const activeOffers = restaurantDeals.filter((d: any) => d.isActive).length;
+  const totalClaimed = restaurantDeals.reduce((sum: number, d: any) => sum + (d.claimedCoupons || 0), 0);
   const pendingBookings = bookingRequests.filter(b => b.status === 'pending').length;
 
   const stats = [

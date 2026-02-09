@@ -1,118 +1,126 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { db } from '@/lib/supabase';
+import { useQuery } from '@tanstack/react-query';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase';
+import { restaurants as mockRestaurants } from '@/mocks/data';
 import type { Restaurant } from '@/types';
-//
-interface UseRestaurantsParams {
-  query?:       string;        // debounced search string
-  cuisineType?: string | null; // single cuisine filter
-  category?:    string | null; // banquet | party | bar | cafe …
-  services?:    string[];      // ['buffet','delivery']
-  lat?:         number | null;
-  lng?:         number | null;
-  radius?:      number;        // km – default 5
-  limit?:       number;        // page size – default 20
-  page?:        number;        // 0-based
+
+function snakeToCamel(obj: Record<string, unknown>): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  for (const key in obj) {
+    const camelKey = key.replace(/_([a-z])/g, (_, letter: string) => letter.toUpperCase());
+    result[camelKey] = obj[key];
+  }
+  return result;
 }
-//
-export function useRestaurants({
+
+function transformArray<T>(data: unknown[] | null): T[] {
+  if (!data || data.length === 0) return [];
+  return data.map(item => snakeToCamel(item as Record<string, unknown>) as unknown as T);
+}
+
+interface UseRestaurantsParams {
+  query?: string;
+  cuisineType?: string | null;
+  category?: string | null;
+  services?: string[];
+  lat?: number | null;
+  lng?: number | null;
+  radius?: number;
+  limit?: number;
+  page?: number;
+}
+
+export function useRestaurantsSearch({
   query = '',
   cuisineType,
   category,
-  services = [],
   lat,
   lng,
   radius = 5,
-  limit  = 20,
-  page   = 0,
+  limit = 20,
+  page = 0,
 }: UseRestaurantsParams = {}) {
- const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
- const [loading,      setLoading]      = useState(true);
- const [error,        setError]        = useState<string | null>(null);
- const [total,        setTotal]        = useState(0);
- const abortRef                        = useRef<AbortController | null>(null);
-//
- const fetch = useCallback(async () => {
-//     // Cancel any in-flight request
- abortRef.current?.abort();
- const ctrl = new AbortController();
-  abortRef.current = ctrl;
-//
-     setLoading(true);
-     setError(null);
+  return useQuery({
+    queryKey: ['restaurantsSearch', query, cuisineType, category, lat, lng, radius, limit, page],
+    queryFn: async (): Promise<{ restaurants: Restaurant[]; total: number }> => {
+      if (isSupabaseConfigured) {
+        try {
+          let q = supabase
+            .from('restaurants')
+            .select('*', { count: 'exact' })
+            .order('rating', { ascending: false })
+            .range(page * limit, (page + 1) * limit - 1);
 
-    try {
-       // ── build the query ─────────────────────────────────
-       let q = db.restaurants()
-         .select('*', { count: 'exact' })
-         .eq('is_open', true)
-         .eq('is_verified', true)
-         .order('rating', { ascending: false })
-         .range(page * limit, (page + 1) * limit - 1);
+          if (query.trim()) {
+            q = q.or(`name.ilike.%${query}%,description.ilike.%${query}%`);
+          }
+          if (cuisineType) {
+            q = q.eq('cuisine_type', cuisineType);
+          }
+          if (category) {
+            q = q.contains('categories', [category]);
+          }
 
-//       // text search (name OR description)
-       if (query.trim()) {
-        q = q.or(`name.ilike.%${query}%,description.ilike.%${query}%`);
-       }
-//       // cuisine filter
-       if (cuisineType) {
-         q = q.contains('cuisine_type', [cuisineType]);
-       }
-//       // category filter
-       if (category) {
-         q = q.contains('categories', [category]);
-       }
-       // services filter – every requested service must be true
-       // Supabase JSONB: services @> '{"buffet":true}'
-       if (services.length) {
-         const svcObj: Record<string,boolean> = {};
-         services.forEach(s => { svcObj[s] = true; });
-         q = q.containedBy('services', svcObj as any);   // adjust if your column is different
-       }
+          const { data, count, error } = await q;
 
-       const { data, count } = await q;
+          if (error) {
+            console.warn('[useRestaurantsSearch] Supabase error:', error.message);
+          } else if (data) {
+            let sorted = transformArray<Restaurant>(data);
 
-       if (ctrl.signal.aborted) return;   // stale request – ignore
+            if (lat != null && lng != null) {
+              sorted = sorted
+                .filter((r: any) => r.latitude != null && r.longitude != null)
+                .map((r: any) => ({
+                  ...r,
+                  distance: haversine(lat, lng, r.latitude, r.longitude),
+                }))
+                .filter((r: any) => r.distance <= radius)
+                .sort((a: any, b: any) => a.distance - b.distance) as Restaurant[];
+            }
 
-       // ── optional client-side geo-sort ────────────────────
-       // If lat/lng provided, sort results by distance.
-       // For production with 1000+ users you would push this to
-       // a Supabase RPC / Edge Function.  This is the quick-win path.
-       let sorted = data ?? [];
-       if (lat != null && lng != null) {
-         sorted = sorted
-           .filter(r => r.latitude != null && r.longitude != null)
-           .map(r => ({
-             ...r,
-             _dist: haversine(lat, lng, r.latitude!, r.longitude!),
-          }))
-           .filter(r => r._dist <= radius)
-           .sort((a, b) => a._dist - b._dist);
-       }
+            console.log('[useRestaurantsSearch] Loaded', sorted.length, 'restaurants from Supabase');
+            return { restaurants: sorted, total: count ?? sorted.length };
+          }
+        } catch (err) {
+          console.warn('[useRestaurantsSearch] Supabase fetch failed:', err);
+        }
+      }
 
-       setRestaurants(sorted);
-       setTotal(count ?? sorted.length);
-     } catch (e: any) {
-       if (ctrl.signal.aborted) return;
-       setError(e.message ?? 'Failed to load restaurants');
-     } finally {
-       if (!ctrl.signal.aborted) setLoading(false);
-     }
-   }, [query, cuisineType, category, services, lat, lng, radius, limit, page]);
+      let filtered = [...mockRestaurants];
 
-   useEffect(() => { fetch(); }, [fetch]);
-   // expose refetch so parent can force a reload (e.g. after a new favorite)
-   return { restaurants, loading, error, total, refetch: fetch };
- }
+      if (query.trim()) {
+        const q = query.toLowerCase();
+        filtered = filtered.filter(r =>
+          r.name.toLowerCase().includes(q) ||
+          r.description.toLowerCase().includes(q) ||
+          r.cuisineType.toLowerCase().includes(q) ||
+          r.city.toLowerCase().includes(q)
+        );
+      }
+      if (cuisineType) {
+        filtered = filtered.filter(r => r.cuisineType.toLowerCase() === cuisineType.toLowerCase());
+      }
+      if (category) {
+        filtered = filtered.filter(r =>
+          r.categories.some(c => c.toLowerCase().includes(category.toLowerCase()))
+        );
+      }
 
- // ── Haversine formula ────────────────────────────────────
- function haversine(lat1: number, lon1: number, lat2: number, lon2: number): number {
-   const R = 6371; // Earth radius km
-   const dLat = deg2rad(lat2 - lat1);
+      return { restaurants: filtered as Restaurant[], total: filtered.length };
+    },
+    staleTime: 30000,
+  });
+}
+
+function haversine(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371;
+  const dLat = deg2rad(lat2 - lat1);
   const dLon = deg2rad(lon2 - lon1);
   const a =
-     Math.sin(dLat/2) * Math.sin(dLat/2) +
-     Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) *
-     Math.sin(dLon/2) * Math.sin(dLon/2);
-   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
- }
- function deg2rad(d: number) { return d * Math.PI / 180; }
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function deg2rad(d: number) { return d * Math.PI / 180; }

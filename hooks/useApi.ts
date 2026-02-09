@@ -640,3 +640,637 @@ export function useMarkNotificationRead() {
     },
   });
 }
+
+export function useMenuItems(restaurantId: string | undefined) {
+  return useQuery({
+    queryKey: ['menuItems', restaurantId],
+    queryFn: async () => {
+      if (!restaurantId) return [];
+
+      if (isSupabaseConfigured) {
+        try {
+          const { data, error } = await supabase
+            .from('menu_items')
+            .select('*')
+            .eq('restaurant_id', restaurantId)
+            .order('category', { ascending: true });
+
+          if (!error && data) {
+            console.log('[useMenuItems] Loaded', data.length, 'items from Supabase');
+            return transformArray<{
+              id: string;
+              restaurantId: string;
+              name: string;
+              description?: string;
+              price: number;
+              category?: string;
+              image?: string;
+              isAvailable?: boolean;
+              isVegetarian?: boolean;
+              isVegan?: boolean;
+              isGlutenFree?: boolean;
+            }>(data);
+          }
+        } catch (err) {
+          console.warn('[useMenuItems] Supabase fetch failed:', err);
+        }
+      }
+
+      return [];
+    },
+    enabled: !!restaurantId,
+  });
+}
+
+export function useCreateMenuItem() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (data: {
+      restaurantId: string;
+      name: string;
+      description?: string;
+      price: number;
+      category?: string;
+      isVegetarian?: boolean;
+      isVegan?: boolean;
+      isGlutenFree?: boolean;
+      isAvailable?: boolean;
+      image?: string;
+    }) => {
+      if (isSupabaseConfigured) {
+        const { data: item, error } = await supabase
+          .from('menu_items')
+          .insert([{
+            restaurant_id: data.restaurantId,
+            name: data.name,
+            description: data.description,
+            price: data.price,
+            category: data.category,
+            is_vegetarian: data.isVegetarian ?? false,
+            is_vegan: data.isVegan ?? false,
+            is_gluten_free: data.isGlutenFree ?? false,
+            is_available: data.isAvailable ?? true,
+            image: data.image,
+          }])
+          .select()
+          .single();
+
+        if (error) throw new Error(error.message);
+        return snakeToCamel(item as Record<string, unknown>);
+      }
+      throw new Error('Supabase not configured');
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['menuItems', variables.restaurantId] });
+    },
+  });
+}
+
+export function useUpdateMenuItem() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ id, restaurantId, ...data }: {
+      id: string;
+      restaurantId: string;
+      name?: string;
+      description?: string;
+      price?: number;
+      category?: string;
+      isVegetarian?: boolean;
+      isVegan?: boolean;
+      isGlutenFree?: boolean;
+      isAvailable?: boolean;
+      image?: string;
+    }) => {
+      if (isSupabaseConfigured) {
+        const updateData: Record<string, unknown> = {};
+        if (data.name !== undefined) updateData.name = data.name;
+        if (data.description !== undefined) updateData.description = data.description;
+        if (data.price !== undefined) updateData.price = data.price;
+        if (data.category !== undefined) updateData.category = data.category;
+        if (data.isVegetarian !== undefined) updateData.is_vegetarian = data.isVegetarian;
+        if (data.isVegan !== undefined) updateData.is_vegan = data.isVegan;
+        if (data.isGlutenFree !== undefined) updateData.is_gluten_free = data.isGlutenFree;
+        if (data.isAvailable !== undefined) updateData.is_available = data.isAvailable;
+        if (data.image !== undefined) updateData.image = data.image;
+
+        const { data: item, error } = await supabase
+          .from('menu_items')
+          .update(updateData)
+          .eq('id', id)
+          .select()
+          .single();
+
+        if (error) throw new Error(error.message);
+        return snakeToCamel(item as Record<string, unknown>);
+      }
+      throw new Error('Supabase not configured');
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['menuItems', variables.restaurantId] });
+    },
+  });
+}
+
+export function useDeleteMenuItem() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ id, restaurantId }: { id: string; restaurantId: string }) => {
+      if (isSupabaseConfigured) {
+        const { error } = await supabase
+          .from('menu_items')
+          .delete()
+          .eq('id', id);
+
+        if (error) throw new Error(error.message);
+        return { success: true };
+      }
+      throw new Error('Supabase not configured');
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['menuItems', variables.restaurantId] });
+    },
+  });
+}
+
+export function useFavoriteRestaurants(favoriteIds: string[]) {
+  return useQuery({
+    queryKey: ['favoriteRestaurants', favoriteIds],
+    queryFn: async (): Promise<Restaurant[]> => {
+      if (!favoriteIds || favoriteIds.length === 0) return [];
+
+      if (isSupabaseConfigured) {
+        try {
+          const { data, error } = await supabase
+            .from('restaurants')
+            .select('*')
+            .in('id', favoriteIds);
+
+          if (!error && data) {
+            console.log('[useFavoriteRestaurants] Loaded', data.length, 'favorites from Supabase');
+            return transformArray<Restaurant>(data);
+          }
+        } catch (err) {
+          console.warn('[useFavoriteRestaurants] Supabase fetch failed:', err);
+        }
+      }
+
+      return mockRestaurants.filter(r => favoriteIds.includes(r.id)) as Restaurant[];
+    },
+    enabled: favoriteIds.length > 0,
+  });
+}
+
+export function useUpdateProfile() {
+  return useMutation({
+    mutationFn: async (data: { userId: string; name?: string; phone?: string; address?: string }) => {
+      if (isSupabaseConfigured) {
+        const updateData: Record<string, unknown> = {};
+        if (data.name !== undefined) updateData.name = data.name;
+        if (data.phone !== undefined) updateData.phone = data.phone;
+        if (data.address !== undefined) updateData.address = data.address;
+
+        const { data: user, error } = await supabase
+          .from('users')
+          .update(updateData)
+          .eq('id', data.userId)
+          .select()
+          .single();
+
+        if (error) throw new Error(error.message);
+        return snakeToCamel(user as Record<string, unknown>);
+      }
+      throw new Error('Supabase not configured');
+    },
+  });
+}
+
+export function useRestaurantOrders(restaurantId: string | undefined) {
+  return useQuery({
+    queryKey: ['restaurantOrders', restaurantId],
+    queryFn: async () => {
+      if (!restaurantId) return [];
+
+      if (isSupabaseConfigured) {
+        try {
+          const { data, error } = await supabase
+            .from('orders')
+            .select('*')
+            .eq('restaurant_id', restaurantId)
+            .order('created_at', { ascending: false });
+
+          if (!error && data) {
+            console.log('[useRestaurantOrders] Loaded', data.length, 'orders from Supabase');
+            return transformArray(data);
+          }
+        } catch (err) {
+          console.warn('[useRestaurantOrders] Supabase fetch failed:', err);
+        }
+      }
+      return [];
+    },
+    enabled: !!restaurantId,
+  });
+}
+
+export function useUpdateOrderStatus() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ orderId, status, restaurantId }: { orderId: string; status: string; restaurantId: string }) => {
+      if (isSupabaseConfigured) {
+        const { data, error } = await supabase
+          .from('orders')
+          .update({ status })
+          .eq('id', orderId)
+          .select()
+          .single();
+
+        if (error) throw new Error(error.message);
+        return snakeToCamel(data as Record<string, unknown>);
+      }
+      throw new Error('Supabase not configured');
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['restaurantOrders', variables.restaurantId] });
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
+    },
+  });
+}
+
+export function useRestaurantBookings(restaurantId: string | undefined) {
+  return useQuery({
+    queryKey: ['restaurantBookings', restaurantId],
+    queryFn: async () => {
+      if (!restaurantId) return [];
+
+      if (isSupabaseConfigured) {
+        try {
+          const { data, error } = await supabase
+            .from('bookings')
+            .select('*')
+            .eq('restaurant_id', restaurantId)
+            .order('created_at', { ascending: false });
+
+          if (!error && data) {
+            return transformArray(data);
+          }
+        } catch (err) {
+          console.warn('[useRestaurantBookings] Supabase fetch failed:', err);
+        }
+      }
+      return [];
+    },
+    enabled: !!restaurantId,
+  });
+}
+
+export function useInventory(restaurantId: string | undefined) {
+  return useQuery({
+    queryKey: ['inventory', restaurantId],
+    queryFn: async () => {
+      if (!restaurantId) return [];
+
+      if (isSupabaseConfigured) {
+        try {
+          const { data, error } = await supabase
+            .from('inventory')
+            .select('*')
+            .eq('restaurant_id', restaurantId)
+            .order('name', { ascending: true });
+
+          if (!error && data) {
+            console.log('[useInventory] Loaded', data.length, 'items from Supabase');
+            return transformArray(data);
+          }
+        } catch (err) {
+          console.warn('[useInventory] Supabase fetch failed:', err);
+        }
+      }
+      return [];
+    },
+    enabled: !!restaurantId,
+  });
+}
+
+export function useCreateInventoryItem() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (data: {
+      restaurantId: string;
+      name: string;
+      category?: string;
+      quantity: number;
+      unit: string;
+      minStock?: number;
+      costPerUnit?: number;
+      supplier?: string;
+    }) => {
+      if (isSupabaseConfigured) {
+        const { data: item, error } = await supabase
+          .from('inventory')
+          .insert([{
+            restaurant_id: data.restaurantId,
+            name: data.name,
+            category: data.category,
+            quantity: data.quantity,
+            unit: data.unit,
+            min_stock: data.minStock ?? 10,
+            cost_per_unit: data.costPerUnit ?? 0,
+            supplier: data.supplier,
+          }])
+          .select()
+          .single();
+
+        if (error) throw new Error(error.message);
+        return snakeToCamel(item as Record<string, unknown>);
+      }
+      throw new Error('Supabase not configured');
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['inventory', variables.restaurantId] });
+    },
+  });
+}
+
+export function useUpdateInventoryItem() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ id, restaurantId, ...data }: {
+      id: string;
+      restaurantId: string;
+      name?: string;
+      category?: string;
+      quantity?: number;
+      unit?: string;
+      minStock?: number;
+      costPerUnit?: number;
+      supplier?: string;
+    }) => {
+      if (isSupabaseConfigured) {
+        const updateData: Record<string, unknown> = {};
+        if (data.name !== undefined) updateData.name = data.name;
+        if (data.category !== undefined) updateData.category = data.category;
+        if (data.quantity !== undefined) updateData.quantity = data.quantity;
+        if (data.unit !== undefined) updateData.unit = data.unit;
+        if (data.minStock !== undefined) updateData.min_stock = data.minStock;
+        if (data.costPerUnit !== undefined) updateData.cost_per_unit = data.costPerUnit;
+        if (data.supplier !== undefined) updateData.supplier = data.supplier;
+
+        const { data: item, error } = await supabase
+          .from('inventory')
+          .update(updateData)
+          .eq('id', id)
+          .select()
+          .single();
+
+        if (error) throw new Error(error.message);
+        return snakeToCamel(item as Record<string, unknown>);
+      }
+      throw new Error('Supabase not configured');
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['inventory', variables.restaurantId] });
+    },
+  });
+}
+
+export function useDeleteInventoryItem() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ id, restaurantId }: { id: string; restaurantId: string }) => {
+      if (isSupabaseConfigured) {
+        const { error } = await supabase
+          .from('inventory')
+          .delete()
+          .eq('id', id);
+
+        if (error) throw new Error(error.message);
+        return { success: true };
+      }
+      throw new Error('Supabase not configured');
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['inventory', variables.restaurantId] });
+    },
+  });
+}
+
+export function useRestaurantDeals(restaurantId: string | undefined) {
+  return useQuery({
+    queryKey: ['restaurantDeals', restaurantId],
+    queryFn: async (): Promise<Deal[]> => {
+      if (!restaurantId) return [];
+
+      if (isSupabaseConfigured) {
+        try {
+          const { data, error } = await supabase
+            .from('deals')
+            .select('*')
+            .eq('restaurant_id', restaurantId)
+            .order('created_at', { ascending: false });
+
+          if (!error && data) {
+            console.log('[useRestaurantDeals] Loaded', data.length, 'deals from Supabase');
+            return transformArray<Deal>(data);
+          }
+        } catch (err) {
+          console.warn('[useRestaurantDeals] Supabase fetch failed:', err);
+        }
+      }
+      return mockDeals.filter(d => d.restaurantId === restaurantId) as Deal[];
+    },
+    enabled: !!restaurantId,
+  });
+}
+
+export function useCreateDeal() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (data: {
+      restaurantId: string;
+      restaurantName: string;
+      restaurantImage?: string;
+      title: string;
+      description?: string;
+      discountPercent: number;
+      offerType: string;
+      maxCoupons: number;
+      minOrder?: number;
+      validTill: string;
+      daysAvailable?: string[];
+      startTime?: string;
+      endTime?: string;
+      termsConditions?: string;
+    }) => {
+      if (isSupabaseConfigured) {
+        const { data: deal, error } = await supabase
+          .from('deals')
+          .insert([{
+            restaurant_id: data.restaurantId,
+            restaurant_name: data.restaurantName,
+            restaurant_image: data.restaurantImage,
+            title: data.title,
+            description: data.description,
+            discount_percent: data.discountPercent,
+            offer_type: data.offerType,
+            max_coupons: data.maxCoupons,
+            min_order: data.minOrder ?? 0,
+            valid_till: data.validTill,
+            days_available: data.daysAvailable ?? [],
+            start_time: data.startTime,
+            end_time: data.endTime,
+            terms_conditions: data.termsConditions,
+            is_active: true,
+            claimed_coupons: 0,
+          }])
+          .select()
+          .single();
+
+        if (error) throw new Error(error.message);
+        return snakeToCamel(deal as Record<string, unknown>);
+      }
+      throw new Error('Supabase not configured');
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['restaurantDeals', variables.restaurantId] });
+      queryClient.invalidateQueries({ queryKey: ['deals'] });
+    },
+  });
+}
+
+export function useFoodWaste(restaurantId: string | undefined) {
+  return useQuery({
+    queryKey: ['foodWaste', restaurantId],
+    queryFn: async () => {
+      if (!restaurantId) return [];
+
+      if (isSupabaseConfigured) {
+        try {
+          const { data, error } = await supabase
+            .from('food_waste')
+            .select('*')
+            .eq('restaurant_id', restaurantId)
+            .order('created_at', { ascending: false });
+
+          if (!error && data) {
+            return transformArray(data);
+          }
+        } catch (err) {
+          console.warn('[useFoodWaste] Supabase fetch failed:', err);
+        }
+      }
+      return [];
+    },
+    enabled: !!restaurantId,
+  });
+}
+
+export function useCreateFoodWaste() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (data: {
+      restaurantId: string;
+      itemName: string;
+      category?: string;
+      quantity: number;
+      unit: string;
+      reason: string;
+      costPerUnit?: number;
+      totalCost?: number;
+      date: string;
+      time: string;
+      notes?: string;
+    }) => {
+      if (isSupabaseConfigured) {
+        const { data: record, error } = await supabase
+          .from('food_waste')
+          .insert([{
+            restaurant_id: data.restaurantId,
+            item_name: data.itemName,
+            category: data.category,
+            quantity: data.quantity,
+            unit: data.unit,
+            reason: data.reason,
+            cost_per_unit: data.costPerUnit ?? 0,
+            total_cost: data.totalCost ?? 0,
+            date: data.date,
+            time: data.time,
+            notes: data.notes,
+          }])
+          .select()
+          .single();
+
+        if (error) throw new Error(error.message);
+        return snakeToCamel(record as Record<string, unknown>);
+      }
+      throw new Error('Supabase not configured');
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['foodWaste', variables.restaurantId] });
+    },
+  });
+}
+
+export function useEmployees(restaurantId: string | undefined) {
+  return useQuery({
+    queryKey: ['employees', restaurantId],
+    queryFn: async () => {
+      if (!restaurantId) return [];
+
+      if (isSupabaseConfigured) {
+        try {
+          const { data, error } = await supabase
+            .from('employees')
+            .select('*')
+            .eq('restaurant_id', restaurantId);
+
+          if (!error && data) {
+            return transformArray(data);
+          }
+        } catch (err) {
+          console.warn('[useEmployees] Supabase fetch failed:', err);
+        }
+      }
+      return [];
+    },
+    enabled: !!restaurantId,
+  });
+}
+
+export function useSchedules(restaurantId: string | undefined) {
+  return useQuery({
+    queryKey: ['schedules', restaurantId],
+    queryFn: async () => {
+      if (!restaurantId) return [];
+
+      if (isSupabaseConfigured) {
+        try {
+          const { data, error } = await supabase
+            .from('schedules')
+            .select('*')
+            .eq('restaurant_id', restaurantId)
+            .order('week_start_date', { ascending: false });
+
+          if (!error && data) {
+            return transformArray(data);
+          }
+        } catch (err) {
+          console.warn('[useSchedules] Supabase fetch failed:', err);
+        }
+      }
+      return [];
+    },
+    enabled: !!restaurantId,
+  });
+}
+
+export { snakeToCamel, transformArray };
