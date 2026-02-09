@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -13,9 +13,13 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
+  ActivityIndicator,
+  RefreshControl,
+  TouchableOpacity,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   ChevronLeft,
   ShoppingBag,
@@ -30,187 +34,60 @@ import {
   Package,
   CircleCheck,
   CircleX,
-
   Search,
   User,
+  Filter,
+  Truck,
 } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
-import { Order, OrderMessage, OrderStatus } from '@/types';
-import { useOrderSubscription } from '@/hooks/useOrderSubscription';
+import { useAuth } from '@/contexts/AuthContext';
+import { api } from '@/lib/api';
+import { supabase } from '@/lib/supabase';
 
 const { width } = Dimensions.get('window');
 
-const mockOrders: Order[] = [
-  {
-    id: '1',
-    restaurantId: 'r1',
-    customerId: 'c1',
-    customerName: 'John Smith',
-    customerPhone: '+1 234 567 8901',
-    orderType: 'dinein',
-    items: [
-      { id: '1', name: 'Butter Chicken', quantity: 2, price: 18.99 },
-      { id: '2', name: 'Garlic Naan', quantity: 4, price: 3.99 },
-      { id: '3', name: 'Mango Lassi', quantity: 2, price: 4.99 },
-    ],
-    subtotal: 59.92,
-    discount: 5.99,
-    total: 53.93,
-    status: 'pending',
-    tableNumber: 'A3',
-    specialInstructions: 'Extra spicy please',
-    createdAt: '2024-01-24T14:30:00Z',
-    updatedAt: '2024-01-24T14:30:00Z',
-    estimatedTime: 25,
-    messages: [
-      { id: 'm1', orderId: '1', senderId: 'c1', senderType: 'customer', message: 'Can you make the butter chicken extra spicy?', timestamp: '2024-01-24T14:31:00Z', read: true },
-    ],
-  },
-  {
-    id: '2',
-    restaurantId: 'r1',
-    customerId: 'c2',
-    customerName: 'Sarah Johnson',
-    customerPhone: '+1 234 567 8902',
-    orderType: 'pickup',
-    items: [
-      { id: '1', name: 'Chicken Biryani', quantity: 1, price: 16.99 },
-      { id: '2', name: 'Raita', quantity: 1, price: 2.99 },
-    ],
-    subtotal: 19.98,
-    discount: 0,
-    total: 19.98,
-    status: 'pending',
-    pickupTime: '15:30',
-    createdAt: '2024-01-24T14:45:00Z',
-    updatedAt: '2024-01-24T14:45:00Z',
-    estimatedTime: 20,
-    messages: [],
-  },
-  {
-    id: '3',
-    restaurantId: 'r1',
-    customerId: 'c3',
-    customerName: 'Mike Davis',
-    customerPhone: '+1 234 567 8903',
-    orderType: 'dinein',
-    items: [
-      { id: '1', name: 'Paneer Tikka', quantity: 1, price: 14.99 },
-      { id: '2', name: 'Dal Makhani', quantity: 1, price: 12.99 },
-      { id: '3', name: 'Jeera Rice', quantity: 2, price: 4.99 },
-    ],
-    subtotal: 37.96,
-    discount: 3.80,
-    total: 34.16,
-    status: 'accepted',
-    tableNumber: 'B2',
-    createdAt: '2024-01-24T14:00:00Z',
-    updatedAt: '2024-01-24T14:10:00Z',
-    estimatedTime: 15,
-    messages: [
-      { id: 'm2', orderId: '3', senderId: 'r1', senderType: 'restaurant', message: 'Your order is being prepared!', timestamp: '2024-01-24T14:11:00Z', read: true },
-    ],
-  },
-  {
-    id: '4',
-    restaurantId: 'r1',
-    customerId: 'c4',
-    customerName: 'Emily Wilson',
-    customerPhone: '+1 234 567 8904',
-    orderType: 'pickup',
-    items: [
-      { id: '1', name: 'Tandoori Chicken', quantity: 1, price: 19.99 },
-    ],
-    subtotal: 19.99,
-    discount: 2.00,
-    total: 17.99,
-    status: 'preparing',
-    pickupTime: '16:00',
-    createdAt: '2024-01-24T13:30:00Z',
-    updatedAt: '2024-01-24T13:45:00Z',
-    estimatedTime: 10,
-    messages: [],
-  },
-  {
-    id: '5',
-    restaurantId: 'r1',
-    customerId: 'c5',
-    customerName: 'David Brown',
-    customerPhone: '+1 234 567 8905',
-    orderType: 'dinein',
-    items: [
-      { id: '1', name: 'Lamb Rogan Josh', quantity: 1, price: 22.99 },
-      { id: '2', name: 'Butter Naan', quantity: 2, price: 3.49 },
-    ],
-    subtotal: 29.97,
-    discount: 0,
-    total: 29.97,
-    status: 'ready',
-    tableNumber: 'C1',
-    createdAt: '2024-01-24T13:00:00Z',
-    updatedAt: '2024-01-24T13:30:00Z',
-    messages: [],
-  },
-  {
-    id: '6',
-    restaurantId: 'r1',
-    customerId: 'c6',
-    customerName: 'Lisa Anderson',
-    customerPhone: '+1 234 567 8906',
-    orderType: 'pickup',
-    items: [
-      { id: '1', name: 'Vegetable Korma', quantity: 2, price: 13.99 },
-    ],
-    subtotal: 27.98,
-    discount: 2.80,
-    total: 25.18,
-    status: 'completed',
-    pickupTime: '14:00',
-    createdAt: '2024-01-24T12:30:00Z',
-    updatedAt: '2024-01-24T14:00:00Z',
-    messages: [],
-  },
-  {
-    id: '7',
-    restaurantId: 'r1',
-    customerId: 'c7',
-    customerName: 'James Taylor',
-    customerPhone: '+1 234 567 8907',
-    orderType: 'dinein',
-    items: [
-      { id: '1', name: 'Fish Curry', quantity: 1, price: 18.99 },
-    ],
-    subtotal: 18.99,
-    discount: 0,
-    total: 18.99,
-    status: 'rejected',
-    createdAt: '2024-01-24T11:00:00Z',
-    updatedAt: '2024-01-24T11:05:00Z',
-    messages: [
-      { id: 'm3', orderId: '7', senderId: 'r1', senderType: 'restaurant', message: 'Sorry, we are currently out of fish. Would you like to order something else?', timestamp: '2024-01-24T11:05:00Z', read: true },
-    ],
-  },
-  {
-    id: '8',
-    restaurantId: 'r1',
-    customerId: 'c8',
-    customerName: 'Anna Martinez',
-    customerPhone: '+1 234 567 8908',
-    orderType: 'pickup',
-    items: [
-      { id: '1', name: 'Chicken Tikka Masala', quantity: 1, price: 17.99 },
-    ],
-    subtotal: 17.99,
-    discount: 0,
-    total: 17.99,
-    status: 'cancelled',
-    createdAt: '2024-01-24T10:00:00Z',
-    updatedAt: '2024-01-24T10:15:00Z',
-    messages: [],
-  },
-];
+interface OrderItem {
+  id: string;
+  name: string;
+  quantity: number;
+  price: number;
+}
+
+interface OrderMessage {
+  id: string;
+  orderId: string;
+  senderId: string;
+  senderType: 'customer' | 'restaurant';
+  message: string;
+  timestamp: string;
+  read: boolean;
+}
+
+interface Order {
+  id: string;
+  restaurantId: string;
+  customerId: string;
+  customerName: string;
+  customerPhone: string;
+  orderType: 'dinein' | 'pickup';
+  items: OrderItem[];
+  subtotal: number;
+  discount: number;
+  total: number;
+  status: 'pending' | 'accepted' | 'preparing' | 'ready' | 'completed' | 'rejected' | 'cancelled';
+  tableNumber?: string;
+  pickupTime?: string;
+  specialInstructions?: string;
+  notes?: string;
+  deliveryAddress?: string;
+  createdAt: string;
+  updatedAt: string;
+  estimatedTime?: number;
+  messages: OrderMessage[];
+}
 
 type TabType = 'new' | 'active' | 'history';
+type OrderStatus = Order['status'];
 
 const statusConfig: Record<OrderStatus, { label: string; color: string; bgColor: string; icon: any }> = {
   pending: { label: 'New', color: '#f59e0b', bgColor: '#fef3c7', icon: Clock },
@@ -226,9 +103,11 @@ export default function OrdersScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { colors, isDark } = useTheme();
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const { filter: urlFilter } = useLocalSearchParams<{ filter?: string }>();
 
   const [activeTab, setActiveTab] = useState<TabType>('new');
-  const [orders, setOrders] = useState<Order[]>(mockOrders);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [showOrderModal, setShowOrderModal] = useState(false);
   const [showChatModal, setShowChatModal] = useState(false);
@@ -238,21 +117,78 @@ export default function OrdersScreen() {
   const [filterType, setFilterType] = useState<'all' | 'dinein' | 'pickup'>('all');
 
   const tabIndicator = useRef(new Animated.Value(0)).current;
+  const flatListRef = useRef<FlatList>(null);
 
-  useOrderSubscription({
-    onUpdate: (payload) => {
-      const order = payload.new as Order;
-      if (order) {
-        setOrders((prev) => {
-          const exists = prev.find((o) => o.id === order.id);
-          return exists
-            ? prev.map((o) => (o.id === order.id ? order : o))
-            : [order, ...prev];
-        });
-      }
+  const restaurantId = user?.restaurantId || 'restaurant-123';
+
+  // Fetch restaurant orders
+  const {
+    data: ordersData,
+    isLoading,
+    error,
+    refetch,
+  } = useQuery({
+    queryKey: ['restaurant-orders', restaurantId],
+    queryFn: () => api.getRestaurantOrders(restaurantId),
+    enabled: !!restaurantId,
+    refetchInterval: 15000, // Refresh every 15 seconds
+  });
+
+  // Update order status mutation
+  const updateStatusMutation = useMutation({
+    mutationFn: ({ orderId, status }: { orderId: string; status: OrderStatus }) =>
+      api.updateOrderStatus(orderId, status),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['restaurant-orders', restaurantId] });
+    },
+    onError: (error: any) => {
+      Alert.alert('Update Failed', error.message || 'Failed to update order status');
     },
   });
-  const flatListRef = useRef<FlatList>(null);
+
+  const orders = ordersData?.data || [];
+
+  // Real-time subscription for new orders
+  useEffect(() => {
+    if (!restaurantId) return;
+
+    const channel = supabase
+      .channel(`restaurant-orders:${restaurantId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'orders',
+          filter: `restaurant_id=eq.${restaurantId}`,
+        },
+        (payload) => {
+          console.log('Order update:', payload);
+          queryClient.invalidateQueries({ queryKey: ['restaurant-orders', restaurantId] });
+          
+          // Show notification for new orders
+          if (payload.eventType === 'INSERT') {
+            Alert.alert('New Order!', 'You have a new order', [
+              { text: 'View', onPress: () => refetch() },
+              { text: 'OK' },
+            ]);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [restaurantId, queryClient, refetch]);
+
+  // Set initial filter from URL params
+  useEffect(() => {
+    if (urlFilter) {
+      if (urlFilter === 'pending') setActiveTab('new');
+      else if (['preparing', 'ready'].includes(urlFilter)) setActiveTab('active');
+    }
+  }, [urlFilter]);
 
   const tabs: { key: TabType; label: string; count: number }[] = [
     { key: 'new', label: 'New', count: orders.filter(o => o.status === 'pending').length },
@@ -294,11 +230,15 @@ export default function OrdersScreen() {
   };
 
   const handleAcceptOrder = (order: Order) => {
-    setOrders(prev => prev.map(o => 
-      o.id === order.id ? { ...o, status: 'accepted' as OrderStatus, updatedAt: new Date().toISOString() } : o
-    ));
-    setShowOrderModal(false);
-    Alert.alert('Order Accepted', `Order #${order.id} has been accepted`);
+    updateStatusMutation.mutate(
+      { orderId: order.id, status: 'accepted' },
+      {
+        onSuccess: () => {
+          setShowOrderModal(false);
+          Alert.alert('Order Accepted', `Order #${order.id.slice(0, 8)} has been accepted`);
+        },
+      }
+    );
   };
 
   const handleRejectOrder = (order: Order) => {
@@ -311,10 +251,14 @@ export default function OrdersScreen() {
           text: 'Reject',
           style: 'destructive',
           onPress: () => {
-            setOrders(prev => prev.map(o => 
-              o.id === order.id ? { ...o, status: 'rejected' as OrderStatus, updatedAt: new Date().toISOString() } : o
-            ));
-            setShowOrderModal(false);
+            updateStatusMutation.mutate(
+              { orderId: order.id, status: 'rejected' },
+              {
+                onSuccess: () => {
+                  setShowOrderModal(false);
+                },
+              }
+            );
           },
         },
       ]
@@ -322,10 +266,14 @@ export default function OrdersScreen() {
   };
 
   const handleUpdateStatus = (order: Order, newStatus: OrderStatus) => {
-    setOrders(prev => prev.map(o => 
-      o.id === order.id ? { ...o, status: newStatus, updatedAt: new Date().toISOString() } : o
-    ));
-    setShowOrderModal(false);
+    updateStatusMutation.mutate(
+      { orderId: order.id, status: newStatus },
+      {
+        onSuccess: () => {
+          setShowOrderModal(false);
+        },
+      }
+    );
   };
 
   const handleOpenChat = (order: Order) => {
@@ -346,12 +294,8 @@ export default function OrdersScreen() {
       read: false,
     };
 
-    setOrders(prev => prev.map(o => 
-      o.id === chatOrder.id 
-        ? { ...o, messages: [...o.messages, message] } 
-        : o
-    ));
-
+    // TODO: Send message via API
+    // For now, update locally
     setChatOrder(prev => prev ? { ...prev, messages: [...prev.messages, message] } : null);
     setNewMessage('');
   };
@@ -374,12 +318,25 @@ export default function OrdersScreen() {
     return `${Math.floor(diffHours / 24)}d ago`;
   };
 
+  const getNextStatus = (currentStatus: OrderStatus): OrderStatus | null => {
+    const statusFlow: Record<OrderStatus, OrderStatus | null> = {
+      pending: 'accepted',
+      accepted: 'preparing',
+      preparing: 'ready',
+      ready: 'completed',
+      completed: null,
+      rejected: null,
+      cancelled: null,
+    };
+    return statusFlow[currentStatus];
+  };
+
   const styles = createStyles(colors, isDark);
 
   const renderOrderCard = ({ item: order }: { item: Order }) => {
     const status = statusConfig[order.status];
     const StatusIcon = status.icon;
-    const hasUnreadMessages = order.messages.some(m => !m.read && m.senderType === 'customer');
+    const hasUnreadMessages = order.messages?.some(m => !m.read && m.senderType === 'customer') || false;
 
     return (
       <Pressable 
@@ -399,7 +356,7 @@ export default function OrdersScreen() {
               )}
             </View>
             <View>
-              <Text style={styles.orderNumber}>#{order.id}</Text>
+              <Text style={styles.orderNumber}>#{order.id.slice(0, 8)}</Text>
               <Text style={styles.orderType}>
                 {order.orderType === 'dinein' ? `Table ${order.tableNumber}` : `Pickup ${order.pickupTime}`}
               </Text>
@@ -477,6 +434,47 @@ export default function OrdersScreen() {
     );
   };
 
+  if (isLoading) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        <View style={styles.header}>
+          <Pressable style={styles.backBtn} onPress={() => router.back()}>
+            <ChevronLeft size={24} color={colors.text} />
+          </Pressable>
+          <Text style={styles.headerTitle}>Orders</Text>
+          <View style={{ width: 40 }} />
+        </View>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={styles.loadingText}>Loading orders...</Text>
+        </View>
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        <View style={styles.header}>
+          <Pressable style={styles.backBtn} onPress={() => router.back()}>
+            <ChevronLeft size={24} color={colors.text} />
+          </Pressable>
+          <Text style={styles.headerTitle}>Orders</Text>
+          <View style={{ width: 40 }} />
+        </View>
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorTitle}>Failed to Load Orders</Text>
+          <Text style={styles.errorMessage}>
+            {error instanceof Error ? error.message : 'Something went wrong'}
+          </Text>
+          <TouchableOpacity style={styles.retryButton} onPress={() => refetch()}>
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
@@ -548,6 +546,13 @@ export default function OrdersScreen() {
         keyExtractor={(item) => item.id}
         contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 20 }]}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={false}
+            onRefresh={refetch}
+            tintColor={colors.primary}
+          />
+        }
         ListEmptyComponent={
           <View style={styles.emptyState}>
             <ShoppingBag size={48} color={colors.textMuted} />
@@ -567,7 +572,7 @@ export default function OrdersScreen() {
             {selectedOrder && (
               <>
                 <View style={styles.modalHeader}>
-                  <Text style={styles.modalTitle}>Order #{selectedOrder.id}</Text>
+                  <Text style={styles.modalTitle}>Order #{selectedOrder.id.slice(0, 8)}</Text>
                   <Pressable onPress={() => setShowOrderModal(false)}>
                     <X size={24} color={colors.text} />
                   </Pressable>
@@ -634,10 +639,12 @@ export default function OrdersScreen() {
                         <Text style={styles.itemPrice}>${(item.quantity * item.price).toFixed(2)}</Text>
                       </View>
                     ))}
-                    {selectedOrder.specialInstructions && (
+                    {(selectedOrder.specialInstructions || selectedOrder.notes) && (
                       <View style={styles.instructionsBox}>
                         <Text style={styles.instructionsLabel}>Special Instructions</Text>
-                        <Text style={styles.instructionsText}>{selectedOrder.specialInstructions}</Text>
+                        <Text style={styles.instructionsText}>
+                          {selectedOrder.specialInstructions || selectedOrder.notes}
+                        </Text>
                       </View>
                     )}
                   </View>
@@ -664,16 +671,30 @@ export default function OrdersScreen() {
                       <Pressable 
                         style={styles.rejectButton}
                         onPress={() => handleRejectOrder(selectedOrder)}
+                        disabled={updateStatusMutation.isPending}
                       >
-                        <X size={20} color={colors.error} />
-                        <Text style={[styles.actionButtonText, { color: colors.error }]}>Reject</Text>
+                        {updateStatusMutation.isPending ? (
+                          <ActivityIndicator size="small" color={colors.error} />
+                        ) : (
+                          <>
+                            <X size={20} color={colors.error} />
+                            <Text style={[styles.actionButtonText, { color: colors.error }]}>Reject</Text>
+                          </>
+                        )}
                       </Pressable>
                       <Pressable 
                         style={styles.acceptButton}
                         onPress={() => handleAcceptOrder(selectedOrder)}
+                        disabled={updateStatusMutation.isPending}
                       >
-                        <Check size={20} color="#fff" />
-                        <Text style={[styles.actionButtonText, { color: '#fff' }]}>Accept Order</Text>
+                        {updateStatusMutation.isPending ? (
+                          <ActivityIndicator size="small" color="#fff" />
+                        ) : (
+                          <>
+                            <Check size={20} color="#fff" />
+                            <Text style={[styles.actionButtonText, { color: '#fff' }]}>Accept Order</Text>
+                          </>
+                        )}
                       </Pressable>
                     </View>
                   )}
@@ -682,9 +703,16 @@ export default function OrdersScreen() {
                     <Pressable 
                       style={styles.primaryButton}
                       onPress={() => handleUpdateStatus(selectedOrder, 'preparing')}
+                      disabled={updateStatusMutation.isPending}
                     >
-                      <ChefHat size={20} color="#fff" />
-                      <Text style={styles.primaryButtonText}>Start Preparing</Text>
+                      {updateStatusMutation.isPending ? (
+                        <ActivityIndicator size="small" color="#fff" />
+                      ) : (
+                        <>
+                          <ChefHat size={20} color="#fff" />
+                          <Text style={styles.primaryButtonText}>Start Preparing</Text>
+                        </>
+                      )}
                     </Pressable>
                   )}
 
@@ -692,9 +720,16 @@ export default function OrdersScreen() {
                     <Pressable 
                       style={styles.primaryButton}
                       onPress={() => handleUpdateStatus(selectedOrder, 'ready')}
+                      disabled={updateStatusMutation.isPending}
                     >
-                      <Package size={20} color="#fff" />
-                      <Text style={styles.primaryButtonText}>Mark as Ready</Text>
+                      {updateStatusMutation.isPending ? (
+                        <ActivityIndicator size="small" color="#fff" />
+                      ) : (
+                        <>
+                          <Package size={20} color="#fff" />
+                          <Text style={styles.primaryButtonText}>Mark as Ready</Text>
+                        </>
+                      )}
                     </Pressable>
                   )}
 
@@ -702,9 +737,16 @@ export default function OrdersScreen() {
                     <Pressable 
                       style={styles.primaryButton}
                       onPress={() => handleUpdateStatus(selectedOrder, 'completed')}
+                      disabled={updateStatusMutation.isPending}
                     >
-                      <CircleCheck size={20} color="#fff" />
-                      <Text style={styles.primaryButtonText}>Complete Order</Text>
+                      {updateStatusMutation.isPending ? (
+                        <ActivityIndicator size="small" color="#fff" />
+                      ) : (
+                        <>
+                          <CircleCheck size={20} color="#fff" />
+                          <Text style={styles.primaryButtonText}>Complete Order</Text>
+                        </>
+                      )}
                     </Pressable>
                   )}
                 </ScrollView>
@@ -728,13 +770,13 @@ export default function OrdersScreen() {
                   </Pressable>
                   <View style={styles.chatHeaderInfo}>
                     <Text style={styles.chatHeaderName}>{chatOrder.customerName}</Text>
-                    <Text style={styles.chatHeaderOrder}>Order #{chatOrder.id}</Text>
+                    <Text style={styles.chatHeaderOrder}>Order #{chatOrder.id.slice(0, 8)}</Text>
                   </View>
                   <View style={{ width: 24 }} />
                 </View>
 
                 <FlatList
-                  data={chatOrder.messages}
+                  data={chatOrder.messages || []}
                   keyExtractor={(item) => item.id}
                   contentContainerStyle={styles.chatMessages}
                   renderItem={({ item: message }) => (
@@ -818,6 +860,45 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     fontSize: 18,
     fontWeight: '700' as const,
     color: colors.text,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: colors.textSecondary,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  errorTitle: {
+    fontSize: 18,
+    fontWeight: '600' as const,
+    color: colors.text,
+    marginBottom: 8,
+  },
+  errorMessage: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginBottom: 24,
+  },
+  retryButton: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600' as const,
   },
   searchContainer: {
     paddingHorizontal: 20,
