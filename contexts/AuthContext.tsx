@@ -1,6 +1,6 @@
 // contexts/AuthContext.tsx
 
-import {
+import React, {
   createContext,
   useContext,
   useEffect,
@@ -10,10 +10,15 @@ import {
 } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Session } from '@supabase/supabase-js';
+import { api } from '@/lib/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { User, UserRole, CardDetails } from '@/types';
 
 export type { User, UserRole, CardDetails };
+
+/* -------------------------------------------------------------------------- */
+/*                               Context Types                                */
+/* -------------------------------------------------------------------------- */
 
 export interface AuthContextValue {
   session: Session | null;
@@ -22,8 +27,8 @@ export interface AuthContextValue {
   isLoading: boolean;
   isAuthenticated: boolean;
   error: string | null;
-  signupPending: boolean;
 
+  // Auth actions
   signIn: (email: string, password: string) => Promise<{ error?: string }>;
   signUp: (
     email: string,
@@ -31,34 +36,38 @@ export interface AuthContextValue {
     name?: string,
     role?: UserRole | 'user'
   ) => Promise<{ error?: string }>;
-  signup: (
-    email: string,
-    password: string,
-    name?: string,
-    role?: UserRole | 'user'
-  ) => Promise<{ error?: string }>;
-  signOut: () => Promise<void>;
   logout: () => Promise<void>;
 
+  // Profile
+  updateProfile: (data: Partial<User>) => Promise<void>;
+
+  // Local helpers
   toggleFavorite: (restaurantId: string) => void;
   addPoints: (points: number) => void;
   updateUser: (updates: Partial<User>) => void;
 
+  // Token
   getToken: () => Promise<string | null>;
 }
 
 /* -------------------------------------------------------------------------- */
-/*                                Context Init                                */
+/*                              Context Creation                              */
 /* -------------------------------------------------------------------------- */
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 /* -------------------------------------------------------------------------- */
-/*                              Provider Component                             */
+/*                                Constants                                   */
 /* -------------------------------------------------------------------------- */
 
 const FAVORITES_KEY = 'user_favorites';
 const POINTS_KEY = 'user_points';
+const TOKEN_KEY = 'authToken';
+const USER_KEY = 'userData';
+
+/* -------------------------------------------------------------------------- */
+/*                              Provider Component                             */
+/* -------------------------------------------------------------------------- */
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
@@ -67,21 +76,49 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
 
   /* ------------------------------------------------------------------------ */
-  /*                           Session + Listener                              */
+  /*                        Load stored backend auth                           */
+  /* ------------------------------------------------------------------------ */
+
+  const loadStoredAuth = async () => {
+    try {
+      const token = await AsyncStorage.getItem(TOKEN_KEY);
+      const storedUser = await AsyncStorage.getItem(USER_KEY);
+
+      if (token && storedUser) {
+        api.setAuthToken(token);
+        setUser(JSON.parse(storedUser));
+      }
+    } catch (err) {
+      console.error('[Auth] Failed loading stored auth:', err);
+    }
+  };
+
+  /* ------------------------------------------------------------------------ */
+  /*                         Supabase Session Listener                          */
   /* ------------------------------------------------------------------------ */
 
   useEffect(() => {
     let mounted = true;
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    const init = async () => {
+      await loadStoredAuth();
+
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
       if (!mounted) return;
+
       setSession(session);
+
       if (session?.user) {
-        fetchProfile(session.user.id);
-      } else {
-        setIsLoading(false);
+        await fetchProfile(session.user.id);
       }
-    });
+
+      setIsLoading(false);
+    };
+
+    init();
 
     const { data: listener } = supabase.auth.onAuthStateChange(
       async (_event, session) => {
@@ -91,7 +128,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           await fetchProfile(session.user.id);
         } else {
           setUser(null);
-          setIsLoading(false);
         }
       }
     );
@@ -103,7 +139,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   /* ------------------------------------------------------------------------ */
-  /*                              Fetch Profile                                */
+  /*                               Fetch Profile                               */
   /* ------------------------------------------------------------------------ */
 
   const fetchProfile = async (userId: string) => {
@@ -116,14 +152,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .eq('id', userId)
         .single();
 
-      const storedFavorites = await AsyncStorage.getItem(FAVORITES_KEY);
-      const storedPoints = await AsyncStorage.getItem(POINTS_KEY);
-
       if (dbError && dbError.code !== 'PGRST116') {
         console.warn('[Auth] Profile fetch warning:', dbError);
       }
 
+      const storedFavorites = await AsyncStorage.getItem(FAVORITES_KEY);
+      const storedPoints = await AsyncStorage.getItem(POINTS_KEY);
+
       const authUser = session?.user;
+
       const profile: User = {
         id: userId,
         name: data?.name || authUser?.user_metadata?.name || 'User',
@@ -131,48 +168,56 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         phone: data?.phone || '',
         address: data?.address || '',
         role: data?.role || 'customer',
-        points: storedPoints ? parseInt(storedPoints, 10) : (data?.points || 0),
-        favorites: storedFavorites ? JSON.parse(storedFavorites) : (data?.favorites || []),
+        points: storedPoints ? parseInt(storedPoints, 10) : data?.points || 0,
+        favorites: storedFavorites
+          ? JSON.parse(storedFavorites)
+          : data?.favorites || [],
         photo: data?.photo || authUser?.user_metadata?.avatar_url,
         restaurantId: data?.restaurant_id,
         cardDetails: data?.card_details,
       };
 
       setUser(profile);
+      await AsyncStorage.setItem(USER_KEY, JSON.stringify(profile));
     } catch (err: any) {
       console.error('[Auth] Profile fetch failed:', err);
       setError(err.message ?? 'Failed to load profile');
-      
-      const authUser = session?.user;
-      if (authUser) {
-        setUser({
-          id: userId,
-          name: authUser.user_metadata?.name || 'User',
-          email: authUser.email || '',
-          phone: '',
-          address: '',
-          role: 'customer',
-          points: 0,
-          favorites: [],
-        });
-      }
-    } finally {
-      setIsLoading(false);
     }
   };
 
   /* ------------------------------------------------------------------------ */
-  /*                                 Actions                                   */
+  /*                                Auth Actions                               */
   /* ------------------------------------------------------------------------ */
 
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
 
-    if (error) return { error: error.message };
-    return {};
+      if (error) return { error: error.message };
+
+      // Optional backend login sync
+      const response = await fetch(
+        `${process.env.EXPO_PUBLIC_API_URL}/auth/login`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password }),
+        }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        await AsyncStorage.setItem(TOKEN_KEY, data.token);
+        api.setAuthToken(data.token);
+      }
+
+      return {};
+    } catch (err: any) {
+      return { error: err.message };
+    }
   };
 
   const signUp = async (
@@ -181,37 +226,60 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     name?: string,
     role: UserRole | 'user' = 'customer'
   ) => {
-    const normalizedRole: UserRole = role === 'user' ? 'customer' : role;
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          name,
-          role: normalizedRole,
-        },
-      },
-    });
+    try {
+      const normalizedRole: UserRole = role === 'user' ? 'customer' : role;
 
-    if (error) return { error: error.message };
-    return {};
+      const { error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: { data: { name, role: normalizedRole } },
+      });
+
+      if (error) return { error: error.message };
+
+      return {};
+    } catch (err: any) {
+      return { error: err.message };
+    }
   };
 
-  const signOut = async () => {
+  const logout = async () => {
     await supabase.auth.signOut();
+    await AsyncStorage.multiRemove([TOKEN_KEY, USER_KEY]);
+    api.setAuthToken(null);
     setSession(null);
     setUser(null);
   };
 
-  const logout = signOut;
+  /* ------------------------------------------------------------------------ */
+  /*                             Profile Updates                               */
+  /* ------------------------------------------------------------------------ */
+
+  const updateProfile = async (data: Partial<User>) => {
+    try {
+      const response = await api.updateUserProfile(data);
+      const updatedUser = { ...user, ...response.data } as User;
+
+      setUser(updatedUser);
+      await AsyncStorage.setItem(USER_KEY, JSON.stringify(updatedUser));
+    } catch (err) {
+      console.error('[Auth] Update profile failed:', err);
+      throw err;
+    }
+  };
+
+  /* ------------------------------------------------------------------------ */
+  /*                           Local State Helpers                             */
+  /* ------------------------------------------------------------------------ */
 
   const toggleFavorite = useCallback((restaurantId: string) => {
     setUser((prev) => {
       if (!prev) return prev;
+
       const favorites = prev.favorites.includes(restaurantId)
         ? prev.favorites.filter((id) => id !== restaurantId)
         : [...prev.favorites, restaurantId];
-      
+
       AsyncStorage.setItem(FAVORITES_KEY, JSON.stringify(favorites));
       return { ...prev, favorites };
     });
@@ -220,6 +288,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const addPoints = useCallback((points: number) => {
     setUser((prev) => {
       if (!prev) return prev;
+
       const newPoints = prev.points + points;
       AsyncStorage.setItem(POINTS_KEY, String(newPoints));
       return { ...prev, points: newPoints };
@@ -227,23 +296,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const updateUser = useCallback((updates: Partial<User>) => {
-    setUser((prev) => {
-      if (!prev) return prev;
-      return { ...prev, ...updates };
-    });
+    setUser((prev) => (prev ? { ...prev, ...updates } : prev));
   }, []);
 
   /* ------------------------------------------------------------------------ */
-  /*                            Token Helper (API)                              */
+  /*                                Token Helper                               */
   /* ------------------------------------------------------------------------ */
 
   const getToken = async (): Promise<string | null> => {
-    const { data: { session } } = await supabase.auth.getSession();
+    const token = await AsyncStorage.getItem(TOKEN_KEY);
+    if (token) return token;
+
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
     return session?.access_token ?? null;
   };
 
   /* ------------------------------------------------------------------------ */
-  /*                                  Provider                                  */
+  /*                                  Provider                                 */
   /* ------------------------------------------------------------------------ */
 
   return (
@@ -253,14 +325,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user,
         profile: user,
         isLoading,
-        isAuthenticated: !!session?.user,
+        isAuthenticated: !!session?.user || !!user,
         error,
-        signupPending: isLoading,
         signIn,
         signUp,
-        signup: signUp,
-        signOut,
         logout,
+        updateProfile,
         toggleFavorite,
         addPoints,
         updateUser,
@@ -273,13 +343,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 }
 
 /* -------------------------------------------------------------------------- */
-/*                                   Hook                                     */
+/*                                    Hook                                    */
 /* -------------------------------------------------------------------------- */
 
 export function useAuth() {
   const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within AuthProvider');
-  }
+  if (!context) throw new Error('useAuth must be used within AuthProvider');
   return context;
 }
