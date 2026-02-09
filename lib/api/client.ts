@@ -1,137 +1,164 @@
-import { config } from '../config';
-import { auth } from '../supabase';
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import { auth } from '@/lib/supabase';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const API_URL = config.api.baseUrl;
+interface User {
+  id: string;
+  email: string;
+  name?: string;
+  role?: 'customer' | 'restaurant_owner' | 'admin';
+}
 
-async function getAuthHeaders() {
-  const session = await auth.getSession();
-  const token = session?.access_token;
+interface AuthContextType {
+  user: User | null;
+  isLoading: boolean;
+  signIn: (email: string, password: string) => Promise<void>;
+  signUp: (email: string, password: string, name: string, role: string) => Promise<void>;
+  signOut: () => Promise<void>;
+  updateProfile: (data: Partial<User>) => Promise<void>;
+}
 
-  return {
-    'Content-Type': 'application/json',
-    ...(token && { 'Authorization': `Bearer ${token}` }),
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const [user, setUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    // Check for existing session
+    checkSession();
+
+    // Listen for auth state changes
+    const { data: authListener } = auth.onAuthStateChange(async (event, session) => {
+      console.log('Auth state changed:', event);
+      if (session?.user) {
+        const userData = await loadUserData(session.user.id);
+        setUser(userData);
+      } else {
+        setUser(null);
+      }
+    });
+
+    return () => {
+      authListener?.subscription?.unsubscribe();
+    };
+  }, []);
+
+  const checkSession = async () => {
+    try {
+      const session = await auth.getSession();
+      if (session?.user) {
+        const userData = await loadUserData(session.user.id);
+        setUser(userData);
+      }
+    } catch (error) {
+      console.error('Session check error:', error);
+    } finally {
+      setIsLoading(false);
+    }
   };
+
+  const loadUserData = async (userId: string): Promise<User> => {
+    try {
+      const stored = await AsyncStorage.getItem('userData');
+      if (stored) {
+        return JSON.parse(stored);
+      }
+
+      // Fetch from your backend
+      const response = await fetch(`${process.env.EXPO_PUBLIC_API_URL}/api/v1/profile`, {
+        headers: {
+          'Authorization': `Bearer ${(await auth.getSession())?.access_token}`,
+        },
+      });
+
+      const data = await response.json();
+      await AsyncStorage.setItem('userData', JSON.stringify(data));
+      return data;
+    } catch (error) {
+      console.error('Load user data error:', error);
+      return { id: userId, email: '' };
+    }
+  };
+
+  const signIn = async (email: string, password: string) => {
+    try {
+      const { data, error } = await auth.signIn(email, password);
+      if (error) throw error;
+
+      if (data.user) {
+        const userData = await loadUserData(data.user.id);
+        setUser(userData);
+      }
+    } catch (error: any) {
+      console.error('Sign in error:', error);
+      throw new Error(error.message || 'Failed to sign in');
+    }
+  };
+
+  const signUp = async (email: string, password: string, name: string, role: string) => {
+    try {
+      const { data, error } = await auth.signUp(email, password, {
+        name,
+        role,
+      });
+
+      if (error) throw error;
+
+      if (data.user) {
+        const userData = { id: data.user.id, email, name, role: role as any };
+        await AsyncStorage.setItem('userData', JSON.stringify(userData));
+        setUser(userData);
+      }
+    } catch (error: any) {
+      console.error('Sign up error:', error);
+      throw new Error(error.message || 'Failed to sign up');
+    }
+  };
+
+  const signOut = async () => {
+    try {
+      await auth.signOut();
+      await AsyncStorage.multiRemove(['userData']);
+      setUser(null);
+    } catch (error) {
+      console.error('Sign out error:', error);
+    }
+  };
+
+  const updateProfile = async (data: Partial<User>) => {
+    try {
+      const session = await auth.getSession();
+      const response = await fetch(`${process.env.EXPO_PUBLIC_API_URL}/api/v1/profile`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token}`,
+        },
+        body: JSON.stringify(data),
+      });
+
+      const updatedData = await response.json();
+      const updatedUser = { ...user, ...updatedData };
+      await AsyncStorage.setItem('userData', JSON.stringify(updatedUser));
+      setUser(updatedUser as User);
+    } catch (error) {
+      console.error('Update profile error:', error);
+      throw error;
+    }
+  };
+
+  return (
+    <AuthContext.Provider value={{ user, isLoading, signIn, signUp, signOut, updateProfile }}>
+      {children}
+    </AuthContext.Provider>
+  );
 }
 
-export async function apiFetch<T = any>(
-  endpoint: string,
-  method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE' = 'GET',
-  body?: any
-): Promise<T> {
-  const headers = await getAuthHeaders();
-  const response = await fetch(`${API_URL}${endpoint}`, {
-    method,
-    headers,
-    body: body ? JSON.stringify(body) : undefined,
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text().catch(() => response.statusText);
-    throw new Error(`API Error: ${errorText}`);
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error('useAuth must be used within AuthProvider');
   }
-
-  if (response.status === 204) {
-    return null as T;
-  }
-
-  return response.json();
-}
-
-export const api = {
-  async get<T>(endpoint: string): Promise<T> {
-    const headers = await getAuthHeaders();
-    const response = await fetch(`${API_URL}${endpoint}`, {
-      method: 'GET',
-      headers,
-    });
-
-    if (!response.ok) {
-      throw new Error(`API Error: ${response.statusText}`);
-    }
-
-    return response.json();
-  },
-
-  async post<T>(endpoint: string, data: any): Promise<T> {
-    const headers = await getAuthHeaders();
-    const response = await fetch(`${API_URL}${endpoint}`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(data),
-    });
-
-    if (!response.ok) {
-      throw new Error(`API Error: ${response.statusText}`);
-    }
-
-    return response.json();
-  },
-
-  async patch<T>(endpoint: string, data: any): Promise<T> {
-    const headers = await getAuthHeaders();
-    const response = await fetch(`${API_URL}${endpoint}`, {
-      method: 'PATCH',
-      headers,
-      body: JSON.stringify(data),
-    });
-
-    if (!response.ok) {
-      throw new Error(`API Error: ${response.statusText}`);
-    }
-
-    return response.json();
-  },
-
-  async delete<T>(endpoint: string): Promise<T> {
-    const headers = await getAuthHeaders();
-    const response = await fetch(`${API_URL}${endpoint}`, {
-      method: 'DELETE',
-      headers,
-    });
-
-    if (!response.ok) {
-      throw new Error(`API Error: ${response.statusText}`);
-    }
-
-    return response.json();
-  },
-};
-
-// Restaurant API
-export const restaurantAPI = {
-  getAll: () => api.get('/api/v1/restaurants'),
-  getById: (id: string) => api.get(`/api/v1/restaurants/${id}`),
-  getNearby: (lat: number, lng: number) => 
-    api.get(`/api/v1/restaurants/nearby?latitude=${lat}&longitude=${lng}`),
-  getMenu: (id: string) => api.get(`/api/v1/restaurants/${id}/menu`),
-  search: (query: string) => api.get(`/api/v1/search?q=${query}`),
-};
-
-// Order API
-export const orderAPI = {
-  create: (data: any) => api.post('/api/v1/orders', data),
-  getAll: () => api.get('/api/v1/orders'),
-  getById: (id: string) => api.get(`/api/v1/orders/${id}`),
-  cancel: (id: string) => api.patch(`/api/v1/orders/${id}/cancel`, {}),
-};
-
-// Booking API
-export const bookingAPI = {
-  create: (data: any) => api.post('/api/v1/bookings', data),
-  getAll: () => api.get('/api/v1/bookings'),
-  getById: (id: string) => api.get(`/api/v1/bookings/${id}`),
-  cancel: (id: string) => api.patch(`/api/v1/bookings/${id}/cancel`, {}),
-};
-
-// Deals API
-export const dealsAPI = {
-  getActive: () => api.get('/api/v1/deals'),
-  getFeatured: () => api.get('/api/v1/deals/featured'),
-};
-
-// Favorites API
-export const favoritesAPI = {
-  getAll: () => api.get('/api/v1/favorites'),
-  add: (restaurantId: string) => api.post('/api/v1/favorites', { restaurant_id: restaurantId }),
-  remove: (restaurantId: string) => api.delete(`/api/v1/favorites/${restaurantId}`),
+  return context;
 };
