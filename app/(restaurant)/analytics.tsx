@@ -7,8 +7,10 @@ import {
   Pressable,
   Dimensions,
   Share,
+  ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useQuery } from '@tanstack/react-query';
 import {
   Download,
   Ticket,
@@ -24,82 +26,86 @@ import {
   Zap,
   Target,
   Share2,
+  ShoppingBag,
+  Users,
 } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
-import { mockAnalytics } from '@/mocks/data';
+import { api } from '@/lib/api';
 import { SalesRecommendation } from '@/types';
 
 const { width } = Dimensions.get('window');
 
-const mockRecommendations: SalesRecommendation[] = [
-  {
-    id: 'rec_1',
-    type: 'timing',
-    title: 'Optimize Off-Peak Hours',
-    description: 'Your peak sales are at 19:00. Consider offering higher discounts (40-50%) during 14:00-16:00 to boost traffic during slow periods.',
-    impact: 'high',
-    basedOn: 'Analysis of 156 transactions',
-  },
-  {
-    id: 'rec_2',
-    type: 'discount',
-    title: 'Adjust Discount Strategy',
-    description: 'Your 40% discount offers have 85% conversion rate vs 68% for 30% offers. Consider focusing on 35-40% range for optimal balance.',
-    impact: 'high',
-    basedOn: 'Discount rate analysis',
-  },
-  {
-    id: 'rec_3',
-    type: 'promotion',
-    title: 'Boost Weekend Traffic',
-    description: 'Weekend transactions are 40% lower than weekdays. Launch a "Weekend Special" with exclusive 45% discounts.',
-    impact: 'medium',
-    basedOn: 'Day-of-week analysis',
-  },
-  {
-    id: 'rec_4',
-    type: 'timing',
-    title: 'Extended Happy Hour',
-    description: 'Based on traffic patterns, extending happy hour to 3-6 PM could increase redemptions by 25%.',
-    impact: 'medium',
-    basedOn: 'Traffic pattern analysis',
-  },
-];
-
-const mockDailyTrend = [
-  { date: 'Mon', revenue: 450, transactions: 8 },
-  { date: 'Tue', revenue: 380, transactions: 6 },
-  { date: 'Wed', revenue: 520, transactions: 9 },
-  { date: 'Thu', revenue: 610, transactions: 11 },
-  { date: 'Fri', revenue: 890, transactions: 15 },
-  { date: 'Sat', revenue: 720, transactions: 12 },
-  { date: 'Sun', revenue: 340, transactions: 5 },
-];
-
-const mockPeakHours = [
-  { hour: '12:00', transactions: 8, revenue: 480 },
-  { hour: '13:00', transactions: 12, revenue: 720 },
-  { hour: '18:00', transactions: 15, revenue: 900 },
-  { hour: '19:00', transactions: 22, revenue: 1320 },
-  { hour: '20:00', transactions: 18, revenue: 1080 },
-  { hour: '21:00', transactions: 10, revenue: 600 },
-];
+type Period = 'daily' | 'weekly' | 'monthly';
 
 export default function AnalyticsScreen() {
   const insets = useSafeAreaInsets();
   const { colors, isDark } = useTheme();
-  const [selectedPeriod, setSelectedPeriod] = useState<'daily' | 'weekly' | 'monthly'>('weekly');
-  const maxRevenue = Math.max(...mockDailyTrend.map(d => d.revenue));
-  const maxPeakTransactions = Math.max(...mockPeakHours.map(h => h.transactions));
+  const [selectedPeriod, setSelectedPeriod] = useState<Period>('weekly');
+  const restaurantId = 'restaurant-123'; // Replace with actual restaurant ID from context/auth
+
+  // Fetch analytics data
+  const { data: analyticsData, isLoading } = useQuery({
+    queryKey: ['analytics', restaurantId, selectedPeriod],
+    queryFn: () => api.getRestaurantAnalytics(restaurantId, selectedPeriod),
+  });
+
+  const analytics = analyticsData?.data || {
+    revenue: 0,
+    transactions: 0,
+    avgOrderValue: 0,
+    redemptionRate: 0,
+    newCustomers: 0,
+    topItems: [],
+    dailyTrend: [],
+    peakHours: [],
+    offerTypeDistribution: { dinein: 0, takeout: 0, both: 0 },
+    discountPerformance: [],
+    recommendations: [],
+  };
 
   const stats = [
-    { label: 'Total Revenue', value: '$3,910', icon: DollarSign, color: colors.success, trend: '+18%', trendUp: true },
-    { label: 'Transactions', value: '66', icon: Ticket, color: colors.primary, trend: '+12%', trendUp: true },
-    { label: 'Avg. Order', value: '$59.24', icon: TrendingUp, color: colors.accent, trend: '+5%', trendUp: true },
-    { label: 'Redemption Rate', value: '78%', icon: CheckCircle, color: colors.secondary, trend: '-2%', trendUp: false },
+    { 
+      label: 'Total Revenue', 
+      value: `$${analytics.revenue?.toFixed(2) || '0.00'}`, 
+      icon: DollarSign, 
+      color: colors.success, 
+      trend: '+18%', 
+      trendUp: true 
+    },
+    { 
+      label: 'Transactions', 
+      value: analytics.transactions?.toString() || '0', 
+      icon: Ticket, 
+      color: colors.primary, 
+      trend: '+12%', 
+      trendUp: true 
+    },
+    { 
+      label: 'Avg. Order', 
+      value: `$${analytics.avgOrderValue?.toFixed(2) || '0.00'}`, 
+      icon: TrendingUp, 
+      color: colors.accent, 
+      trend: '+5%', 
+      trendUp: true 
+    },
+    { 
+      label: 'Redemption Rate', 
+      value: `${analytics.redemptionRate || 0}%`, 
+      icon: CheckCircle, 
+      color: colors.secondary, 
+      trend: '-2%', 
+      trendUp: false 
+    },
   ];
 
   const styles = createStyles(colors, isDark);
+
+  const maxRevenue = analytics.dailyTrend?.length > 0 
+    ? Math.max(...analytics.dailyTrend.map((d: any) => d.revenue))
+    : 1;
+  const maxPeakTransactions = analytics.peakHours?.length > 0
+    ? Math.max(...analytics.peakHours.map((h: any) => h.transactions))
+    : 1;
 
   const getImpactColor = (impact: string) => {
     switch (impact) {
@@ -139,13 +145,24 @@ export default function AnalyticsScreen() {
     stats.forEach(stat => {
       report += `${stat.label}: ${stat.value} (${stat.trend})\n`;
     });
-    report += `\n💡 AI Recommendations\n`;
-    report += `━━━━━━━━━━━━━━━━━━━━━━\n`;
-    mockRecommendations.forEach((rec, i) => {
-      report += `${i + 1}. ${rec.title}\n   ${rec.description}\n   Impact: ${rec.impact.toUpperCase()}\n\n`;
-    });
+    if (analytics.recommendations?.length > 0) {
+      report += `\n💡 AI Recommendations\n`;
+      report += `━━━━━━━━━━━━━━━━━━━━━━\n`;
+      analytics.recommendations.forEach((rec: SalesRecommendation, i: number) => {
+        report += `${i + 1}. ${rec.title}\n   ${rec.description}\n   Impact: ${rec.impact.toUpperCase()}\n\n`;
+      });
+    }
     return report;
   };
+
+  if (isLoading) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top, justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={[styles.statLabel, { marginTop: 16 }]}>Loading analytics...</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -179,6 +196,7 @@ export default function AnalyticsScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 100 }]}
       >
+        {/* Stats Grid */}
         <View style={styles.statsGrid}>
           {stats.map((stat, index) => (
             <View key={index} style={styles.statCard}>
@@ -203,174 +221,205 @@ export default function AnalyticsScreen() {
           ))}
         </View>
 
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <View style={styles.sectionTitleRow}>
-              <Lightbulb size={20} color={colors.warning} />
-              <Text style={styles.sectionTitle}>AI Recommendations</Text>
+        {/* AI Recommendations */}
+        {analytics.recommendations && analytics.recommendations.length > 0 && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <View style={styles.sectionTitleRow}>
+                <Lightbulb size={20} color={colors.warning} />
+                <Text style={styles.sectionTitle}>AI Recommendations</Text>
+              </View>
+              <View style={styles.aiBadge}>
+                <Zap size={12} color="#fff" />
+                <Text style={styles.aiBadgeText}>Smart</Text>
+              </View>
             </View>
-            <View style={styles.aiBadge}>
-              <Zap size={12} color="#fff" />
-              <Text style={styles.aiBadgeText}>Smart</Text>
+
+            {analytics.recommendations.map((rec: SalesRecommendation, index: number) => {
+              const TypeIcon = getTypeIcon(rec.type);
+              return (
+                <Pressable key={rec.id} style={styles.recommendationCard}>
+                  <View style={[styles.recIcon, { backgroundColor: `${getImpactColor(rec.impact)}15` }]}>
+                    <TypeIcon size={20} color={getImpactColor(rec.impact)} />
+                  </View>
+                  <View style={styles.recContent}>
+                    <View style={styles.recHeader}>
+                      <Text style={styles.recTitle}>{rec.title}</Text>
+                      <View style={[styles.impactBadge, { backgroundColor: `${getImpactColor(rec.impact)}20` }]}>
+                        <Text style={[styles.impactText, { color: getImpactColor(rec.impact) }]}>
+                          {rec.impact}
+                        </Text>
+                      </View>
+                    </View>
+                    <Text style={styles.recDescription} numberOfLines={2}>{rec.description}</Text>
+                    <Text style={styles.recBasedOn}>{rec.basedOn}</Text>
+                  </View>
+                  <ChevronRight size={18} color={colors.textMuted} />
+                </Pressable>
+              );
+            })}
+          </View>
+        )}
+
+        {/* Revenue Trend */}
+        {analytics.dailyTrend && analytics.dailyTrend.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Revenue Trend</Text>
+            <View style={styles.chartCard}>
+              <View style={styles.barChart}>
+                {analytics.dailyTrend.map((day: any, index: number) => (
+                  <View key={index} style={styles.barContainer}>
+                    <View style={styles.barWrapper}>
+                      <View
+                        style={[
+                          styles.bar,
+                          { 
+                            height: `${(day.revenue / maxRevenue) * 100}%`,
+                            backgroundColor: colors.primary,
+                          }
+                        ]}
+                      />
+                    </View>
+                    <Text style={styles.barLabel}>{day.date}</Text>
+                    <Text style={styles.barValue}>${day.revenue}</Text>
+                  </View>
+                ))}
+              </View>
             </View>
           </View>
+        )}
 
-          {mockRecommendations.map((rec, index) => {
-            const TypeIcon = getTypeIcon(rec.type);
-            return (
-              <Pressable key={rec.id} style={styles.recommendationCard}>
-                <View style={[styles.recIcon, { backgroundColor: `${getImpactColor(rec.impact)}15` }]}>
-                  <TypeIcon size={20} color={getImpactColor(rec.impact)} />
-                </View>
-                <View style={styles.recContent}>
-                  <View style={styles.recHeader}>
-                    <Text style={styles.recTitle}>{rec.title}</Text>
-                    <View style={[styles.impactBadge, { backgroundColor: `${getImpactColor(rec.impact)}20` }]}>
-                      <Text style={[styles.impactText, { color: getImpactColor(rec.impact) }]}>
-                        {rec.impact}
-                      </Text>
-                    </View>
-                  </View>
-                  <Text style={styles.recDescription} numberOfLines={2}>{rec.description}</Text>
-                  <Text style={styles.recBasedOn}>{rec.basedOn}</Text>
-                </View>
-                <ChevronRight size={18} color={colors.textMuted} />
-              </Pressable>
-            );
-          })}
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Revenue Trend</Text>
-          <View style={styles.chartCard}>
-            <View style={styles.barChart}>
-              {mockDailyTrend.map((day, index) => (
-                <View key={index} style={styles.barContainer}>
-                  <View style={styles.barWrapper}>
+        {/* Peak Hours */}
+        {analytics.peakHours && analytics.peakHours.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Peak Hours</Text>
+            <View style={styles.chartCard}>
+              {analytics.peakHours.map((hour: any, index: number) => (
+                <View key={index} style={styles.hourRow}>
+                  <Text style={styles.hourLabel}>{hour.hour}</Text>
+                  <View style={styles.hourBarContainer}>
                     <View
                       style={[
-                        styles.bar,
+                        styles.hourBar,
                         { 
-                          height: `${(day.revenue / maxRevenue) * 100}%`,
-                          backgroundColor: colors.primary,
+                          width: `${(hour.transactions / maxPeakTransactions) * 100}%`,
+                          backgroundColor: hour.transactions > 15 ? colors.success : 
+                            hour.transactions > 10 ? colors.primary : colors.accent,
                         }
                       ]}
                     />
                   </View>
-                  <Text style={styles.barLabel}>{day.date}</Text>
-                  <Text style={styles.barValue}>${day.revenue}</Text>
+                  <Text style={styles.hourValue}>{hour.transactions} txn</Text>
                 </View>
               ))}
             </View>
           </View>
-        </View>
+        )}
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Peak Hours</Text>
-          <View style={styles.chartCard}>
-            {mockPeakHours.map((hour, index) => (
-              <View key={index} style={styles.hourRow}>
-                <Text style={styles.hourLabel}>{hour.hour}</Text>
-                <View style={styles.hourBarContainer}>
-                  <View
-                    style={[
-                      styles.hourBar,
-                      { 
-                        width: `${(hour.transactions / maxPeakTransactions) * 100}%`,
-                        backgroundColor: hour.transactions > 15 ? colors.success : 
-                          hour.transactions > 10 ? colors.primary : colors.accent,
-                      }
-                    ]}
-                  />
+        {/* Top Selling Items */}
+        {analytics.topItems && analytics.topItems.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Top Selling Items</Text>
+            <View style={styles.chartCard}>
+              {analytics.topItems.map((item: any, index: number) => (
+                <View key={index} style={styles.topItem}>
+                  <View style={styles.topItemRank}>
+                    <Text style={styles.topItemRankText}>#{index + 1}</Text>
+                  </View>
+                  <View style={styles.topItemContent}>
+                    <Text style={styles.topItemName}>{item.name}</Text>
+                    <Text style={styles.topItemSales}>{item.sales} orders</Text>
+                  </View>
+                  <Text style={styles.topItemRevenue}>${item.revenue?.toFixed(2) || '0.00'}</Text>
                 </View>
-                <Text style={styles.hourValue}>{hour.transactions} txn</Text>
-              </View>
-            ))}
-          </View>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Offer Type Distribution</Text>
-          <View style={styles.distributionCard}>
-            <View style={styles.distributionRow}>
-              <View style={styles.distributionItem}>
-                <View style={[styles.distributionDot, { backgroundColor: colors.primary }]} />
-                <Text style={styles.distributionLabel}>Dine In</Text>
-              </View>
-              <Text style={styles.distributionValue}>{mockAnalytics.offerTypeDistribution.dinein}%</Text>
-            </View>
-            <View style={styles.distributionBar}>
-              <View
-                style={[
-                  styles.distributionFill,
-                  { width: `${mockAnalytics.offerTypeDistribution.dinein}%`, backgroundColor: colors.primary }
-                ]}
-              />
-            </View>
-
-            <View style={styles.distributionRow}>
-              <View style={styles.distributionItem}>
-                <View style={[styles.distributionDot, { backgroundColor: colors.accent }]} />
-                <Text style={styles.distributionLabel}>Takeout</Text>
-              </View>
-              <Text style={styles.distributionValue}>{mockAnalytics.offerTypeDistribution.takeout}%</Text>
-            </View>
-            <View style={styles.distributionBar}>
-              <View
-                style={[
-                  styles.distributionFill,
-                  { width: `${mockAnalytics.offerTypeDistribution.takeout}%`, backgroundColor: colors.accent }
-                ]}
-              />
-            </View>
-
-            <View style={styles.distributionRow}>
-              <View style={styles.distributionItem}>
-                <View style={[styles.distributionDot, { backgroundColor: colors.success }]} />
-                <Text style={styles.distributionLabel}>Both</Text>
-              </View>
-              <Text style={styles.distributionValue}>{mockAnalytics.offerTypeDistribution.both}%</Text>
-            </View>
-            <View style={styles.distributionBar}>
-              <View
-                style={[
-                  styles.distributionFill,
-                  { width: `${mockAnalytics.offerTypeDistribution.both}%`, backgroundColor: colors.success }
-                ]}
-              />
+              ))}
             </View>
           </View>
-        </View>
+        )}
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Discount Performance</Text>
-          <View style={styles.chartCard}>
-            {[
-              { range: '30%', conversions: 68, revenue: 2850 },
-              { range: '35%', conversions: 72, revenue: 2660 },
-              { range: '40%', conversions: 85, revenue: 2600 },
-              { range: '45%', conversions: 91, revenue: 1540 },
-            ].map((item, index) => (
-              <View key={index} style={styles.discountRow}>
-                <View style={styles.discountLabel}>
-                  <Text style={styles.discountRange}>{item.range}</Text>
+        {/* Offer Type Distribution */}
+        {analytics.offerTypeDistribution && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Offer Type Distribution</Text>
+            <View style={styles.distributionCard}>
+              <View style={styles.distributionRow}>
+                <View style={styles.distributionItem}>
+                  <View style={[styles.distributionDot, { backgroundColor: colors.primary }]} />
+                  <Text style={styles.distributionLabel}>Dine In</Text>
                 </View>
-                <View style={styles.discountBarContainer}>
-                  <View
-                    style={[
-                      styles.discountBar,
-                      { width: `${item.conversions}%`, backgroundColor: colors.primary }
-                    ]}
-                  />
-                </View>
-                <View style={styles.discountStats}>
-                  <Text style={styles.discountConversion}>{item.conversions}%</Text>
-                  <Text style={styles.discountRevenue}>${item.revenue}</Text>
-                </View>
+                <Text style={styles.distributionValue}>{analytics.offerTypeDistribution.dinein}%</Text>
               </View>
-            ))}
+              <View style={styles.distributionBar}>
+                <View
+                  style={[
+                    styles.distributionFill,
+                    { width: `${analytics.offerTypeDistribution.dinein}%`, backgroundColor: colors.primary }
+                  ]}
+                />
+              </View>
+
+              <View style={styles.distributionRow}>
+                <View style={styles.distributionItem}>
+                  <View style={[styles.distributionDot, { backgroundColor: colors.accent }]} />
+                  <Text style={styles.distributionLabel}>Takeout</Text>
+                </View>
+                <Text style={styles.distributionValue}>{analytics.offerTypeDistribution.takeout}%</Text>
+              </View>
+              <View style={styles.distributionBar}>
+                <View
+                  style={[
+                    styles.distributionFill,
+                    { width: `${analytics.offerTypeDistribution.takeout}%`, backgroundColor: colors.accent }
+                  ]}
+                />
+              </View>
+
+              <View style={styles.distributionRow}>
+                <View style={styles.distributionItem}>
+                  <View style={[styles.distributionDot, { backgroundColor: colors.success }]} />
+                  <Text style={styles.distributionLabel}>Both</Text>
+                </View>
+                <Text style={styles.distributionValue}>{analytics.offerTypeDistribution.both}%</Text>
+              </View>
+              <View style={styles.distributionBar}>
+                <View
+                  style={[
+                    styles.distributionFill,
+                    { width: `${analytics.offerTypeDistribution.both}%`, backgroundColor: colors.success }
+                  ]}
+                />
+              </View>
+            </View>
           </View>
-        </View>
+        )}
+
+        {/* Discount Performance */}
+        {analytics.discountPerformance && analytics.discountPerformance.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Discount Performance</Text>
+            <View style={styles.chartCard}>
+              {analytics.discountPerformance.map((item: any, index: number) => (
+                <View key={index} style={styles.discountRow}>
+                  <View style={styles.discountLabel}>
+                    <Text style={styles.discountRange}>{item.range}</Text>
+                  </View>
+                  <View style={styles.discountBarContainer}>
+                    <View
+                      style={[
+                        styles.discountBar,
+                        { width: `${item.conversions}%`, backgroundColor: colors.primary }
+                      ]}
+                    />
+                  </View>
+                  <View style={styles.discountStats}>
+                    <Text style={styles.discountConversion}>{item.conversions}%</Text>
+                    <Text style={styles.discountRevenue}>${item.revenue}</Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+          </View>
+        )}
       </ScrollView>
     </View>
   );
@@ -391,7 +440,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   },
   title: {
     fontSize: 24,
-    fontWeight: '700' as const,
+    fontWeight: '700',
     color: colors.text,
   },
   headerActions: {
@@ -427,7 +476,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   },
   periodBtnText: {
     fontSize: 14,
-    fontWeight: '600' as const,
+    fontWeight: '600',
     color: colors.textSecondary,
   },
   periodBtnTextActive: {
@@ -474,11 +523,11 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   },
   trendText: {
     fontSize: 11,
-    fontWeight: '600' as const,
+    fontWeight: '600',
   },
   statValue: {
     fontSize: 22,
-    fontWeight: '700' as const,
+    fontWeight: '700',
     color: colors.text,
   },
   statLabel: {
@@ -503,7 +552,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 18,
-    fontWeight: '700' as const,
+    fontWeight: '700',
     color: colors.text,
     marginBottom: 16,
   },
@@ -518,7 +567,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   },
   aiBadgeText: {
     fontSize: 11,
-    fontWeight: '700' as const,
+    fontWeight: '700',
     color: '#fff',
   },
   recommendationCard: {
@@ -551,7 +600,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   },
   recTitle: {
     fontSize: 14,
-    fontWeight: '600' as const,
+    fontWeight: '600',
     color: colors.text,
     flex: 1,
   },
@@ -563,7 +612,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   },
   impactText: {
     fontSize: 10,
-    fontWeight: '700' as const,
+    fontWeight: '700',
     textTransform: 'uppercase',
   },
   recDescription: {
@@ -613,7 +662,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   },
   barValue: {
     fontSize: 10,
-    fontWeight: '600' as const,
+    fontWeight: '600',
     color: colors.text,
     marginTop: 2,
   },
@@ -642,9 +691,48 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   hourValue: {
     width: 50,
     fontSize: 12,
-    fontWeight: '600' as const,
+    fontWeight: '600',
     color: colors.text,
     textAlign: 'right',
+  },
+  topItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  topItemRank: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: colors.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  topItemRankText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.primary,
+  },
+  topItemContent: {
+    flex: 1,
+  },
+  topItemName: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 2,
+  },
+  topItemSales: {
+    fontSize: 12,
+    color: colors.textSecondary,
+  },
+  topItemRevenue: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.text,
   },
   distributionCard: {
     backgroundColor: colors.surface,
@@ -675,7 +763,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   },
   distributionValue: {
     fontSize: 14,
-    fontWeight: '600' as const,
+    fontWeight: '600',
     color: colors.text,
   },
   distributionBar: {
@@ -699,7 +787,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   },
   discountRange: {
     fontSize: 13,
-    fontWeight: '600' as const,
+    fontWeight: '600',
     color: colors.text,
   },
   discountBarContainer: {
@@ -720,7 +808,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   },
   discountConversion: {
     fontSize: 12,
-    fontWeight: '700' as const,
+    fontWeight: '700',
     color: colors.success,
   },
   discountRevenue: {
