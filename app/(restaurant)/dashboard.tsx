@@ -1,66 +1,61 @@
-import React, { useState } from 'react';
+// app/(restaurant)/dashboard.tsx
+// Restaurant Owner Dashboard with Real-time Stats and Order Management
+
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
-  Pressable,
-  Dimensions,
-  Modal,
-  Alert,
+  TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
-  TouchableOpacity,
+  Alert,
+  Dimensions,
 } from 'react-native';
-import { useRouter, Href } from 'expo-router';
-import { LinearGradient } from 'expo-linear-gradient';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-
+import { useRouter } from 'expo-router';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  Plus,
-  Tag,
+  ArrowLeft,
+  Bell,
+  Package,
+  DollarSign,
+  ShoppingBag,
   TrendingUp,
   Clock,
-  ChevronRight,
-  Package,
-  Bell,
-  ArrowUpRight,
-  ArrowDownRight,
-  QrCode,
-  CalendarDays,
-  UtensilsCrossed,
-  X,
-  Check,
-  Users,
-  ShoppingBag,
-  DollarSign,
   CheckCircle,
-  AlertCircle,
   ArrowRight,
+  AlertCircle,
 } from 'lucide-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { supabase, realtime } from '@/lib/supabase';
+
+import { api, Order } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
-import { useTheme } from '@/contexts/ThemeContext';
-import { useRestaurant, useRestaurantOrders, useRestaurantDeals } from '@/hooks/useApi';
+
+/* ──────────────────────────────────────────────────────────
+   Constants
+────────────────────────────────────────────────────────── */
 
 const { width } = Dimensions.get('window');
 
-interface BookingRequest {
-  id: string;
-  customerName: string;
-  date: string;
-  time: string;
-  guests: number;
-  status: 'pending' | 'accepted' | 'declined';
-  tableNumber?: string;
-}
+const Colors = {
+  primary: '#F97316',
+  success: '#4CAF50',
+  error: '#FF3B30',
+  warning: '#FF9800',
+  info: '#2196F3',
+  text: '#333',
+  textSecondary: '#666',
+  textMuted: '#999',
+  background: '#fff',
+  surface: '#f9f9f9',
+  border: '#f0f0f0',
+};
 
-const mockBookingRequests: BookingRequest[] = [
-  { id: '1', customerName: 'John Smith', date: 'Jan 25', time: '19:00', guests: 4, status: 'pending' },
-  { id: '2', customerName: 'Sarah Johnson', date: 'Jan 25', time: '20:30', guests: 2, status: 'pending' },
-  { id: '3', customerName: 'Mike Davis', date: 'Jan 26', time: '18:00', guests: 6, status: 'pending' },
-];
-
-const TABLE_OPTIONS = ['A1', 'A2', 'A3', 'B1', 'B2', 'B3', 'C1', 'C2', 'C3', '21', '22', '23', '24', '25'];
+/* ──────────────────────────────────────────────────────────
+   Helpers
+────────────────────────────────────────────────────────── */
 
 function getTimeOfDay() {
   const hour = new Date().getHours();
@@ -71,175 +66,42 @@ function getTimeOfDay() {
 
 function getStatusColor(status: string) {
   switch (status) {
-    case 'pending': return '#FF9800';
+    case 'pending':
+      return Colors.warning;
     case 'confirmed':
-    case 'preparing': return '#2196F3';
-    case 'ready': return '#9C27B0';
-    case 'delivered': return '#4CAF50';
-    case 'cancelled': return '#FF3B30';
-    default: return '#999';
+    case 'preparing':
+      return Colors.info;
+    case 'ready':
+      return '#9C27B0';
+    case 'delivered':
+      return Colors.success;
+    case 'cancelled':
+      return Colors.error;
+    default:
+      return Colors.textMuted;
   }
 }
+
+/* ──────────────────────────────────────────────────────────
+   Component
+────────────────────────────────────────────────────────── */
 
 export default function DashboardScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
-  const { colors, isDark } = useTheme();
+  const queryClient = useQueryClient();
 
-  const [bookingRequests, setBookingRequests] = useState<BookingRequest[]>(mockBookingRequests);
-  const [showBookingModal, setShowBookingModal] = useState(false);
-  const [selectedBooking, setSelectedBooking] = useState<BookingRequest | null>(null);
-  const [selectedTable, setSelectedTable] = useState('');
+  const restaurantId = user?.restaurantId;
 
-  const restaurantId = user?.restaurantId || 'restaurant-123';
-
-  const { data: restaurant } = useRestaurant(restaurantId);
-
-  const {
-    data: ordersRaw,
-    isLoading: ordersLoading,
-    refetch: refetchOrders,
-  } = useRestaurantOrders(restaurantId);
-
-  const { data: restaurantDealsData } = useRestaurantDeals(restaurantId);
-
-  const orders = (ordersRaw || []) as any[];
-  const restaurantDeals = (restaurantDealsData || []) as any[];
-
-  // Calculate order stats
-  const pendingOrders = orders.filter((o) => o.status === 'pending').length;
-  const preparingOrders = orders.filter((o) => o.status === 'preparing').length;
-  const readyOrders = orders.filter((o) => o.status === 'ready').length;
-  const todayRevenue = orders.reduce((sum, o) => sum + o.total, 0);
-
-  const activeOffers = restaurantDeals.filter((d: any) => d.isActive).length;
-  const totalClaimed = restaurantDeals.reduce((sum: number, d: any) => sum + (d.claimedCoupons || 0), 0);
-  const pendingBookings = bookingRequests.filter(b => b.status === 'pending').length;
-
-  const stats = [
-    { 
-      label: "Today's Revenue",
-      value: `$${todayRevenue.toFixed(2)}`,
-      icon: DollarSign, 
-      color: colors.success,
-      bgColor: colors.successLight,
-      trend: '+12%',
-      trendUp: true,
-    },
-    { 
-      label: "Today's Orders",
-      value: orders.length, 
-      icon: ShoppingBag, 
-      color: colors.primary,
-      bgColor: colors.primaryLight,
-      trend: '+8%',
-      trendUp: true,
-    },
-    { 
-      label: 'Active Offers', 
-      value: activeOffers, 
-      icon: Tag, 
-      color: colors.accent,
-      bgColor: colors.accentLight,
-      trend: '+12%',
-      trendUp: true,
-    },
-    { 
-      label: 'Avg. Rating', 
-      value: restaurant?.rating?.toFixed(1) || '0.0', 
-      icon: TrendingUp, 
-      color: '#FFB800',
-      bgColor: '#FFB80020',
-      trend: '',
-      trendUp: true,
-    },
-  ];
-
-  const quickActions = [
-    { label: 'Scan QR', icon: QrCode, route: '/(restaurant)/scan', color: colors.success },
-    { label: 'Orders', icon: ShoppingBag, route: '/(restaurant)/orders', color: colors.primary },
-    { label: 'Schedule', icon: CalendarDays, route: '/(restaurant)/schedule', color: colors.accent },
-    { label: 'Inventory', icon: Package, route: '/(restaurant)/inventory', color: '#8b5cf6' },
-    { label: 'Menu', icon: UtensilsCrossed, route: '/(restaurant)/menu-management', color: colors.secondary },
-    { label: 'Analytics', icon: TrendingUp, route: '/(restaurant)/analytics', color: '#f59e0b' },
-  ];
-
-  const actionItems = [
-    {
-      icon: Package,
-      title: 'Pending Orders',
-      value: pendingOrders,
-      color: '#FF9800',
-      route: '/(restaurant)/orders?filter=pending',
-    },
-    {
-      icon: Clock,
-      title: 'Preparing',
-      value: preparingOrders,
-      color: '#2196F3',
-      route: '/(restaurant)/orders?filter=preparing',
-    },
-    {
-      icon: CheckCircle,
-      title: 'Ready for Pickup',
-      value: readyOrders,
-      color: '#4CAF50',
-      route: '/(restaurant)/orders?filter=ready',
-    },
-  ];
-
-  const recentActivity = [
-    { type: 'claimed', text: 'John D. claimed "30% Off Weekend Brunch"', time: '2 min ago' },
-    { type: 'claimed', text: 'Sarah M. claimed "30% Off Weekend Brunch"', time: '15 min ago' },
-    { type: 'favorite', text: 'New favorite added by Mike R.', time: '1 hour ago' },
-    { type: 'claimed', text: 'Emily K. claimed "20% Off Takeaway"', time: '2 hours ago' },
-  ];
-
-  const navigateTo = (route: string) => {
-    router.push(route as any);
-  };
-
-  const handleBookingAction = (booking: BookingRequest) => {
-    setSelectedBooking(booking);
-    setSelectedTable('');
-    setShowBookingModal(true);
-  };
-
-  const handleAcceptBooking = () => {
-    if (!selectedTable) {
-      Alert.alert('Select Table', 'Please select a table number');
-      return;
-    }
-    if (selectedBooking) {
-      setBookingRequests(prev => prev.map(b => 
-        b.id === selectedBooking.id 
-          ? { ...b, status: 'accepted' as const, tableNumber: selectedTable }
-          : b
-      ));
-      setShowBookingModal(false);
-      Alert.alert('Booking Accepted', `Table ${selectedTable} assigned to ${selectedBooking.customerName}`);
-    }
-  };
-
-  const handleDeclineBooking = () => {
-    if (selectedBooking) {
-      setBookingRequests(prev => prev.map(b => 
-        b.id === selectedBooking.id 
-          ? { ...b, status: 'declined' as const }
-          : b
-      ));
-      setShowBookingModal(false);
-      Alert.alert('Booking Declined', 'The customer will be notified');
-    }
-  };
-
-  const styles = createStyles(colors, isDark);
+  /* ────────────────────────────────────────────────────────
+     Authentication Check
+  ──────────────────────────────────────────────────────── */
 
   if (!user || user.role !== 'restaurant_owner') {
     return (
       <View style={styles.errorContainer}>
-        <AlertCircle size={64} color="#FF3B30" />
+        <AlertCircle size={64} color={Colors.error} />
         <Text style={styles.errorTitle}>Access Denied</Text>
         <Text style={styles.errorMessage}>
           You need a restaurant owner account to access this page.
@@ -254,6 +116,162 @@ export default function DashboardScreen() {
     );
   }
 
+  if (!restaurantId) {
+    return (
+      <View style={styles.errorContainer}>
+        <AlertCircle size={64} color={Colors.error} />
+        <Text style={styles.errorTitle}>No Restaurant Found</Text>
+        <Text style={styles.errorMessage}>
+          Your account is not linked to a restaurant.
+        </Text>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => router.replace('/')}
+        >
+          <Text style={styles.backButtonText}>Go Back</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  /* ────────────────────────────────────────────────────────
+     Data Fetching
+  ──────────────────────────────────────────────────────── */
+
+  // Fetch restaurant details
+  const { data: restaurantData } = useQuery({
+    queryKey: ['restaurant', restaurantId],
+    queryFn: () => api.getRestaurant(restaurantId),
+    enabled: !!restaurantId,
+  });
+
+  // Fetch restaurant orders
+  const {
+    data: ordersData,
+    isLoading: ordersLoading,
+    refetch: refetchOrders,
+  } = useQuery({
+    queryKey: ['restaurant-orders', restaurantId],
+    queryFn: () => api.getRestaurantOrders(restaurantId),
+    enabled: !!restaurantId,
+    refetchInterval: 30000, // Refetch every 30 seconds
+  });
+
+  // Fetch restaurant analytics
+  const { data: analyticsData } = useQuery({
+    queryKey: ['restaurant-analytics', restaurantId, 'today'],
+    queryFn: () => api.getRestaurantAnalytics(restaurantId, 'today'),
+    enabled: !!restaurantId,
+  });
+
+  const restaurant = restaurantData?.data;
+  const orders = ordersData?.data || [];
+  const analytics = analyticsData?.data;
+
+  /* ────────────────────────────────────────────────────────
+     Real-time Order Subscriptions
+  ──────────────────────────────────────────────────────── */
+
+  useEffect(() => {
+    if (!restaurantId) return;
+
+    console.log('📡 Subscribing to new restaurant orders:', restaurantId);
+
+    // Subscribe to new orders
+    const unsubscribe = realtime.subscribeToRestaurantOrders(
+      restaurantId,
+      (payload) => {
+        console.log('🔔 New order received!', payload);
+
+        // Show alert
+        Alert.alert('New Order', 'You have a new order!', [
+          {
+            text: 'View',
+            onPress: () => refetchOrders(),
+          },
+          { text: 'OK' },
+        ]);
+
+        // Refetch orders
+        queryClient.invalidateQueries({ queryKey: ['restaurant-orders'] });
+        queryClient.invalidateQueries({ queryKey: ['restaurant-analytics'] });
+      }
+    );
+
+    return () => {
+      console.log('🔌 Unsubscribing from restaurant orders');
+      unsubscribe();
+    };
+  }, [restaurantId, queryClient]);
+
+  /* ────────────────────────────────────────────────────────
+     Calculate Stats
+  ──────────────────────────────────────────────────────── */
+
+  const pendingOrders = orders.filter((o) => o.status === 'pending').length;
+  const preparingOrders = orders.filter((o) => o.status === 'preparing').length;
+  const readyOrders = orders.filter((o) => o.status === 'ready').length;
+  const todayRevenue = orders.reduce((sum, o) => sum + o.total, 0);
+
+  const stats = [
+    {
+      label: "Today's Revenue",
+      value: `$${todayRevenue.toFixed(2)}`,
+      icon: DollarSign,
+      color: Colors.success,
+      bgColor: Colors.success + '20',
+    },
+    {
+      label: "Today's Orders",
+      value: orders.length,
+      icon: ShoppingBag,
+      color: Colors.primary,
+      bgColor: Colors.primary + '20',
+    },
+    {
+      label: 'Pending Orders',
+      value: pendingOrders,
+      icon: Package,
+      color: Colors.warning,
+      bgColor: Colors.warning + '20',
+    },
+    {
+      label: 'Avg. Rating',
+      value: restaurant?.rating?.toFixed(1) || '0.0',
+      icon: TrendingUp,
+      color: '#FFB800',
+      bgColor: '#FFB80020',
+    },
+  ];
+
+  const actionItems = [
+    {
+      icon: Package,
+      title: 'Pending Orders',
+      value: pendingOrders,
+      color: Colors.warning,
+      route: '/(restaurant)/orders?filter=pending',
+    },
+    {
+      icon: Clock,
+      title: 'Preparing',
+      value: preparingOrders,
+      color: Colors.info,
+      route: '/(restaurant)/orders?filter=preparing',
+    },
+    {
+      icon: CheckCircle,
+      title: 'Ready for Pickup',
+      value: readyOrders,
+      color: Colors.success,
+      route: '/(restaurant)/orders?filter=ready',
+    },
+  ];
+
+  /* ────────────────────────────────────────────────────────
+     Render
+  ──────────────────────────────────────────────────────── */
+
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <ScrollView
@@ -263,68 +281,38 @@ export default function DashboardScreen() {
           <RefreshControl
             refreshing={false}
             onRefresh={refetchOrders}
-            tintColor={colors.primary}
+            tintColor={Colors.primary}
           />
         }
       >
+        {/* Header */}
         <View style={styles.header}>
-          <View style={styles.headerTop}>
-            <View>
-              <Text style={styles.welcomeText}>Good {getTimeOfDay()}</Text>
-              <Text style={styles.userName}>{restaurant?.name || user?.name || 'Restaurant Owner'}</Text>
-            </View>
-            <Pressable 
-              style={styles.notificationBtn}
-              onPress={() => router.push('/(restaurant)/book-call' as Href)}
-            >
-              <Bell size={22} color={colors.text} />
-              {pendingBookings > 0 && (
-                <View style={styles.notificationBadge}>
-                  <Text style={styles.notificationBadgeText}>{pendingBookings}</Text>
-                </View>
-              )}
-            </Pressable>
+          <View>
+            <Text style={styles.welcomeText}>Good {getTimeOfDay()}</Text>
+            <Text style={styles.userName}>
+              {restaurant?.name || user?.name || 'Restaurant Owner'}
+            </Text>
           </View>
-          
-          <Pressable 
-            style={styles.createButton}
-            onPress={() => navigateTo('/(restaurant)/offers')}
-          >
-            <LinearGradient
-              colors={[colors.primary, colors.primaryDark]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={styles.createButtonGradient}
-            >
-              <Plus size={20} color="#fff" />
-              <Text style={styles.createButtonText}>Create New Offer</Text>
-            </LinearGradient>
-          </Pressable>
+          <TouchableOpacity style={styles.notificationBtn}>
+            <Bell size={22} color={Colors.text} />
+            {pendingOrders > 0 && (
+              <View style={styles.notificationBadge}>
+                <Text style={styles.notificationBadgeText}>
+                  {pendingOrders}
+                </Text>
+              </View>
+            )}
+          </TouchableOpacity>
         </View>
 
+        {/* Stats Grid */}
         <View style={styles.statsGrid}>
           {stats.map((stat, index) => (
             <View key={index} style={styles.statCard}>
-              <View style={styles.statHeader}>
-                <View style={[styles.statIcon, { backgroundColor: stat.bgColor }]}>
-                  <stat.icon size={18} color={stat.color} />
-                </View>
-                <View style={[
-                  styles.trendBadge,
-                  { backgroundColor: stat.trendUp ? colors.successLight : colors.errorLight }
-                ]}>
-                  {stat.trendUp ? (
-                    <ArrowUpRight size={12} color={colors.success} />
-                  ) : (
-                    <ArrowDownRight size={12} color={colors.error} />
-                  )}
-                  <Text style={[
-                    styles.trendText,
-                    { color: stat.trendUp ? colors.success : colors.error }
-                  ]}>
-                    {stat.trend}
-                  </Text>
-                </View>
+              <View
+                style={[styles.statIcon, { backgroundColor: stat.bgColor }]}
+              >
+                <stat.icon size={18} color={stat.color} />
               </View>
               <Text style={styles.statValue}>{stat.value}</Text>
               <Text style={styles.statLabel}>{stat.label}</Text>
@@ -332,99 +320,40 @@ export default function DashboardScreen() {
           ))}
         </View>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Quick Actions</Text>
-          <View style={styles.actionsGrid}>
-            {quickActions.map((action, index) => (
-              <Pressable
-                key={index}
-                style={styles.actionCard}
-                onPress={() => action.route && navigateTo(action.route)}
-              >
-                <View style={[styles.actionIcon, { backgroundColor: `${action.color}15` }]}>
-                  <action.icon size={24} color={action.color} />
-                </View>
-                <Text style={styles.actionLabel}>{action.label}</Text>
-              </Pressable>
-            ))}
-          </View>
-        </View>
-
         {/* Order Action Items */}
         {(pendingOrders > 0 || preparingOrders > 0 || readyOrders > 0) && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Order Status</Text>
-            {actionItems.map((item, index) => (
-              item.value > 0 && (
-                <TouchableOpacity
-                  key={index}
-                  style={styles.orderActionCard}
-                  onPress={() => router.push(item.route as any)}
-                >
-                  <View style={styles.actionLeft}>
-                    <View style={[styles.orderActionIcon, { backgroundColor: item.color + '20' }]}>
-                      <item.icon size={24} color={item.color} />
-                    </View>
-                    <View>
-                      <Text style={styles.orderActionTitle}>{item.title}</Text>
-                      <Text style={styles.orderActionSubtitle}>
-                        {item.value} {item.value === 1 ? 'order' : 'orders'}
-                      </Text>
-                    </View>
-                  </View>
-                  <ArrowRight size={20} color={colors.textMuted} />
-                </TouchableOpacity>
-              )
-            ))}
-          </View>
-        )}
-
-        {bookingRequests.filter(b => b.status === 'pending').length > 0 && (
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Booking Requests</Text>
-              <View style={styles.pendingBadge}>
-                <Text style={styles.pendingBadgeText}>{pendingBookings} pending</Text>
-              </View>
-            </View>
-            {bookingRequests.filter(b => b.status === 'pending').map((booking) => (
-              <Pressable 
-                key={booking.id} 
-                style={styles.bookingCard}
-                onPress={() => handleBookingAction(booking)}
-              >
-                <View style={styles.bookingInfo}>
-                  <Text style={styles.bookingName}>{booking.customerName}</Text>
-                  <View style={styles.bookingMeta}>
-                    <View style={styles.bookingMetaItem}>
-                      <CalendarDays size={14} color={colors.textSecondary} />
-                      <Text style={styles.bookingMetaText}>{booking.date} at {booking.time}</Text>
-                    </View>
-                    <View style={styles.bookingMetaItem}>
-                      <Users size={14} color={colors.textSecondary} />
-                      <Text style={styles.bookingMetaText}>{booking.guests} guests</Text>
-                    </View>
-                  </View>
-                </View>
-                <View style={styles.bookingActions}>
-                  <Pressable 
-                    style={[styles.bookingActionBtn, styles.acceptBtn]}
-                    onPress={() => handleBookingAction(booking)}
+            {actionItems.map(
+              (item, index) =>
+                item.value > 0 && (
+                  <TouchableOpacity
+                    key={index}
+                    style={styles.orderActionCard}
+                    onPress={() => router.push(item.route as any)}
                   >
-                    <Check size={16} color="#fff" />
-                  </Pressable>
-                  <Pressable 
-                    style={[styles.bookingActionBtn, styles.declineBtn]}
-                    onPress={() => {
-                      setSelectedBooking(booking);
-                      handleDeclineBooking();
-                    }}
-                  >
-                    <X size={16} color="#fff" />
-                  </Pressable>
-                </View>
-              </Pressable>
-            ))}
+                    <View style={styles.actionLeft}>
+                      <View
+                        style={[
+                          styles.orderActionIcon,
+                          { backgroundColor: item.color + '20' },
+                        ]}
+                      >
+                        <item.icon size={24} color={item.color} />
+                      </View>
+                      <View>
+                        <Text style={styles.orderActionTitle}>
+                          {item.title}
+                        </Text>
+                        <Text style={styles.orderActionSubtitle}>
+                          {item.value} {item.value === 1 ? 'order' : 'orders'}
+                        </Text>
+                      </View>
+                    </View>
+                    <ArrowRight size={20} color={Colors.textMuted} />
+                  </TouchableOpacity>
+                )
+            )}
           </View>
         )}
 
@@ -432,27 +361,37 @@ export default function DashboardScreen() {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Recent Orders</Text>
-            <TouchableOpacity onPress={() => router.push('/(restaurant)/orders')}>
+            <TouchableOpacity
+              onPress={() => router.push('/(restaurant)/orders' as any)}
+            >
               <Text style={styles.seeAll}>See All</Text>
             </TouchableOpacity>
           </View>
 
           {ordersLoading ? (
-            <ActivityIndicator size="small" color={colors.primary} style={{ marginVertical: 20 }} />
+            <ActivityIndicator
+              size="small"
+              color={Colors.primary}
+              style={{ marginVertical: 20 }}
+            />
           ) : orders.length === 0 ? (
             <View style={styles.emptyOrders}>
-              <Package size={48} color={colors.textMuted} />
+              <Package size={48} color={Colors.textMuted} />
               <Text style={styles.emptyOrdersText}>No orders yet today</Text>
             </View>
           ) : (
-            orders.slice(0, 5).map((order) => (
+            orders.slice(0, 5).map((order: Order) => (
               <TouchableOpacity
                 key={order.id}
                 style={styles.orderCard}
-                onPress={() => router.push(`/(customer)/order/${order.id}`)}
+                onPress={() =>
+                  router.push(`/(customer)/order/${order.id}` as any)
+                }
               >
                 <View style={styles.orderHeader}>
-                  <Text style={styles.orderId}>#{order.id.slice(0, 8)}</Text>
+                  <Text style={styles.orderId}>
+                    #{order.id.slice(0, 8)}
+                  </Text>
                   <View
                     style={[
                       styles.orderStatus,
@@ -470,194 +409,92 @@ export default function DashboardScreen() {
                   </View>
                 </View>
                 <Text style={styles.orderItems} numberOfLines={1}>
-                  {order.items.map((i: any) => `${i.quantity}x ${i.name}`).join(', ')}
+                  {order.items
+                    .map((i) => `${i.quantity}x ${i.name}`)
+                    .join(', ')}
                 </Text>
                 <View style={styles.orderFooter}>
                   <Text style={styles.orderTime}>
-                    {new Date(order.createdAt).toLocaleTimeString()}
+                    {new Date(order.createdAt).toLocaleTimeString('en-US', {
+                      hour: 'numeric',
+                      minute: '2-digit',
+                    })}
                   </Text>
-                  <Text style={styles.orderTotal}>${order.total.toFixed(2)}</Text>
+                  <Text style={styles.orderTotal}>
+                    ${order.total.toFixed(2)}
+                  </Text>
                 </View>
               </TouchableOpacity>
             ))
           )}
         </View>
 
+        {/* Quick Links */}
         <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Active Offers</Text>
-            <Pressable onPress={() => navigateTo('/(restaurant)/offers')}>
-              <Text style={styles.seeAll}>See All</Text>
-            </Pressable>
-          </View>
-
-          {restaurantDeals.filter(d => d.isActive).slice(0, 3).map((deal) => (
-            <Pressable key={deal.id} style={styles.offerCard}>
-              <View style={styles.offerLeft}>
-                <View style={[styles.discountBadge, { backgroundColor: colors.primary }]}>
-                  <Text style={styles.discountText}>{deal.discountPercent}%</Text>
-                </View>
-                <View style={styles.offerDetails}>
-                  <Text style={styles.offerTitle} numberOfLines={1}>{deal.title}</Text>
-                  <View style={styles.offerMeta}>
-                    <Clock size={12} color={colors.textSecondary} />
-                    <Text style={styles.offerMetaText}>Until {deal.validTill}</Text>
-                  </View>
-                  <View style={styles.offerTypeBadge}>
-                    <Text style={styles.offerTypeText}>
-                      {deal.offerType === 'dinein' ? 'Dine-in' : 
-                       deal.offerType === 'pickup' ? 'Pickup' : 'Both'}
-                    </Text>
-                  </View>
-                </View>
-              </View>
-              <View style={styles.offerStats}>
-                <Text style={styles.offerStatsValue}>{deal.claimedCoupons}/{deal.maxCoupons}</Text>
-                <Text style={styles.offerStatsLabel}>claimed</Text>
-                <View style={styles.progressBar}>
-                  <View 
-                    style={[
-                      styles.progressFill, 
-                      { 
-                        width: `${(deal.claimedCoupons / deal.maxCoupons) * 100}%`,
-                        backgroundColor: colors.primary,
-                      }
-                    ]} 
-                  />
-                </View>
-              </View>
-            </Pressable>
-          ))}
-        </View>
-
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Recent Activity</Text>
-            <ChevronRight size={20} color={colors.textMuted} />
-          </View>
-          <View style={styles.activityCard}>
-            {recentActivity.map((activity, index) => (
-              <React.Fragment key={index}>
-                <View style={styles.activityItem}>
-                  <View style={[
-                    styles.activityDot,
-                    { backgroundColor: activity.type === 'claimed' ? colors.success : colors.error }
-                  ]} />
-                  <View style={styles.activityContent}>
-                    <Text style={styles.activityText} numberOfLines={1}>{activity.text}</Text>
-                    <Text style={styles.activityTime}>{activity.time}</Text>
-                  </View>
-                </View>
-                {index < recentActivity.length - 1 && <View style={styles.activityDivider} />}
-              </React.Fragment>
-            ))}
-          </View>
-        </View>
-
-        <View style={styles.tipsCard}>
-          <View style={styles.tipsIcon}>
-            <TrendingUp size={24} color={colors.primary} />
-          </View>
-          <View style={styles.tipsContent}>
-            <Text style={styles.tipsTitle}>Pro Tip</Text>
-            <Text style={styles.tipsText}>
-              Restaurants with 40%+ discounts see 3x more coupon claims during peak hours.
-            </Text>
+          <Text style={styles.sectionTitle}>Quick Links</Text>
+          <View style={styles.quickLinksGrid}>
+            <TouchableOpacity
+              style={styles.quickLink}
+              onPress={() => router.push('/(restaurant)/menu-management' as any)}
+            >
+              <Text style={styles.quickLinkText}>Menu Management</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.quickLink}
+              onPress={() => router.push('/(restaurant)/inventory' as any)}
+            >
+              <Text style={styles.quickLinkText}>Inventory</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.quickLink}
+              onPress={() => router.push('/(restaurant)/analytics' as any)}
+            >
+              <Text style={styles.quickLinkText}>Analytics</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.quickLink}
+              onPress={() => router.push('/(restaurant)/settings' as any)}
+            >
+              <Text style={styles.quickLinkText}>Settings</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </ScrollView>
-
-      <Modal visible={showBookingModal} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Assign Table</Text>
-              <Pressable onPress={() => setShowBookingModal(false)}>
-                <X size={24} color={colors.text} />
-              </Pressable>
-            </View>
-
-            {selectedBooking && (
-              <View style={styles.bookingDetails}>
-                <Text style={styles.bookingDetailName}>{selectedBooking.customerName}</Text>
-                <View style={styles.bookingDetailRow}>
-                  <CalendarDays size={16} color={colors.textSecondary} />
-                  <Text style={styles.bookingDetailText}>
-                    {selectedBooking.date} at {selectedBooking.time}
-                  </Text>
-                </View>
-                <View style={styles.bookingDetailRow}>
-                  <Users size={16} color={colors.textSecondary} />
-                  <Text style={styles.bookingDetailText}>{selectedBooking.guests} guests</Text>
-                </View>
-              </View>
-            )}
-
-            <Text style={styles.tableLabel}>Select Table Number</Text>
-            <View style={styles.tableGrid}>
-              {TABLE_OPTIONS.map((table) => (
-                <Pressable
-                  key={table}
-                  style={[
-                    styles.tableOption,
-                    selectedTable === table && styles.tableOptionActive,
-                  ]}
-                  onPress={() => setSelectedTable(table)}
-                >
-                  <Text style={[
-                    styles.tableOptionText,
-                    selectedTable === table && styles.tableOptionTextActive,
-                  ]}>
-                    {table}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-
-            <View style={styles.modalActions}>
-              <Pressable style={styles.declineModalBtn} onPress={handleDeclineBooking}>
-                <X size={18} color={colors.error} />
-                <Text style={[styles.modalBtnText, { color: colors.error }]}>Decline</Text>
-              </Pressable>
-              <Pressable style={styles.acceptModalBtn} onPress={handleAcceptBooking}>
-                <Check size={18} color="#fff" />
-                <Text style={[styles.modalBtnText, { color: '#fff' }]}>Accept</Text>
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      </Modal>
     </View>
   );
 }
 
-const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
+/* ──────────────────────────────────────────────────────────
+   Styles
+────────────────────────────────────────────────────────── */
+
+const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: Colors.background,
   },
   errorContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 24,
-    backgroundColor: colors.background,
+    backgroundColor: Colors.background,
   },
   errorTitle: {
     fontSize: 20,
-    fontWeight: '600' as const,
-    color: colors.text,
+    fontWeight: '600',
+    color: Colors.text,
     marginTop: 16,
     marginBottom: 8,
   },
   errorMessage: {
     fontSize: 14,
-    color: colors.textSecondary,
+    color: Colors.textSecondary,
     textAlign: 'center',
     marginBottom: 24,
   },
   backButton: {
-    backgroundColor: colors.primary,
+    backgroundColor: Colors.primary,
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
@@ -665,36 +502,32 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   backButtonText: {
     color: '#fff',
     fontSize: 16,
-    fontWeight: '600' as const,
+    fontWeight: '600',
   },
   header: {
-    backgroundColor: colors.surface,
-    padding: 20,
-    paddingBottom: 24,
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
-  },
-  headerTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 20,
+    padding: 20,
+    backgroundColor: Colors.surface,
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
   },
   welcomeText: {
     fontSize: 14,
-    color: colors.textSecondary,
+    color: Colors.textSecondary,
   },
   userName: {
     fontSize: 24,
-    fontWeight: '700' as const,
-    color: colors.text,
+    fontWeight: '700',
+    color: Colors.text,
     marginTop: 2,
   },
   notificationBtn: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: colors.backgroundSecondary,
+    backgroundColor: Colors.background,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -705,31 +538,15 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     minWidth: 18,
     height: 18,
     borderRadius: 9,
-    backgroundColor: colors.error,
+    backgroundColor: Colors.error,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
-    borderColor: colors.surface,
+    borderColor: Colors.surface,
   },
   notificationBadgeText: {
     fontSize: 10,
-    fontWeight: '700' as const,
-    color: '#fff',
-  },
-  createButton: {
-    borderRadius: 14,
-    overflow: 'hidden',
-  },
-  createButtonGradient: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 16,
-    gap: 8,
-  },
-  createButtonText: {
-    fontSize: 16,
-    fontWeight: '600' as const,
+    fontWeight: '700',
     color: '#fff',
   },
   statsGrid: {
@@ -740,17 +557,11 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   },
   statCard: {
     width: (width - 44) / 2,
-    backgroundColor: colors.surface,
+    backgroundColor: Colors.surface,
     borderRadius: 16,
     padding: 16,
     borderWidth: 1,
-    borderColor: colors.cardBorder,
-  },
-  statHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
+    borderColor: Colors.border,
   },
   statIcon: {
     width: 36,
@@ -758,27 +569,16 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  trendBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    borderRadius: 6,
-    gap: 2,
-  },
-  trendText: {
-    fontSize: 11,
-    fontWeight: '600' as const,
+    marginBottom: 12,
   },
   statValue: {
     fontSize: 28,
-    fontWeight: '700' as const,
-    color: colors.text,
+    fontWeight: '700',
+    color: Colors.text,
   },
   statLabel: {
     fontSize: 13,
-    color: colors.textSecondary,
+    color: Colors.textSecondary,
     marginTop: 4,
   },
   section: {
@@ -793,66 +593,24 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 18,
-    fontWeight: '700' as const,
-    color: colors.text,
-    marginBottom: 16,
+    fontWeight: '700',
+    color: Colors.text,
   },
   seeAll: {
     fontSize: 14,
-    fontWeight: '600' as const,
-    color: colors.primary,
-    marginBottom: 16,
-  },
-  pendingBadge: {
-    backgroundColor: colors.warningLight,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-    marginBottom: 16,
-  },
-  pendingBadgeText: {
-    fontSize: 12,
-    fontWeight: '600' as const,
-    color: colors.warning,
-  },
-  actionsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-  },
-  actionCard: {
-    width: (width - 64) / 3,
-    backgroundColor: colors.surface,
-    borderRadius: 16,
-    padding: 14,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-  },
-  actionIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 8,
-  },
-  actionLabel: {
-    fontSize: 12,
-    fontWeight: '600' as const,
-    color: colors.text,
-    textAlign: 'center',
+    fontWeight: '600',
+    color: Colors.primary,
   },
   orderActionCard: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: colors.surface,
+    backgroundColor: Colors.surface,
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: colors.cardBorder,
+    borderColor: Colors.border,
   },
   actionLeft: {
     flexDirection: 'row',
@@ -868,63 +626,13 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   },
   orderActionTitle: {
     fontSize: 16,
-    fontWeight: '600' as const,
-    color: colors.text,
+    fontWeight: '600',
+    color: Colors.text,
     marginBottom: 2,
   },
   orderActionSubtitle: {
     fontSize: 13,
-    color: colors.textSecondary,
-  },
-  bookingCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: colors.surface,
-    borderRadius: 14,
-    padding: 14,
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-  },
-  bookingInfo: {
-    flex: 1,
-  },
-  bookingName: {
-    fontSize: 15,
-    fontWeight: '600' as const,
-    color: colors.text,
-    marginBottom: 6,
-  },
-  bookingMeta: {
-    flexDirection: 'row',
-    gap: 16,
-  },
-  bookingMetaItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  bookingMetaText: {
-    fontSize: 12,
-    color: colors.textSecondary,
-  },
-  bookingActions: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  bookingActionBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  acceptBtn: {
-    backgroundColor: colors.success,
-  },
-  declineBtn: {
-    backgroundColor: colors.error,
+    color: Colors.textSecondary,
   },
   emptyOrders: {
     alignItems: 'center',
@@ -932,16 +640,16 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   },
   emptyOrdersText: {
     fontSize: 14,
-    color: colors.textMuted,
+    color: Colors.textMuted,
     marginTop: 12,
   },
   orderCard: {
-    backgroundColor: colors.surface,
+    backgroundColor: Colors.surface,
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: colors.cardBorder,
+    borderColor: Colors.border,
   },
   orderHeader: {
     flexDirection: 'row',
@@ -951,8 +659,8 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   },
   orderId: {
     fontSize: 15,
-    fontWeight: '600' as const,
-    color: colors.text,
+    fontWeight: '600',
+    color: Colors.text,
   },
   orderStatus: {
     paddingHorizontal: 10,
@@ -961,11 +669,11 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   },
   orderStatusText: {
     fontSize: 11,
-    fontWeight: '700' as const,
+    fontWeight: '700',
   },
   orderItems: {
     fontSize: 13,
-    color: colors.textSecondary,
+    color: Colors.textSecondary,
     marginBottom: 12,
   },
   orderFooter: {
@@ -975,267 +683,31 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   },
   orderTime: {
     fontSize: 12,
-    color: colors.textMuted,
+    color: Colors.textMuted,
   },
   orderTotal: {
     fontSize: 16,
-    fontWeight: '700' as const,
-    color: colors.text,
+    fontWeight: '700',
+    color: Colors.text,
   },
-  offerCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: colors.surface,
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-  },
-  offerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  discountBadge: {
-    width: 52,
-    height: 52,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  discountText: {
-    fontSize: 18,
-    fontWeight: '700' as const,
-    color: '#fff',
-  },
-  offerDetails: {
-    marginLeft: 14,
-    flex: 1,
-  },
-  offerTitle: {
-    fontSize: 15,
-    fontWeight: '600' as const,
-    color: colors.text,
-    marginBottom: 4,
-  },
-  offerMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    marginBottom: 6,
-  },
-  offerMetaText: {
-    fontSize: 12,
-    color: colors.textSecondary,
-  },
-  offerTypeBadge: {
-    alignSelf: 'flex-start',
-    backgroundColor: colors.backgroundSecondary,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-  },
-  offerTypeText: {
-    fontSize: 11,
-    fontWeight: '500' as const,
-    color: colors.textSecondary,
-  },
-  offerStats: {
-    alignItems: 'flex-end',
-    minWidth: 70,
-  },
-  offerStatsValue: {
-    fontSize: 16,
-    fontWeight: '700' as const,
-    color: colors.primary,
-  },
-  offerStatsLabel: {
-    fontSize: 11,
-    color: colors.textSecondary,
-    marginBottom: 6,
-  },
-  progressBar: {
-    width: 60,
-    height: 4,
-    backgroundColor: colors.border,
-    borderRadius: 2,
-    overflow: 'hidden',
-  },
-  progressFill: {
-    height: '100%',
-    borderRadius: 2,
-  },
-  activityCard: {
-    backgroundColor: colors.surface,
-    borderRadius: 16,
-    padding: 4,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-  },
-  activityItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 14,
-    gap: 12,
-  },
-  activityDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-  },
-  activityContent: {
-    flex: 1,
-  },
-  activityText: {
-    fontSize: 14,
-    color: colors.text,
-    marginBottom: 2,
-  },
-  activityTime: {
-    fontSize: 12,
-    color: colors.textMuted,
-  },
-  activityDivider: {
-    height: 1,
-    backgroundColor: colors.divider,
-    marginLeft: 36,
-  },
-  tipsCard: {
-    flexDirection: 'row',
-    marginHorizontal: 20,
-    marginTop: 24,
-    padding: 16,
-    backgroundColor: colors.primaryLight,
-    borderRadius: 16,
-    gap: 14,
-  },
-  tipsIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 14,
-    backgroundColor: colors.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  tipsContent: {
-    flex: 1,
-  },
-  tipsTitle: {
-    fontSize: 15,
-    fontWeight: '700' as const,
-    color: colors.primary,
-    marginBottom: 4,
-  },
-  tipsText: {
-    fontSize: 13,
-    color: colors.text,
-    lineHeight: 18,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'flex-end',
-  },
-  modalContent: {
-    backgroundColor: colors.surface,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 20,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: '700' as const,
-    color: colors.text,
-  },
-  bookingDetails: {
-    backgroundColor: colors.backgroundSecondary,
-    borderRadius: 14,
-    padding: 16,
-    marginBottom: 20,
-  },
-  bookingDetailName: {
-    fontSize: 18,
-    fontWeight: '600' as const,
-    color: colors.text,
-    marginBottom: 10,
-  },
-  bookingDetailRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 6,
-  },
-  bookingDetailText: {
-    fontSize: 14,
-    color: colors.textSecondary,
-  },
-  tableLabel: {
-    fontSize: 14,
-    fontWeight: '600' as const,
-    color: colors.text,
-    marginBottom: 12,
-  },
-  tableGrid: {
+  quickLinksGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
-    marginBottom: 24,
-  },
-  tableOption: {
-    width: (width - 80) / 5,
-    paddingVertical: 12,
-    borderRadius: 10,
-    backgroundColor: colors.backgroundSecondary,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  tableOptionActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
-  tableOptionText: {
-    fontSize: 14,
-    fontWeight: '600' as const,
-    color: colors.text,
-  },
-  tableOptionTextActive: {
-    color: '#fff',
-  },
-  modalActions: {
-    flexDirection: 'row',
     gap: 12,
   },
-  declineModalBtn: {
+  quickLink: {
     flex: 1,
-    flexDirection: 'row',
+    minWidth: (width - 56) / 2,
+    backgroundColor: Colors.surface,
+    borderRadius: 12,
+    padding: 16,
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 14,
-    borderRadius: 14,
-    backgroundColor: colors.errorLight,
-    gap: 8,
+    borderWidth: 1,
+    borderColor: Colors.border,
   },
-  acceptModalBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 14,
-    borderRadius: 14,
-    backgroundColor: colors.success,
-    gap: 8,
-  },
-  modalBtnText: {
-    fontSize: 16,
-    fontWeight: '600' as const,
+  quickLinkText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.text,
   },
 });
