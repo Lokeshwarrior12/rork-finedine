@@ -262,18 +262,18 @@ export default function RootLayout() {
     initialize();
   }, []);
 
-// FIXED:
-return (
-  <GestureHandlerRootView style={{ flex: 1 }}>
-    <QueryClientProvider client={queryClient}>
-      <ThemeProvider>           {/* ← ADD THIS LINE */}
-        <AuthProvider>
-          <RootLayoutInner />
-        </AuthProvider>
-      </ThemeProvider>           {/* ← ADD THIS LINE */}
-    </QueryClientProvider>
-  </GestureHandlerRootView>
-);
+  return (
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <QueryClientProvider client={queryClient}>
+        <ThemeProvider>
+          <AuthProvider>
+            <RootLayoutInner />
+          </AuthProvider>
+        </ThemeProvider>
+      </QueryClientProvider>
+    </GestureHandlerRootView>
+  );
+}
 
 /* ──────────────────────────────────────────────────────────
    Styles
