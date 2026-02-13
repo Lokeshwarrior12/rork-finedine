@@ -7,9 +7,12 @@ import {
   Pressable,
   TextInput,
   Share,
+  ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Gift,
   Users,
@@ -21,7 +24,8 @@ import {
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { useAuth } from '@/contexts/AuthContext';
-import Colors from '@/constants/colors';
+import { useTheme } from '@/contexts/ThemeContext';
+import { api } from '@/lib/api';
 
 interface Referral {
   id: string;
@@ -30,27 +34,73 @@ interface Referral {
   status: 'pending' | 'completed';
   date: string;
   pointsEarned?: number;
+  createdAt: string;
 }
-
-const mockReferrals: Referral[] = [
-  { id: '1', name: 'Sarah M.', email: 'sarah.m@email.com', status: 'completed', date: 'Jan 18, 2026', pointsEarned: 50 },
-  { id: '2', name: 'Mike R.', email: 'mike.r@email.com', status: 'completed', date: 'Jan 12, 2026', pointsEarned: 50 },
-  { id: '3', name: 'Emily K.', email: 'emily.k@email.com', status: 'pending', date: 'Jan 20, 2026' },
-];
 
 export default function ReferralScreen() {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
+  const { colors } = useTheme();
+  const queryClient = useQueryClient();
   const [copied, setCopied] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
 
-  const referralCode = user?.id ? `FINEDINE-${user.id.toUpperCase().slice(0, 6)}` : 'FINEDINE-GUEST';
+  // REAL API QUERY - Fetch user's referrals from backend
+  const { 
+    data: referralsResponse, 
+    isLoading,
+    error 
+  } = useQuery({
+    queryKey: ['referrals'],
+    queryFn: async () => {
+      console.log('🔄 Fetching referrals from API...');
+      const result = await api.getReferrals();
+      console.log('✅ Referrals fetched:', result.data?.length || 0);
+      return result;
+    },
+    staleTime: 60 * 1000, // Cache for 1 minute
+    enabled: !!user,
+  });
+
+  // REAL API MUTATION - Send referral invite
+  const sendInviteMutation = useMutation({
+    mutationFn: async (email: string) => {
+      console.log('🔄 Sending referral invite to:', email);
+      return await api.sendReferralInvite({ email });
+    },
+    onSuccess: () => {
+      console.log('✅ Referral invite sent successfully');
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setInviteEmail('');
+      Alert.alert('Success', 'Referral invite sent!');
+      queryClient.invalidateQueries(['referrals']);
+    },
+    onError: (error) => {
+      console.error('❌ Failed to send invite:', error);
+      Alert.alert('Error', 'Failed to send invite. Please try again.');
+    },
+  });
+
+  const referrals = referralsResponse?.data || [];
+  const referralCode = user?.referralCode || user?.id ? `FINEDINE-${user.id.toUpperCase().slice(0, 6)}` : 'FINEDINE-GUEST';
   const referralLink = `https://finedine.app/invite/${referralCode}`;
 
+  const completedReferrals = referrals.filter(r => r.status === 'completed').length;
+  const totalPointsEarned = referrals
+    .filter(r => r.status === 'completed')
+    .reduce((sum, r) => sum + (r.pointsEarned || 0), 0);
+
   const handleCopyCode = async () => {
-    setCopied(true);
-    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    setTimeout(() => setCopied(false), 2000);
+    try {
+      // Note: Clipboard API would be used here in production
+      // import * as Clipboard from 'expo-clipboard';
+      // await Clipboard.setStringAsync(referralCode);
+      setCopied(true);
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (error) {
+      console.error('Copy error:', error);
+    }
   };
 
   const handleShare = async () => {
@@ -66,15 +116,32 @@ export default function ReferralScreen() {
   };
 
   const handleSendInvite = async () => {
-    if (!inviteEmail.trim()) return;
-    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    setInviteEmail('');
+    if (!inviteEmail.trim()) {
+      Alert.alert('Error', 'Please enter an email address');
+      return;
+    }
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(inviteEmail.trim())) {
+      Alert.alert('Error', 'Please enter a valid email address');
+      return;
+    }
+
+    sendInviteMutation.mutate(inviteEmail.trim());
   };
 
-  const completedReferrals = mockReferrals.filter(r => r.status === 'completed').length;
-  const totalPointsEarned = mockReferrals
-    .filter(r => r.status === 'completed')
-    .reduce((sum, r) => sum + (r.pointsEarned || 0), 0);
+  const styles = createStyles(colors);
+
+  // Loading State
+  if (isLoading && !referralsResponse) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top, justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={[styles.loadingText, { marginTop: 16 }]}>Loading referrals...</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -83,11 +150,11 @@ export default function ReferralScreen() {
         contentContainerStyle={{ paddingBottom: insets.bottom + 20 }}
       >
         <LinearGradient
-          colors={[Colors.primary, Colors.primaryDark]}
+          colors={[colors.primary, colors.primaryDark]}
           style={styles.header}
         >
           <View style={styles.headerIcon}>
-            <Gift size={32} color={Colors.accent} />
+            <Gift size={32} color={colors.accent} />
           </View>
           <Text style={styles.headerTitle}>Refer a Friend</Text>
           <Text style={styles.headerSubtitle}>
@@ -95,7 +162,7 @@ export default function ReferralScreen() {
           </Text>
 
           <View style={styles.rewardHighlight}>
-            <Sparkles size={20} color={Colors.accent} />
+            <Sparkles size={20} color={colors.accent} />
             <Text style={styles.rewardText}>
               Get <Text style={styles.rewardBold}>50 points</Text> + free meal deal for each friend!
             </Text>
@@ -104,12 +171,12 @@ export default function ReferralScreen() {
 
         <View style={styles.statsRow}>
           <View style={styles.statCard}>
-            <Users size={24} color={Colors.primary} />
+            <Users size={24} color={colors.primary} />
             <Text style={styles.statValue}>{completedReferrals}</Text>
             <Text style={styles.statLabel}>Friends Invited</Text>
           </View>
           <View style={styles.statCard}>
-            <Award size={24} color={Colors.accent} />
+            <Award size={24} color={colors.accent} />
             <Text style={styles.statValue}>{totalPointsEarned}</Text>
             <Text style={styles.statLabel}>Points Earned</Text>
           </View>
@@ -123,15 +190,15 @@ export default function ReferralScreen() {
             </View>
             <Pressable style={styles.copyButton} onPress={handleCopyCode}>
               {copied ? (
-                <Check size={20} color={Colors.success} />
+                <Check size={20} color={colors.success} />
               ) : (
-                <Copy size={20} color={Colors.primary} />
+                <Copy size={20} color={colors.primary} />
               )}
             </Pressable>
           </View>
 
           <Pressable style={styles.shareButton} onPress={handleShare}>
-            <Share2 size={20} color={Colors.surface} />
+            <Share2 size={20} color="#fff" />
             <Text style={styles.shareButtonText}>Share Invite Link</Text>
           </Pressable>
         </View>
@@ -142,21 +209,26 @@ export default function ReferralScreen() {
             <TextInput
               style={styles.emailInput}
               placeholder="Enter friend's email"
-              placeholderTextColor={Colors.textLight}
+              placeholderTextColor={colors.placeholder}
               value={inviteEmail}
               onChangeText={setInviteEmail}
               keyboardType="email-address"
               autoCapitalize="none"
+              editable={!sendInviteMutation.isPending}
             />
             <Pressable 
               style={[
                 styles.sendButton,
-                !inviteEmail.trim() && styles.sendButtonDisabled
+                (!inviteEmail.trim() || sendInviteMutation.isPending) && styles.sendButtonDisabled
               ]} 
               onPress={handleSendInvite}
-              disabled={!inviteEmail.trim()}
+              disabled={!inviteEmail.trim() || sendInviteMutation.isPending}
             >
-              <Text style={styles.sendButtonText}>Send</Text>
+              {sendInviteMutation.isPending ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Text style={styles.sendButtonText}>Send</Text>
+              )}
             </Pressable>
           </View>
         </View>
@@ -186,19 +258,35 @@ export default function ReferralScreen() {
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Your Referrals</Text>
-          {mockReferrals.length > 0 ? (
+          {error ? (
+            <View style={styles.errorCard}>
+              <Text style={styles.errorText}>Failed to load referrals</Text>
+              <Pressable 
+                style={styles.retryButton} 
+                onPress={() => queryClient.invalidateQueries(['referrals'])}
+              >
+                <Text style={styles.retryButtonText}>Retry</Text>
+              </Pressable>
+            </View>
+          ) : referrals.length > 0 ? (
             <View style={styles.referralsCard}>
-              {mockReferrals.map((referral, index) => (
+              {referrals.map((referral, index) => (
                 <React.Fragment key={referral.id}>
                   <View style={styles.referralItem}>
                     <View style={styles.referralAvatar}>
                       <Text style={styles.referralInitial}>
-                        {referral.name.charAt(0)}
+                        {referral.name.charAt(0).toUpperCase()}
                       </Text>
                     </View>
                     <View style={styles.referralInfo}>
                       <Text style={styles.referralName}>{referral.name}</Text>
-                      <Text style={styles.referralDate}>{referral.date}</Text>
+                      <Text style={styles.referralDate}>
+                        {new Date(referral.createdAt).toLocaleDateString('en-US', { 
+                          month: 'short', 
+                          day: 'numeric', 
+                          year: 'numeric' 
+                        })}
+                      </Text>
                     </View>
                     <View style={[
                       styles.referralStatus,
@@ -214,14 +302,15 @@ export default function ReferralScreen() {
                       </Text>
                     </View>
                   </View>
-                  {index < mockReferrals.length - 1 && <View style={styles.referralDivider} />}
+                  {index < referrals.length - 1 && <View style={styles.referralDivider} />}
                 </React.Fragment>
               ))}
             </View>
           ) : (
             <View style={styles.emptyReferrals}>
-              <Users size={32} color={Colors.textLight} />
+              <Users size={32} color={colors.textMuted} />
               <Text style={styles.emptyText}>No referrals yet</Text>
+              <Text style={styles.emptySubtext}>Start inviting friends to earn rewards!</Text>
             </View>
           )}
         </View>
@@ -237,10 +326,10 @@ export default function ReferralScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: colors.background,
   },
   header: {
     padding: 24,
@@ -261,7 +350,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 28,
     fontWeight: '700' as const,
-    color: Colors.surface,
+    color: '#fff',
     marginBottom: 8,
   },
   headerSubtitle: {
@@ -281,11 +370,11 @@ const styles = StyleSheet.create({
   },
   rewardText: {
     fontSize: 14,
-    color: Colors.surface,
+    color: '#fff',
   },
   rewardBold: {
     fontWeight: '700' as const,
-    color: Colors.accent,
+    color: colors.accent,
   },
   statsRow: {
     flexDirection: 'row',
@@ -296,25 +385,27 @@ const styles = StyleSheet.create({
   },
   statCard: {
     flex: 1,
-    backgroundColor: Colors.surface,
+    backgroundColor: colors.surface,
     borderRadius: 16,
     padding: 16,
     alignItems: 'center',
-    shadowColor: Colors.cardShadow,
+    shadowColor: colors.cardShadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 1,
     shadowRadius: 8,
     elevation: 3,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
   },
   statValue: {
     fontSize: 28,
     fontWeight: '700' as const,
-    color: Colors.text,
+    color: colors.text,
     marginTop: 8,
   },
   statLabel: {
     fontSize: 13,
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
     marginTop: 4,
   },
   section: {
@@ -324,28 +415,28 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontWeight: '600' as const,
-    color: Colors.text,
+    color: colors.text,
     marginBottom: 16,
   },
   codeCard: {
     flexDirection: 'row',
-    backgroundColor: Colors.surface,
+    backgroundColor: colors.surface,
     borderRadius: 14,
     overflow: 'hidden',
     borderWidth: 2,
     borderStyle: 'dashed',
-    borderColor: Colors.primary,
+    borderColor: colors.primary,
   },
   codeDisplay: {
     flex: 1,
     paddingVertical: 16,
     paddingHorizontal: 20,
-    backgroundColor: Colors.surfaceAlt,
+    backgroundColor: colors.backgroundSecondary,
   },
   codeText: {
     fontSize: 20,
     fontWeight: '700' as const,
-    color: Colors.text,
+    color: colors.text,
     letterSpacing: 2,
     textAlign: 'center',
   },
@@ -353,13 +444,13 @@ const styles = StyleSheet.create({
     width: 56,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: Colors.surface,
+    backgroundColor: colors.surface,
   },
   shareButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: Colors.primary,
+    backgroundColor: colors.primary,
     paddingVertical: 16,
     borderRadius: 14,
     marginTop: 12,
@@ -368,7 +459,7 @@ const styles = StyleSheet.create({
   shareButtonText: {
     fontSize: 16,
     fontWeight: '600' as const,
-    color: Colors.surface,
+    color: '#fff',
   },
   emailInputContainer: {
     flexDirection: 'row',
@@ -376,39 +467,42 @@ const styles = StyleSheet.create({
   },
   emailInput: {
     flex: 1,
-    backgroundColor: Colors.surface,
+    backgroundColor: colors.surface,
     borderRadius: 14,
     paddingHorizontal: 16,
     paddingVertical: 14,
     fontSize: 16,
-    color: Colors.text,
+    color: colors.text,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: colors.border,
   },
   sendButton: {
-    backgroundColor: Colors.primary,
+    backgroundColor: colors.primary,
     paddingHorizontal: 24,
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
+    minWidth: 80,
   },
   sendButtonDisabled: {
-    backgroundColor: Colors.textLight,
+    backgroundColor: colors.textMuted,
   },
   sendButtonText: {
     fontSize: 16,
     fontWeight: '600' as const,
-    color: Colors.surface,
+    color: '#fff',
   },
   stepsCard: {
-    backgroundColor: Colors.surface,
+    backgroundColor: colors.surface,
     borderRadius: 16,
     padding: 20,
-    shadowColor: Colors.cardShadow,
+    shadowColor: colors.cardShadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 1,
     shadowRadius: 8,
     elevation: 3,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
   },
   stepItem: {
     flexDirection: 'row',
@@ -418,7 +512,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: Colors.primary,
+    backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 14,
@@ -427,7 +521,7 @@ const styles = StyleSheet.create({
   stepNumberText: {
     fontSize: 14,
     fontWeight: '700' as const,
-    color: Colors.surface,
+    color: '#fff',
   },
   stepContent: {
     flex: 1,
@@ -436,12 +530,12 @@ const styles = StyleSheet.create({
   stepTitle: {
     fontSize: 15,
     fontWeight: '600' as const,
-    color: Colors.text,
+    color: colors.text,
     marginBottom: 4,
   },
   stepDesc: {
     fontSize: 13,
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
     lineHeight: 18,
   },
   stepLine: {
@@ -450,17 +544,19 @@ const styles = StyleSheet.create({
     top: 32,
     bottom: 0,
     width: 2,
-    backgroundColor: Colors.border,
+    backgroundColor: colors.border,
   },
   referralsCard: {
-    backgroundColor: Colors.surface,
+    backgroundColor: colors.surface,
     borderRadius: 16,
     padding: 4,
-    shadowColor: Colors.cardShadow,
+    shadowColor: colors.cardShadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 1,
     shadowRadius: 8,
     elevation: 3,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
   },
   referralItem: {
     flexDirection: 'row',
@@ -471,14 +567,14 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: Colors.primary,
+    backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },
   referralInitial: {
     fontSize: 18,
     fontWeight: '600' as const,
-    color: Colors.surface,
+    color: '#fff',
   },
   referralInfo: {
     flex: 1,
@@ -487,45 +583,53 @@ const styles = StyleSheet.create({
   referralName: {
     fontSize: 15,
     fontWeight: '600' as const,
-    color: Colors.text,
+    color: colors.text,
   },
   referralDate: {
     fontSize: 13,
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
     marginTop: 2,
   },
   referralStatus: {
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 12,
-    backgroundColor: Colors.surfaceAlt,
+    backgroundColor: colors.backgroundSecondary,
   },
   referralStatusCompleted: {
-    backgroundColor: `${Colors.success}15`,
+    backgroundColor: `${colors.success}15`,
   },
   referralStatusText: {
     fontSize: 13,
     fontWeight: '600' as const,
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
   },
   referralStatusTextCompleted: {
-    color: Colors.success,
+    color: colors.success,
   },
   referralDivider: {
     height: 1,
-    backgroundColor: Colors.borderLight,
+    backgroundColor: colors.divider,
     marginLeft: 70,
   },
   emptyReferrals: {
-    backgroundColor: Colors.surface,
+    backgroundColor: colors.surface,
     borderRadius: 16,
     padding: 40,
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
   },
   emptyText: {
     fontSize: 14,
-    color: Colors.textSecondary,
+    color: colors.text,
     marginTop: 12,
+    fontWeight: '600' as const,
+  },
+  emptySubtext: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    marginTop: 4,
   },
   termsSection: {
     paddingHorizontal: 20,
@@ -533,8 +637,36 @@ const styles = StyleSheet.create({
   },
   termsText: {
     fontSize: 12,
-    color: Colors.textLight,
+    color: colors.textMuted,
     textAlign: 'center',
     lineHeight: 18,
+  },
+  loadingText: {
+    fontSize: 16,
+    color: colors.textSecondary,
+  },
+  errorCard: {
+    backgroundColor: colors.surface,
+    borderRadius: 16,
+    padding: 24,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+  },
+  errorText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    marginBottom: 12,
+  },
+  retryButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    backgroundColor: colors.primary,
+    borderRadius: 12,
+  },
+  retryButtonText: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: '#fff',
   },
 });
