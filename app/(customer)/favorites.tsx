@@ -60,6 +60,9 @@ export default function FavoritesScreen() {
     staleTime: 60000, // 1 minute
   });
 
+  // Add type casting:
+const favoriteRestaurants = (favoritesData?.data || []) as Restaurant[];
+// Replace Colors.textMuted → Colors.textSecondary
   const favoriteRestaurants = favoritesData?.data || [];
 
   /* ---------------- REMOVE FAVORITE MUTATION ---------------- */
