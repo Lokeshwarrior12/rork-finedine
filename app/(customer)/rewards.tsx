@@ -6,10 +6,12 @@ import {
   ScrollView,
   Pressable,
   Animated,
-  Dimensions,
+  ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Gift,
   Star,
@@ -20,10 +22,10 @@ import {
   Crown,
   Target,
 } from 'lucide-react-native';
+import * as Haptics from 'expo-haptics';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
-
-Dimensions.get('window');
+import { api } from '@/lib/api';
 
 interface Reward {
   id: string;
@@ -32,16 +34,8 @@ interface Reward {
   pointsCost: number;
   category: 'discount' | 'freebie' | 'experience';
   isAvailable: boolean;
+  stock?: number;
 }
-
-const mockRewards: Reward[] = [
-  { id: '1', title: '10% Off Next Order', description: 'Get 10% discount on your next dining experience', pointsCost: 100, category: 'discount', isAvailable: true },
-  { id: '2', title: 'Free Dessert', description: 'Complimentary dessert at any partner restaurant', pointsCost: 200, category: 'freebie', isAvailable: true },
-  { id: '3', title: '25% Off Weekend Brunch', description: 'Special weekend brunch discount', pointsCost: 350, category: 'discount', isAvailable: true },
-  { id: '4', title: 'VIP Table Booking', description: 'Priority reservation at premium restaurants', pointsCost: 500, category: 'experience', isAvailable: true },
-  { id: '5', title: 'Free Appetizer', description: 'Complimentary starter at select restaurants', pointsCost: 150, category: 'freebie', isAvailable: true },
-  { id: '6', title: 'Chef\'s Table Experience', description: 'Exclusive dining with the head chef', pointsCost: 1000, category: 'experience', isAvailable: false },
-];
 
 const tiers = [
   { name: 'Bronze', minPoints: 0, maxPoints: 499, color: '#CD7F32', icon: Star },
@@ -54,6 +48,7 @@ export default function RewardsScreen() {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const { colors, isDark } = useTheme();
+  const queryClient = useQueryClient();
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   
   const scaleAnim = useRef(new Animated.Value(0.9)).current;
@@ -75,7 +70,80 @@ export default function RewardsScreen() {
     ]).start();
   }, [scaleAnim, fadeAnim]);
 
-  const userPoints = user?.points || 0;
+  // REAL API QUERY - Fetch available rewards from backend
+  const { 
+    data: rewardsResponse, 
+    isLoading: rewardsLoading,
+    error: rewardsError 
+  } = useQuery({
+    queryKey: ['rewards'],
+    queryFn: async () => {
+      console.log('🔄 Fetching rewards from API...');
+      const result = await api.getRewards();
+      console.log('✅ Rewards fetched:', result.data?.length || 0);
+      return result;
+    },
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+  });
+
+  // REAL API QUERY - Fetch user profile for points
+  const { 
+    data: profileResponse 
+  } = useQuery({
+    queryKey: ['profile'],
+    queryFn: async () => {
+      console.log('🔄 Fetching user profile for points...');
+      const result = await api.getUserProfile();
+      console.log('✅ User points:', result.data?.loyaltyPoints || 0);
+      return result;
+    },
+    enabled: !!user,
+    staleTime: 60 * 1000,
+  });
+
+  // REAL API MUTATION - Redeem reward
+  const redeemRewardMutation = useMutation({
+    mutationFn: async (rewardId: string) => {
+      console.log('🔄 Redeeming reward:', rewardId);
+      return await api.redeemReward(rewardId);
+    },
+    onSuccess: (data, rewardId) => {
+      console.log('✅ Reward redeemed successfully');
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      
+      const reward = rewards.find(r => r.id === rewardId);
+      Alert.alert(
+        'Success!',
+        `${reward?.title || 'Reward'} has been added to your coupons!`,
+        [
+          {
+            text: 'View Coupons',
+            onPress: () => {
+              // Navigate to coupons screen
+              // router.push('/(customer)/coupons');
+            },
+          },
+          { text: 'OK' },
+        ]
+      );
+      
+      // Invalidate queries to refresh data
+      queryClient.invalidateQueries(['rewards']);
+      queryClient.invalidateQueries(['profile']);
+      queryClient.invalidateQueries(['coupons']);
+    },
+    onError: (error) => {
+      console.error('❌ Failed to redeem reward:', error);
+      Alert.alert(
+        'Error',
+        error instanceof Error ? error.message : 'Failed to redeem reward. Please try again.'
+      );
+    },
+  });
+
+  const rewards = rewardsResponse?.data || [];
+  const userPoints = profileResponse?.data?.loyaltyPoints || user?.loyaltyPoints || 0;
+  
   const currentTier = tiers.find(t => userPoints >= t.minPoints && userPoints <= t.maxPoints) || tiers[0];
   const nextTier = tiers[tiers.indexOf(currentTier) + 1];
   const progressToNextTier = nextTier 
@@ -83,8 +151,8 @@ export default function RewardsScreen() {
     : 100;
 
   const filteredRewards = selectedCategory === 'all' 
-    ? mockRewards 
-    : mockRewards.filter(r => r.category === selectedCategory);
+    ? rewards 
+    : rewards.filter(r => r.category === selectedCategory);
 
   const categories = [
     { id: 'all', label: 'All' },
@@ -93,7 +161,63 @@ export default function RewardsScreen() {
     { id: 'experience', label: 'Experiences' },
   ];
 
+  const handleRedeemReward = (reward: Reward) => {
+    if (!reward.isAvailable) {
+      Alert.alert('Not Available', 'This reward is currently unavailable.');
+      return;
+    }
+
+    if (userPoints < reward.pointsCost) {
+      Alert.alert(
+        'Insufficient Points',
+        `You need ${reward.pointsCost - userPoints} more points to redeem this reward.`
+      );
+      return;
+    }
+
+    Alert.alert(
+      'Redeem Reward',
+      `Redeem ${reward.title} for ${reward.pointsCost} points?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Redeem',
+          onPress: () => redeemRewardMutation.mutate(reward.id),
+        },
+      ]
+    );
+  };
+
   const styles = createStyles(colors, isDark);
+
+  // Loading State
+  if (rewardsLoading && !rewardsResponse) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top, justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={[styles.loadingText, { marginTop: 16 }]}>Loading rewards...</Text>
+      </View>
+    );
+  }
+
+  // Error State
+  if (rewardsError && !rewardsResponse) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 20 }]}>
+        <Gift size={48} color={colors.textMuted} />
+        <Text style={styles.errorTitle}>Unable to load rewards</Text>
+        <Text style={styles.errorText}>
+          {rewardsError instanceof Error ? rewardsError.message : 'Please check your connection'}
+        </Text>
+        <Pressable 
+          style={styles.retryButton} 
+          onPress={() => queryClient.invalidateQueries(['rewards'])}
+        >
+          <Text style={styles.retryButtonText}>Retry</Text>
+        </Pressable>
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -140,7 +264,7 @@ export default function RewardsScreen() {
                   </Text>
                 </View>
                 <View style={styles.progressBar}>
-                  <View style={[styles.progressFill, { width: `${progressToNextTier}%` }]} />
+                  <View style={[styles.progressFill, { width: `${Math.min(progressToNextTier, 100)}%` }]} />
                 </View>
               </View>
             )}
@@ -189,7 +313,10 @@ export default function RewardsScreen() {
                   styles.categoryChip,
                   selectedCategory === cat.id && styles.categoryChipActive
                 ]}
-                onPress={() => setSelectedCategory(cat.id)}
+                onPress={() => {
+                  setSelectedCategory(cat.id);
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                }}
               >
                 <Text style={[
                   styles.categoryChipText,
@@ -201,33 +328,53 @@ export default function RewardsScreen() {
             ))}
           </ScrollView>
 
-          {filteredRewards.map((reward) => {
-            const canRedeem = userPoints >= reward.pointsCost && reward.isAvailable;
-            return (
-              <Pressable 
-                key={reward.id} 
-                style={[styles.rewardCard, !reward.isAvailable && styles.rewardCardDisabled]}
-              >
-                <View style={styles.rewardInfo}>
-                  <Text style={styles.rewardTitle}>{reward.title}</Text>
-                  <Text style={styles.rewardDesc} numberOfLines={2}>{reward.description}</Text>
-                  <View style={styles.rewardCost}>
-                    <Sparkles size={14} color={colors.accent} />
-                    <Text style={styles.rewardCostText}>{reward.pointsCost} points</Text>
-                  </View>
-                </View>
+          {filteredRewards.length > 0 ? (
+            filteredRewards.map((reward) => {
+              const canRedeem = userPoints >= reward.pointsCost && reward.isAvailable;
+              const isRedeeming = redeemRewardMutation.isPending && redeemRewardMutation.variables === reward.id;
+              
+              return (
                 <Pressable 
-                  style={[styles.redeemBtn, canRedeem && styles.redeemBtnActive]}
-                  disabled={!canRedeem}
+                  key={reward.id} 
+                  style={[styles.rewardCard, !reward.isAvailable && styles.rewardCardDisabled]}
+                  onPress={() => canRedeem && handleRedeemReward(reward)}
                 >
-                  <Text style={[styles.redeemBtnText, canRedeem && styles.redeemBtnTextActive]}>
-                    {reward.isAvailable ? (canRedeem ? 'Redeem' : 'Locked') : 'Coming Soon'}
-                  </Text>
-                  {canRedeem && <ChevronRight size={16} color="#fff" />}
+                  <View style={styles.rewardInfo}>
+                    <Text style={styles.rewardTitle}>{reward.title}</Text>
+                    <Text style={styles.rewardDesc} numberOfLines={2}>{reward.description}</Text>
+                    <View style={styles.rewardCost}>
+                      <Sparkles size={14} color={colors.accent} />
+                      <Text style={styles.rewardCostText}>{reward.pointsCost} points</Text>
+                      {reward.stock !== undefined && reward.stock > 0 && reward.stock < 10 && (
+                        <Text style={styles.stockText}>• {reward.stock} left</Text>
+                      )}
+                    </View>
+                  </View>
+                  <Pressable 
+                    style={[styles.redeemBtn, canRedeem && styles.redeemBtnActive]}
+                    disabled={!canRedeem || isRedeeming}
+                    onPress={() => canRedeem && handleRedeemReward(reward)}
+                  >
+                    {isRedeeming ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <>
+                        <Text style={[styles.redeemBtnText, canRedeem && styles.redeemBtnTextActive]}>
+                          {reward.isAvailable ? (canRedeem ? 'Redeem' : 'Locked') : 'Coming Soon'}
+                        </Text>
+                        {canRedeem && <ChevronRight size={16} color="#fff" />}
+                      </>
+                    )}
+                  </Pressable>
                 </Pressable>
-              </Pressable>
-            );
-          })}
+              );
+            })
+          ) : (
+            <View style={styles.emptyRewards}>
+              <Gift size={48} color={colors.textMuted} />
+              <Text style={styles.emptyText}>No rewards in this category</Text>
+            </View>
+          )}
         </View>
       </ScrollView>
     </View>
@@ -428,6 +575,11 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     fontWeight: '600' as const,
     color: colors.accent,
   },
+  stockText: {
+    fontSize: 12,
+    color: colors.error,
+    marginLeft: 4,
+  },
   redeemBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -436,6 +588,8 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     borderRadius: 10,
     backgroundColor: colors.backgroundSecondary,
     gap: 4,
+    minWidth: 90,
+    justifyContent: 'center',
   },
   redeemBtnActive: {
     backgroundColor: colors.primary,
@@ -446,6 +600,47 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     color: colors.textSecondary,
   },
   redeemBtnTextActive: {
+    color: '#fff',
+  },
+  emptyRewards: {
+    backgroundColor: colors.surface,
+    borderRadius: 16,
+    padding: 40,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+  },
+  emptyText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    marginTop: 12,
+  },
+  loadingText: {
+    fontSize: 16,
+    color: colors.textSecondary,
+  },
+  errorTitle: {
+    fontSize: 18,
+    fontWeight: '600' as const,
+    color: colors.text,
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  errorText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  retryButton: {
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    backgroundColor: colors.primary,
+    borderRadius: 12,
+  },
+  retryButtonText: {
+    fontSize: 14,
+    fontWeight: '600' as const,
     color: '#fff',
   },
 });
