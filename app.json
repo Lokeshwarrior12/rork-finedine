@@ -35,8 +35,7 @@
         "WRITE_EXTERNAL_STORAGE",
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
-        "VIBRATE",
-        "POST_NOTIFICATIONS"
+        "VIBRATE"
       ]
     },
     "web": {
@@ -51,22 +50,14 @@
         }
       ],
       "expo-font",
-      "expo-web-browser",
-      "expo-secure-store",
-      [
-        "expo-notifications",
-        {
-          "icon": "./assets/images/notification-icon.png",
-          "color": "#F97316"
-        }
-      ]
+      "expo-secure-store"
     ],
     "experiments": {
       "typedRoutes": true
     },
     "extra": {
       "apiUrl": "http://localhost:8080/api/v1",
-      "apiUrlProduction": "https://primedine.fly.dev/",
+      "apiUrlProduction": "https://primedine.fly.dev/api/v1",
       "supabaseUrl": "https://qtmvztgxfvqmqekdhnxw.supabase.co",
       "supabaseAnonKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlieXloandyaGFlaGhtem55YWR6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjgxMTIyNzEsImV4cCI6MjA4MzY4ODI3MX0.yTOtqjeKEIuRdZ-8BgWK3x2zVbT8XgaAlCqj1EbsYvs",
       "eas": {
@@ -74,7 +65,7 @@
       }
     },
     "updates": {
-      "url": "https://u.expo.dev/your-eas-project-id"
+      "url": "https://u.expo.dev/70eb24db"
     },
     "runtimeVersion": {
       "policy": "sdkVersion"
