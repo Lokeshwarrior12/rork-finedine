@@ -11,7 +11,6 @@ import {
   Platform,
   ActivityIndicator,
   RefreshControl,
-  Alert,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -295,19 +294,20 @@ export default function CouponsScreen() {
     queryKey: ['coupons', user?.id],
     queryFn: async () => {
       if (!user?.id) throw new Error('User not authenticated');
-      return api.getUserCoupons(user.id);
+      // Use getCoupons instead of getUserCoupons
+      return api.getCoupons();
     },
     enabled: !!user?.id,
     staleTime: 60000, // 1 minute
   });
 
-  const coupons = couponsData?.data || [];
-  const filteredCoupons = coupons.filter((c: Coupon) => c.status === activeTab);
+  const coupons = (couponsData?.data || []) as Coupon[];
+  const filteredCoupons = coupons.filter((c) => c.status === activeTab);
 
   const tabs: { key: TabType; label: string; count: number }[] = [
-    { key: 'active', label: 'Active', count: coupons.filter((c: Coupon) => c.status === 'active').length },
-    { key: 'used', label: 'Used', count: coupons.filter((c: Coupon) => c.status === 'used').length },
-    { key: 'expired', label: 'Expired', count: coupons.filter((c: Coupon) => c.status === 'expired').length },
+    { key: 'active', label: 'Active', count: coupons.filter((c) => c.status === 'active').length },
+    { key: 'used', label: 'Used', count: coupons.filter((c) => c.status === 'used').length },
+    { key: 'expired', label: 'Expired', count: coupons.filter((c) => c.status === 'expired').length },
   ];
 
   const styles = createStyles(colors, isDark);
@@ -381,13 +381,13 @@ export default function CouponsScreen() {
           <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={colors.primary} />
         }
       >
-        {filteredCoupons.map((coupon: Coupon) => (
+        {filteredCoupons.map((coupon) => (
           <CouponCard key={coupon.id} coupon={coupon} colors={colors} isDark={isDark} />
         ))}
 
         {filteredCoupons.length === 0 && (
           <View style={styles.emptyState}>
-            <Ticket size={48} color={colors.textMuted} />
+            <Ticket size={48} color={colors.textSecondary} />
             <Text style={styles.emptyTitle}>No {activeTab} coupons</Text>
             <Text style={styles.emptyText}>
               {activeTab === 'active'
@@ -415,7 +415,7 @@ const createStyles = (colors: any, isDark: boolean) =>
     },
     loadingText: {
       fontSize: 16,
-      color: colors.textMuted,
+      color: colors.textSecondary,
     },
     errorContainer: {
       flex: 1,
@@ -562,7 +562,7 @@ const createCardStyles = (colors: any, isDark: boolean) =>
       backgroundColor: colors.success,
     },
     discountBadgeExpired: {
-      backgroundColor: colors.textMuted,
+      backgroundColor: colors.textSecondary,
     },
     discountText: {
       fontSize: 13,
