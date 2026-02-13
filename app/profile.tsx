@@ -4,7 +4,7 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  TouchableOpacity,
+  Pressable,
   TextInput,
   ActivityIndicator,
   Alert,
@@ -34,16 +34,20 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 
-import { apiFetch } from '@/lib/api/client';
+import { api } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
 import Colors from '@/constants/colors';
 
-interface ProfileResponse {
+interface UserProfile {
+  id: string;
+  email: string;
   name?: string;
   phone?: string;
   address?: string;
   role?: string;
   loyaltyPoints?: number;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export default function ProfileScreen() {
@@ -60,37 +64,33 @@ export default function ProfileScreen() {
     address: '',
   });
 
-  /* ---------------- FETCH PROFILE ---------------- */
-  const { data: profile, isLoading, isError } = useQuery<ProfileResponse>({
+  /* ---------------- FETCH PROFILE FROM REAL API ---------------- */
+  const { data: profile, isLoading, isError } = useQuery<UserProfile>({
     queryKey: ['profile'],
-    queryFn: () => apiFetch('/api/v1/profile'),
+    queryFn: () => api.getUserProfile(),
     enabled: !!user,
   });
 
   useEffect(() => {
     if (profile) {
       setFormData({
-        name: profile.name ?? '',
-        phone: profile.phone ?? '',
-        address: profile.address ?? '',
+        name: profile.name || '',
+        phone: profile.phone || '',
+        address: profile.address || '',
       });
     }
   }, [profile]);
 
-  /* ---------------- UPDATE PROFILE ---------------- */
+  /* ---------------- UPDATE PROFILE VIA REAL API ---------------- */
   const updateMutation = useMutation({
-    mutationFn: (payload: typeof formData) =>
-      apiFetch('/api/v1/profile', {
-        method: 'PUT',
-        body: JSON.stringify(payload),
-      }),
+    mutationFn: (payload: typeof formData) => api.updateUserProfile(payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['profile'] });
       setIsEditing(false);
       Alert.alert('Success', 'Profile updated successfully');
     },
-    onError: () => {
-      Alert.alert('Error', 'Failed to update profile');
+    onError: (error: any) => {
+      Alert.alert('Error', error.message || 'Failed to update profile');
     },
   });
 
@@ -105,7 +105,7 @@ export default function ProfileScreen() {
           try {
             await signOut();
             router.replace('/login');
-          } catch {
+          } catch (error) {
             Alert.alert('Error', 'Failed to sign out');
           }
         },
@@ -113,40 +113,65 @@ export default function ProfileScreen() {
     ]);
   };
 
-  /* ---------------- STATES ---------------- */
+  const handleSave = () => {
+    if (!formData.name.trim()) {
+      Alert.alert('Error', 'Name is required');
+      return;
+    }
+    updateMutation.mutate(formData);
+  };
+
+  /* ---------------- NOT LOGGED IN STATE ---------------- */
   if (!user) {
     return (
-      <View style={styles.center}>
-        <User size={64} color="#ccc" />
-        <Text style={styles.title}>Not Logged In</Text>
-        <TouchableOpacity
-          style={styles.primaryBtn}
-          onPress={() => router.push('/login')}
-        >
-          <Text style={styles.primaryText}>Sign In</Text>
-        </TouchableOpacity>
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        <View style={styles.notLoggedIn}>
+          <User size={64} color="#ccc" />
+          <Text style={styles.notLoggedInTitle}>Not Logged In</Text>
+          <Text style={styles.notLoggedInText}>
+            Sign in to view your profile and orders
+          </Text>
+          <Pressable
+            style={styles.loginButton}
+            onPress={() => router.push('/login')}
+          >
+            <Text style={styles.loginButtonText}>Sign In</Text>
+          </Pressable>
+        </View>
       </View>
     );
   }
 
+  /* ---------------- LOADING STATE ---------------- */
   if (isLoading) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" color={Colors.primary} />
-        <Text style={{ marginTop: 10 }}>Loading profile…</Text>
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={Colors.primary} />
+          <Text style={styles.loadingText}>Loading profile...</Text>
+        </View>
       </View>
     );
   }
 
+  /* ---------------- ERROR STATE ---------------- */
   if (isError) {
     return (
-      <View style={styles.center}>
-        <Text>Failed to load profile</Text>
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>Failed to load profile</Text>
+          <Pressable
+            style={styles.retryButton}
+            onPress={() => queryClient.invalidateQueries({ queryKey: ['profile'] })}
+          >
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </Pressable>
+        </View>
       </View>
     );
   }
 
-  /* ---------------- UI ---------------- */
+  /* ---------------- MAIN UI ---------------- */
   return (
     <View style={styles.container}>
       {/* HEADER */}
@@ -157,81 +182,215 @@ export default function ProfileScreen() {
         <View style={styles.headerRow}>
           <View style={styles.avatar}>
             <Text style={styles.avatarText}>
-              {profile?.name?.charAt(0) ??
-                user.email?.charAt(0)?.toUpperCase()}
+              {profile?.name?.charAt(0)?.toUpperCase() ||
+                user.email?.charAt(0)?.toUpperCase() ||
+                'U'}
             </Text>
           </View>
 
           <View style={{ flex: 1 }}>
-            <Text style={styles.headerName}>{profile?.name ?? 'User'}</Text>
+            <Text style={styles.headerName}>{profile?.name || 'User'}</Text>
             <Text style={styles.headerEmail}>{user.email}</Text>
           </View>
 
-          <TouchableOpacity onPress={() => setIsEditing(!isEditing)}>
-            {isEditing ? <X color="#fff" /> : <Edit color="#fff" />}
-          </TouchableOpacity>
+          <Pressable onPress={() => setIsEditing(!isEditing)}>
+            {isEditing ? (
+              <X size={24} color="#fff" />
+            ) : (
+              <Edit size={24} color="#fff" />
+            )}
+          </Pressable>
         </View>
 
         {profile?.loyaltyPoints !== undefined && (
           <View style={styles.loyalty}>
-            <Star size={18} color="#FFB800" />
-            <Text style={{ color: '#fff' }}>
-              {profile.loyaltyPoints} Points
+            <Star size={18} color="#FFB800" fill="#FFB800" />
+            <Text style={styles.loyaltyText}>
+              {profile.loyaltyPoints} Loyalty Points
             </Text>
           </View>
         )}
       </LinearGradient>
 
-      <ScrollView contentContainerStyle={{ padding: 16 }}>
+      <ScrollView contentContainerStyle={styles.scrollContent}>
         {/* EDIT FORM */}
-        {isEditing && (
-          <>
-            {['name', 'phone', 'address'].map((field) => (
-              <TextInput
-                key={field}
-                placeholder={field}
-                style={styles.input}
-                value={(formData as any)[field]}
-                onChangeText={(t) =>
-                  setFormData({ ...formData, [field]: t })
-                }
-              />
-            ))}
+        {isEditing ? (
+          <View style={styles.editSection}>
+            <Text style={styles.sectionTitle}>Edit Profile</Text>
+            
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Name</Text>
+              <View style={styles.inputContainer}>
+                <User size={20} color={Colors.textMuted} />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Full Name"
+                  value={formData.name}
+                  onChangeText={(text) => setFormData({ ...formData, name: text })}
+                />
+              </View>
+            </View>
 
-            <TouchableOpacity
-              style={styles.primaryBtn}
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Phone</Text>
+              <View style={styles.inputContainer}>
+                <Phone size={20} color={Colors.textMuted} />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Phone Number"
+                  value={formData.phone}
+                  onChangeText={(text) => setFormData({ ...formData, phone: text })}
+                  keyboardType="phone-pad"
+                />
+              </View>
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Address</Text>
+              <View style={styles.inputContainer}>
+                <MapPin size={20} color={Colors.textMuted} />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Delivery Address"
+                  value={formData.address}
+                  onChangeText={(text) => setFormData({ ...formData, address: text })}
+                  multiline
+                />
+              </View>
+            </View>
+
+            <Pressable
+              style={[
+                styles.saveButton,
+                updateMutation.isPending && styles.saveButtonDisabled,
+              ]}
+              onPress={handleSave}
               disabled={updateMutation.isPending}
-              onPress={() => updateMutation.mutate(formData)}
             >
               {updateMutation.isPending ? (
                 <ActivityIndicator color="#fff" />
               ) : (
-                <Text style={styles.primaryText}>Save</Text>
+                <>
+                  <Save size={20} color="#fff" />
+                  <Text style={styles.saveButtonText}>Save Changes</Text>
+                </>
               )}
-            </TouchableOpacity>
+            </Pressable>
+          </View>
+        ) : (
+          <>
+            {/* PROFILE INFO */}
+            <View style={styles.infoSection}>
+              <Text style={styles.sectionTitle}>Personal Information</Text>
+              
+              <View style={styles.infoRow}>
+                <User size={20} color={Colors.textMuted} />
+                <View style={styles.infoContent}>
+                  <Text style={styles.infoLabel}>Name</Text>
+                  <Text style={styles.infoValue}>{profile?.name || 'Not set'}</Text>
+                </View>
+              </View>
+
+              <View style={styles.infoRow}>
+                <Phone size={20} color={Colors.textMuted} />
+                <View style={styles.infoContent}>
+                  <Text style={styles.infoLabel}>Phone</Text>
+                  <Text style={styles.infoValue}>{profile?.phone || 'Not set'}</Text>
+                </View>
+              </View>
+
+              <View style={styles.infoRow}>
+                <MapPin size={20} color={Colors.textMuted} />
+                <View style={styles.infoContent}>
+                  <Text style={styles.infoLabel}>Address</Text>
+                  <Text style={styles.infoValue}>{profile?.address || 'Not set'}</Text>
+                </View>
+              </View>
+            </View>
+
+            {/* MENU OPTIONS */}
+            <View style={styles.menuSection}>
+              <Pressable style={styles.menuItem}>
+                <Bell size={22} color={Colors.textSecondary} />
+                <Text style={styles.menuItemText}>Notifications</Text>
+                <Switch
+                  value={notificationsEnabled}
+                  onValueChange={setNotificationsEnabled}
+                  trackColor={{ false: '#ccc', true: Colors.primary }}
+                />
+              </Pressable>
+
+              <Pressable 
+                style={styles.menuItem}
+                onPress={() => router.push('/(customer)/favorites' as any)}
+              >
+                <Heart size={22} color={Colors.textSecondary} />
+                <Text style={styles.menuItemText}>Favorites</Text>
+                <ChevronRight size={22} color={Colors.textMuted} />
+              </Pressable>
+
+              <Pressable 
+                style={styles.menuItem}
+                onPress={() => router.push('/(customer)/orders' as any)}
+              >
+                <ShoppingBag size={22} color={Colors.textSecondary} />
+                <Text style={styles.menuItemText}>Order History</Text>
+                <ChevronRight size={22} color={Colors.textMuted} />
+              </Pressable>
+
+              <Pressable style={styles.menuItem}>
+                <CreditCard size={22} color={Colors.textSecondary} />
+                <Text style={styles.menuItemText}>Payment Methods</Text>
+                <ChevronRight size={22} color={Colors.textMuted} />
+              </Pressable>
+
+              <Pressable style={styles.menuItem}>
+                <Gift size={22} color={Colors.textSecondary} />
+                <Text style={styles.menuItemText}>Rewards</Text>
+                <ChevronRight size={22} color={Colors.textMuted} />
+              </Pressable>
+
+              <Pressable style={styles.menuItem}>
+                <Shield size={22} color={Colors.textSecondary} />
+                <Text style={styles.menuItemText}>Privacy & Security</Text>
+                <ChevronRight size={22} color={Colors.textMuted} />
+              </Pressable>
+
+              <Pressable style={styles.menuItem}>
+                <HelpCircle size={22} color={Colors.textSecondary} />
+                <Text style={styles.menuItemText}>Help & Support</Text>
+                <ChevronRight size={22} color={Colors.textMuted} />
+              </Pressable>
+            </View>
+
+            {/* SIGN OUT BUTTON */}
+            <Pressable style={styles.signOutButton} onPress={handleSignOut}>
+              <LogOut size={20} color="#FF3B30" />
+              <Text style={styles.signOutText}>Sign Out</Text>
+            </Pressable>
           </>
         )}
-
-        {/* SIGN OUT */}
-        <TouchableOpacity style={styles.signOut} onPress={handleSignOut}>
-          <LogOut size={18} color="#FF3B30" />
-          <Text style={{ color: '#FF3B30', marginLeft: 6 }}>Sign Out</Text>
-        </TouchableOpacity>
       </ScrollView>
     </View>
   );
 }
 
 /* ---------------- STYLES ---------------- */
-
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  title: { fontSize: 18, marginTop: 10 },
-
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 16 },
+  loadingText: { fontSize: 16, color: Colors.textMuted },
+  errorContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 16, paddingHorizontal: 32 },
+  errorText: { fontSize: 18, color: Colors.error, textAlign: 'center' },
+  retryButton: { paddingHorizontal: 24, paddingVertical: 12, backgroundColor: Colors.primary, borderRadius: 12 },
+  retryButtonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
+  notLoggedIn: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 16, paddingHorizontal: 32 },
+  notLoggedInTitle: { fontSize: 24, fontWeight: '700', color: Colors.text },
+  notLoggedInText: { fontSize: 16, color: Colors.textMuted, textAlign: 'center' },
+  loginButton: { paddingHorizontal: 32, paddingVertical: 14, backgroundColor: Colors.primary, borderRadius: 12, marginTop: 8 },
+  loginButtonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
   header: { paddingBottom: 20, paddingHorizontal: 16 },
   headerRow: { flexDirection: 'row', alignItems: 'center' },
-
   avatar: {
     width: 60,
     height: 60,
@@ -242,40 +401,64 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   avatarText: { color: '#fff', fontSize: 24, fontWeight: '700' },
-
-  headerName: { color: '#fff', fontSize: 20, fontWeight: '700' },
-  headerEmail: { color: 'rgba(255,255,255,0.8)' },
-
-  loyalty: {
+  headerName: { color: '#fff', fontSize: 20, fontWeight: '700', marginBottom: 2 },
+  headerEmail: { color: 'rgba(255,255,255,0.8)', fontSize: 14 },
+  loyalty: { flexDirection: 'row', alignItems: 'center', marginTop: 12, gap: 8, backgroundColor: 'rgba(255,255,255,0.15)', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, alignSelf: 'flex-start' },
+  loyaltyText: { color: '#fff', fontSize: 14, fontWeight: '600' },
+  scrollContent: { padding: 16, gap: 20 },
+  editSection: { gap: 16 },
+  sectionTitle: { fontSize: 18, fontWeight: '700', color: Colors.text, marginBottom: 8 },
+  inputGroup: { gap: 8 },
+  inputLabel: { fontSize: 14, fontWeight: '600', color: Colors.textSecondary },
+  inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 12,
-    gap: 6,
-  },
-
-  input: {
+    gap: 12,
     borderWidth: 1,
-    borderColor: '#eee',
-    borderRadius: 10,
-    padding: 12,
-    marginBottom: 12,
-  },
-
-  primaryBtn: {
-    backgroundColor: Colors.primary,
+    borderColor: Colors.border,
+    borderRadius: 12,
     padding: 14,
-    borderRadius: 10,
-    alignItems: 'center',
+    backgroundColor: Colors.surface,
   },
-  primaryText: { color: '#fff', fontWeight: '600' },
-
-  signOut: {
+  input: { flex: 1, fontSize: 16, color: Colors.text },
+  saveButton: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'center',
-    padding: 16,
-    marginTop: 30,
+    gap: 8,
+    backgroundColor: Colors.primary,
+    paddingVertical: 14,
+    borderRadius: 12,
+    marginTop: 8,
+  },
+  saveButtonDisabled: { opacity: 0.7 },
+  saveButtonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
+  infoSection: { gap: 16 },
+  infoRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: Colors.border },
+  infoContent: { flex: 1 },
+  infoLabel: { fontSize: 13, color: Colors.textMuted, marginBottom: 2 },
+  infoValue: { fontSize: 16, color: Colors.text, fontWeight: '500' },
+  menuSection: { gap: 4 },
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 12,
+    backgroundColor: Colors.surface,
+    borderRadius: 12,
+  },
+  menuItemText: { flex: 1, fontSize: 16, color: Colors.text, fontWeight: '500' },
+  signOutButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 16,
     borderWidth: 1,
     borderColor: '#FF3B30',
-    borderRadius: 10,
+    borderRadius: 12,
+    marginTop: 20,
   },
+  signOutText: { color: '#FF3B30', fontSize: 16, fontWeight: '600' },
 });
