@@ -1,3 +1,6 @@
+// app/(customer)/_layout.tsx
+// Customer Tab Navigation Layout with Real Backend Integration
+
 import { Tabs } from 'expo-router';
 import { Home, Search, Ticket, User, Gift } from 'lucide-react-native';
 import React from 'react';
@@ -40,93 +43,158 @@ export default function CustomerLayout() {
         },
       }}
     >
+      {/* Home Tab - Restaurant Browse */}
       <Tabs.Screen
         name="home"
         options={{
           title: 'Home',
           tabBarIcon: ({ color, focused }) => (
-            <View style={[styles.iconContainer, focused && { backgroundColor: `${colors.primary}15` }]}>
+            <View
+              style={[
+                styles.iconContainer,
+                focused && { backgroundColor: `${colors.primary}15` },
+              ]}
+            >
               <Home size={22} color={color} strokeWidth={focused ? 2.5 : 2} />
             </View>
           ),
         }}
       />
+
+      {/* Explore Tab - Search & Discover */}
       <Tabs.Screen
         name="deals"
         options={{
           title: 'Explore',
           tabBarIcon: ({ color, focused }) => (
-            <View style={[styles.iconContainer, focused && { backgroundColor: `${colors.primary}15` }]}>
+            <View
+              style={[
+                styles.iconContainer,
+                focused && { backgroundColor: `${colors.primary}15` },
+              ]}
+            >
               <Search size={22} color={color} strokeWidth={focused ? 2.5 : 2} />
             </View>
           ),
         }}
       />
+
+      {/* Coupons Tab */}
       <Tabs.Screen
         name="coupons"
         options={{
           title: 'Coupons',
           tabBarIcon: ({ color, focused }) => (
-            <View style={[styles.iconContainer, focused && { backgroundColor: `${colors.primary}15` }]}>
+            <View
+              style={[
+                styles.iconContainer,
+                focused && { backgroundColor: `${colors.primary}15` },
+              ]}
+            >
               <Ticket size={22} color={color} strokeWidth={focused ? 2.5 : 2} />
             </View>
           ),
         }}
       />
+
+      {/* Rewards Tab */}
       <Tabs.Screen
         name="rewards"
         options={{
           title: 'Rewards',
           tabBarIcon: ({ color, focused }) => (
-            <View style={[styles.iconContainer, focused && { backgroundColor: `${colors.primary}15` }]}>
+            <View
+              style={[
+                styles.iconContainer,
+                focused && { backgroundColor: `${colors.primary}15` },
+              ]}
+            >
               <Gift size={22} color={color} strokeWidth={focused ? 2.5 : 2} />
             </View>
           ),
         }}
       />
+
+      {/* Profile Tab */}
       <Tabs.Screen
         name="profile"
         options={{
           title: 'Profile',
           tabBarIcon: ({ color, focused }) => (
-            <View style={[styles.iconContainer, focused && { backgroundColor: `${colors.primary}15` }]}>
+            <View
+              style={[
+                styles.iconContainer,
+                focused && { backgroundColor: `${colors.primary}15` },
+              ]}
+            >
               <User size={22} color={color} strokeWidth={focused ? 2.5 : 2} />
             </View>
           ),
         }}
       />
+
+      {/* Hidden Screens - Not shown in tab bar */}
       <Tabs.Screen
         name="more"
         options={{
-          href: null,
+          href: null, // Hide from tab bar
         }}
       />
+
       <Tabs.Screen
         name="notifications"
         options={{
           href: null,
         }}
       />
+
       <Tabs.Screen
         name="bookings"
         options={{
           href: null,
         }}
       />
+
       <Tabs.Screen
         name="favorites"
         options={{
           href: null,
         }}
       />
+
       <Tabs.Screen
         name="referral"
         options={{
           href: null,
         }}
       />
+
       <Tabs.Screen
         name="test"
+        options={{
+          href: null,
+        }}
+      />
+
+      {/* Restaurant Detail - Nested Route */}
+      <Tabs.Screen
+        name="restaurant/[id]"
+        options={{
+          href: null,
+        }}
+      />
+
+      {/* Checkout Screen - Nested Route */}
+      <Tabs.Screen
+        name="checkout"
+        options={{
+          href: null,
+        }}
+      />
+
+      {/* Order Tracking - Nested Route */}
+      <Tabs.Screen
+        name="order/[id]"
         options={{
           href: null,
         }}
@@ -134,6 +202,10 @@ export default function CustomerLayout() {
     </Tabs>
   );
 }
+
+/* -----------------------------------------------------
+   STYLES
+----------------------------------------------------- */
 
 const styles = StyleSheet.create({
   iconContainer: {
@@ -144,3 +216,36 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 });
+
+/* -----------------------------------------------------
+   CUSTOMER TAB STRUCTURE:
+   
+   VISIBLE TABS (5):
+   1. Home - Browse restaurants (app/(customer)/home.tsx)
+   2. Explore - Search & discover (app/(customer)/deals.tsx)
+   3. Coupons - View & redeem coupons (app/(customer)/coupons.tsx)
+   4. Rewards - Loyalty program (app/(customer)/rewards.tsx)
+   5. Profile - User settings (app/(customer)/profile.tsx)
+   
+   HIDDEN SCREENS (accessed via navigation):
+   - More - Additional features
+   - Notifications - Push notifications
+   - Bookings - Table reservations
+   - Favorites - Saved restaurants
+   - Referral - Referral program
+   - Test - Development testing
+   - Restaurant Detail - View menu & place order
+   - Checkout - Complete order
+   - Order Tracking - Live order status
+   
+   NAVIGATION FLOW:
+   Home → Restaurant Detail → Checkout → Order Tracking
+   Profile → Favorites → Restaurant Detail
+   Profile → Bookings → Booking Details
+   
+   BACKEND CONNECTIONS:
+   - Each tab screen fetches data from real API
+   - Uses React Query for caching and state management
+   - All mutations invalidate relevant query caches
+   - Real-time updates via Supabase Realtime
+----------------------------------------------------- */
