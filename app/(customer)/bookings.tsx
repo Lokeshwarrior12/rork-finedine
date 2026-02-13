@@ -6,6 +6,8 @@ import {
   ScrollView,
   Pressable,
   Alert,
+  ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
@@ -18,8 +20,13 @@ import {
   CheckCircle,
   AlertCircle,
 } from 'lucide-react-native';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
+import { Platform } from 'react-native';
+
 import Colors from '@/constants/colors';
+import { api } from '@/lib/api';
+import { useAuth } from '@/contexts/AuthContext';
 
 type BookingStatus = 'upcoming' | 'completed' | 'cancelled';
 
@@ -35,74 +42,50 @@ interface Booking {
   status: BookingStatus;
   specialRequests?: string;
   confirmationCode: string;
+  createdAt: string;
+  updatedAt: string;
 }
-
-const mockBookings: Booking[] = [
-  {
-    id: 'b1',
-    restaurantId: '1',
-    restaurantName: 'The Golden Fork',
-    restaurantImage: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=400',
-    date: 'Jan 28, 2026',
-    time: '7:00 PM',
-    guests: 4,
-    tableType: 'Window Seat',
-    status: 'upcoming',
-    specialRequests: 'Anniversary celebration - any decorations appreciated!',
-    confirmationCode: 'FD-GF1234',
-  },
-  {
-    id: 'b2',
-    restaurantId: '3',
-    restaurantName: 'Sakura Lounge',
-    restaurantImage: 'https://images.unsplash.com/photo-1579871494447-9811cf80d66c?w=400',
-    date: 'Feb 14, 2026',
-    time: '8:00 PM',
-    guests: 2,
-    tableType: 'Private Booth',
-    status: 'upcoming',
-    confirmationCode: 'FD-SL5678',
-  },
-  {
-    id: 'b3',
-    restaurantId: '2',
-    restaurantName: 'Spice Garden',
-    restaurantImage: 'https://images.unsplash.com/photo-1585937421612-70a008356fbe?w=400',
-    date: 'Jan 15, 2026',
-    time: '12:30 PM',
-    guests: 6,
-    tableType: 'Large Table',
-    status: 'completed',
-    confirmationCode: 'FD-SG9012',
-  },
-  {
-    id: 'b4',
-    restaurantId: '4',
-    restaurantName: 'The Rooftop Bar',
-    restaurantImage: 'https://images.unsplash.com/photo-1470337458703-46ad1756a187?w=400',
-    date: 'Jan 10, 2026',
-    time: '6:00 PM',
-    guests: 3,
-    tableType: 'Outdoor',
-    status: 'cancelled',
-    confirmationCode: 'FD-RB3456',
-  },
-];
 
 export default function BookingsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<BookingStatus>('upcoming');
-  const [bookings, setBookings] = useState<Booking[]>(mockBookings);
 
-  const filteredBookings = bookings.filter(b => b.status === activeTab);
+  /* ---------------- FETCH BOOKINGS FROM REAL API ---------------- */
+  const {
+    data: bookingsData,
+    isLoading,
+    error,
+    refetch,
+    isRefetching,
+  } = useQuery({
+    queryKey: ['bookings', user?.id],
+    queryFn: async () => {
+      if (!user?.id) throw new Error('User not authenticated');
+      return api.getUserBookings(user.id);
+    },
+    enabled: !!user?.id,
+    staleTime: 60000, // 1 minute
+  });
 
-  const tabs: { key: BookingStatus; label: string; count: number }[] = [
-    { key: 'upcoming', label: 'Upcoming', count: bookings.filter(b => b.status === 'upcoming').length },
-    { key: 'completed', label: 'Completed', count: bookings.filter(b => b.status === 'completed').length },
-    { key: 'cancelled', label: 'Cancelled', count: bookings.filter(b => b.status === 'cancelled').length },
-  ];
+  const bookings = bookingsData?.data || [];
+  const filteredBookings = bookings.filter((b: Booking) => b.status === activeTab);
 
+  /* ---------------- CANCEL BOOKING MUTATION ---------------- */
+  const cancelBookingMutation = useMutation({
+    mutationFn: (bookingId: string) => api.cancelBooking(bookingId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['bookings', user?.id] });
+      Alert.alert('Success', 'Booking cancelled successfully');
+    },
+    onError: (error: any) => {
+      Alert.alert('Error', error.message || 'Failed to cancel booking');
+    },
+  });
+
+  /* ---------------- HANDLERS ---------------- */
   const handleCancelBooking = (booking: Booking) => {
     Alert.alert(
       'Cancel Booking',
@@ -113,10 +96,10 @@ export default function BookingsScreen() {
           text: 'Cancel Booking',
           style: 'destructive',
           onPress: async () => {
-            await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-            setBookings(prev =>
-              prev.map(b => b.id === booking.id ? { ...b, status: 'cancelled' as BookingStatus } : b)
-            );
+            if (Platform.OS !== 'web') {
+              await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+            }
+            cancelBookingMutation.mutate(booking.id);
           },
         },
       ]
@@ -124,8 +107,27 @@ export default function BookingsScreen() {
   };
 
   const navigateToRestaurant = (id: string) => {
-    router.push(`/restaurant/${id}` as any);
+    router.push(`/(customer)/restaurant/${id}` as any);
   };
+
+  /* ---------------- HELPERS ---------------- */
+  const tabs: { key: BookingStatus; label: string; count: number }[] = [
+    {
+      key: 'upcoming',
+      label: 'Upcoming',
+      count: bookings.filter((b: Booking) => b.status === 'upcoming').length,
+    },
+    {
+      key: 'completed',
+      label: 'Completed',
+      count: bookings.filter((b: Booking) => b.status === 'completed').length,
+    },
+    {
+      key: 'cancelled',
+      label: 'Cancelled',
+      count: bookings.filter((b: Booking) => b.status === 'cancelled').length,
+    },
+  ];
 
   const getStatusIcon = (status: BookingStatus) => {
     switch (status) {
@@ -149,6 +151,42 @@ export default function BookingsScreen() {
     }
   };
 
+  /* ---------------- LOADING STATE ---------------- */
+  if (isLoading) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        <View style={styles.header}>
+          <Text style={styles.title}>My Bookings</Text>
+          <Text style={styles.subtitle}>Manage your reservations</Text>
+        </View>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={Colors.primary} />
+          <Text style={styles.loadingText}>Loading bookings...</Text>
+        </View>
+      </View>
+    );
+  }
+
+  /* ---------------- ERROR STATE ---------------- */
+  if (error) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        <View style={styles.header}>
+          <Text style={styles.title}>My Bookings</Text>
+          <Text style={styles.subtitle}>Manage your reservations</Text>
+        </View>
+        <View style={styles.errorContainer}>
+          <AlertCircle size={48} color={Colors.error} />
+          <Text style={styles.errorText}>Failed to load bookings</Text>
+          <Pressable style={styles.retryButton} onPress={() => refetch()}>
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </Pressable>
+        </View>
+      </View>
+    );
+  }
+
+  /* ---------------- MAIN UI ---------------- */
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
@@ -178,8 +216,15 @@ export default function BookingsScreen() {
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 20 }]}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefetching}
+            onRefresh={refetch}
+            tintColor={Colors.primary}
+          />
+        }
       >
-        {filteredBookings.map((booking) => {
+        {filteredBookings.map((booking: Booking) => {
           const statusColors = getStatusColor(booking.status);
           return (
             <Pressable
@@ -223,13 +268,21 @@ export default function BookingsScreen() {
                     <Text style={styles.confirmationLabel}>Confirmation:</Text>
                     <Text style={styles.confirmationValue}>{booking.confirmationCode}</Text>
                   </View>
-                  
+
                   {booking.status === 'upcoming' && (
                     <Pressable
-                      style={styles.cancelButton}
+                      style={[
+                        styles.cancelButton,
+                        cancelBookingMutation.isPending && styles.cancelButtonDisabled,
+                      ]}
                       onPress={() => handleCancelBooking(booking)}
+                      disabled={cancelBookingMutation.isPending}
                     >
-                      <Text style={styles.cancelButtonText}>Cancel</Text>
+                      {cancelBookingMutation.isPending ? (
+                        <ActivityIndicator size="small" color={Colors.error} />
+                      ) : (
+                        <Text style={styles.cancelButtonText}>Cancel</Text>
+                      )}
                     </Pressable>
                   )}
                 </View>
@@ -256,6 +309,14 @@ export default function BookingsScreen() {
                 ? 'Book a table at your favorite restaurant'
                 : `Your ${activeTab} bookings will appear here`}
             </Text>
+            {activeTab === 'upcoming' && (
+              <Pressable
+                style={styles.exploreButton}
+                onPress={() => router.push('/(customer)/home' as any)}
+              >
+                <Text style={styles.exploreButtonText}>Explore Restaurants</Text>
+              </Pressable>
+            )}
           </View>
         )}
       </ScrollView>
@@ -268,6 +329,39 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.background,
   },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 16,
+  },
+  loadingText: {
+    fontSize: 16,
+    color: Colors.textMuted,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 16,
+    paddingHorizontal: 32,
+  },
+  errorText: {
+    fontSize: 18,
+    color: Colors.error,
+    textAlign: 'center',
+  },
+  retryButton: {
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    backgroundColor: Colors.primary,
+    borderRadius: 12,
+  },
+  retryButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
   header: {
     paddingHorizontal: 20,
     paddingTop: 16,
@@ -275,7 +369,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 28,
-    fontWeight: '700' as const,
+    fontWeight: '700',
     color: Colors.text,
   },
   subtitle: {
@@ -307,7 +401,7 @@ const styles = StyleSheet.create({
   },
   tabText: {
     fontSize: 14,
-    fontWeight: '600' as const,
+    fontWeight: '600',
     color: Colors.text,
   },
   tabTextActive: {
@@ -324,7 +418,7 @@ const styles = StyleSheet.create({
   },
   tabBadgeText: {
     fontSize: 12,
-    fontWeight: '600' as const,
+    fontWeight: '600',
     color: Colors.textSecondary,
   },
   tabBadgeTextActive: {
@@ -360,7 +454,7 @@ const styles = StyleSheet.create({
   },
   restaurantName: {
     fontSize: 18,
-    fontWeight: '600' as const,
+    fontWeight: '600',
     color: Colors.text,
     flex: 1,
   },
@@ -374,7 +468,7 @@ const styles = StyleSheet.create({
   },
   statusText: {
     fontSize: 12,
-    fontWeight: '600' as const,
+    fontWeight: '600',
   },
   bookingDetails: {
     flexDirection: 'row',
@@ -406,7 +500,7 @@ const styles = StyleSheet.create({
   },
   confirmationValue: {
     fontSize: 13,
-    fontWeight: '700' as const,
+    fontWeight: '700',
     color: Colors.text,
     letterSpacing: 0.5,
   },
@@ -416,9 +510,12 @@ const styles = StyleSheet.create({
     backgroundColor: `${Colors.error}10`,
     borderRadius: 8,
   },
+  cancelButtonDisabled: {
+    opacity: 0.7,
+  },
   cancelButtonText: {
     fontSize: 13,
-    fontWeight: '600' as const,
+    fontWeight: '600',
     color: Colors.error,
   },
   specialRequests: {
@@ -442,7 +539,7 @@ const styles = StyleSheet.create({
   },
   emptyTitle: {
     fontSize: 18,
-    fontWeight: '600' as const,
+    fontWeight: '600',
     color: Colors.text,
     marginTop: 16,
   },
@@ -451,5 +548,17 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     marginTop: 8,
     textAlign: 'center',
+  },
+  exploreButton: {
+    marginTop: 24,
+    backgroundColor: Colors.primary,
+    paddingVertical: 14,
+    paddingHorizontal: 28,
+    borderRadius: 14,
+  },
+  exploreButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.surface,
   },
 });
