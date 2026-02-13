@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -18,6 +19,11 @@ var (
 		ReadBufferSize:  1024,
 		WriteBufferSize: 1024,
 	}
+)
+const (
+	maxMessageSize = 1024
+	pongWait       = 60 * time.Second
+	pingPeriod     = (pongWait * 9) / 10
 )
 
 type Client struct {
@@ -118,7 +124,9 @@ func HandleWebSocket(c *gin.Context) {
 
 	userID := c.Query("userId")
 	clientID := c.Query("clientId")
-
+    if clientID == "" {
+		clientID = "anonymous_" + time.Now().Format("20060102150405")
+	}
 	client := &Client{
 		ID:     clientID,
 		UserID: userID,
@@ -139,7 +147,12 @@ func (c *Client) readPump() {
 		WSHub.Unregister <- c
 		c.Conn.Close()
 	}()
-
+	c.Conn.SetReadLimit(maxMessageSize)
+	_ = c.Conn.SetReadDeadline(time.Now().Add(pongWait))
+	c.Conn.SetPongHandler(func(string) error {
+		_ = c.Conn.SetReadDeadline(time.Now().Add(pongWait))
+		return nil
+	})
 	for {
 		_, message, err := c.Conn.ReadMessage()
 		if err != nil {
@@ -156,12 +169,27 @@ func (c *Client) readPump() {
 
 // Write messages to WebSocket
 func (c *Client) writePump() {
-	defer c.Conn.Close()
-
-	for message := range c.Send {
-		if err := c.Conn.WriteMessage(websocket.TextMessage, message); err != nil {
-			log.Printf("WebSocket write error: %v", err)
-			return
+	ticker := time.NewTicker(pingPeriod)
+	defer func() {
+		ticker.Stop()
+		c.Conn.Close()
+	}()
+	for {
+		select {
+		case message, ok := <-c.Send:
+			if !ok {
+				_ = c.Conn.WriteMessage(websocket.CloseMessage, []byte{})
+				return
+			}
+			if err := c.Conn.WriteMessage(websocket.TextMessage, message); err != nil {
+				log.Printf("WebSocket write error: %v", err)
+				return
+			}
+		case <-ticker.C:
+			if err := c.Conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+				log.Printf("WebSocket ping error: %v", err)
+				return
+			}
 		}
 	}
 }
