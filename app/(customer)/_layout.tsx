@@ -1,313 +1,146 @@
-// app/_layout.tsx
+import { Tabs } from 'expo-router';
+import { Home, Search, Ticket, User, Gift } from 'lucide-react-native';
+import React from 'react';
+import { Platform, View, StyleSheet } from 'react-native';
+import { useTheme } from '@/contexts/ThemeContext';
 
-import React, { useEffect, useState } from 'react';
-import { View, ActivityIndicator, StyleSheet, Platform } from 'react-native';
-import { Stack } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
-import * as SplashScreen from 'expo-splash-screen';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import Constants from 'expo-constants';
-
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-
-import { AuthProvider, useAuth } from '@/contexts/AuthContext';
-import { api } from '@/lib/api';
-import { supabase } from '@/lib/supabase';
-
-/* ──────────────────────────────────────────────────────────
-   Prevent Splash Screen Auto-Hide
-────────────────────────────────────────────────────────── */
-
-SplashScreen.preventAutoHideAsync();
-
-/* ──────────────────────────────────────────────────────────
-   React Query Client (Singleton)
-────────────────────────────────────────────────────────── */
-
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 5 * 60 * 1000, // 5 minutes
-      gcTime: 10 * 60 * 1000, // 10 minutes (previously cacheTime)
-      retry: 2,
-      retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
-      refetchOnWindowFocus: true,
-      refetchOnReconnect: true,
-      networkMode: 'online',
-    },
-    mutations: {
-      retry: 1,
-      networkMode: 'online',
-    },
-  },
-});
-
-/* ──────────────────────────────────────────────────────────
-   Loading Screen Component
-────────────────────────────────────────────────────────── */
-
-function LoadingScreen() {
-  return (
-    <View style={styles.loadingContainer}>
-      <ActivityIndicator size="large" color="#E85D04" />
-    </View>
-  );
-}
-
-/* ──────────────────────────────────────────────────────────
-   Root Layout Navigation (Inner)
-────────────────────────────────────────────────────────── */
-
-function RootLayoutInner() {
-  const { session, loading } = useAuth();
-  const [isReady, setIsReady] = useState(false);
-
-  useEffect(() => {
-    const prepare = async () => {
-      try {
-        // Set auth token if session exists
-        if (session?.access_token) {
-          api.setAuthToken(session.access_token);
-          console.log('✅ Auth token set in API client');
-        } else {
-          api.setAuthToken(null);
-          console.log('🔓 No auth token');
-        }
-
-        // Small delay to ensure everything is initialized
-        await new Promise(resolve => setTimeout(resolve, 100));
-      } catch (error) {
-        console.error('❌ Error preparing app:', error);
-      } finally {
-        setIsReady(true);
-        await SplashScreen.hideAsync();
-      }
-    };
-
-    if (!loading) {
-      prepare();
-    }
-  }, [session, loading]);
-
-  // Show loading screen while auth is loading or app is preparing
-  if (loading || !isReady) {
-    return <LoadingScreen />;
-  }
+export default function CustomerLayout() {
+  const { colors } = useTheme();
 
   return (
-    <>
-      <StatusBar style="dark" />
-      
-      <Stack
-        screenOptions={{
-          headerShown: false,
-          animation: 'slide_from_right',
-          contentStyle: { backgroundColor: '#fff' },
+    <Tabs
+      screenOptions={{
+        tabBarActiveTintColor: colors.primary,
+        tabBarInactiveTintColor: colors.textMuted,
+        headerShown: false,
+        tabBarStyle: {
+          backgroundColor: colors.tabBar,
+          borderTopColor: colors.tabBarBorder,
+          borderTopWidth: 1,
+          paddingTop: 8,
+          paddingBottom: Platform.OS === 'ios' ? 24 : 12,
+          height: Platform.OS === 'ios' ? 88 : 68,
+          elevation: 0,
+          ...(Platform.OS === 'web'
+            ? { boxShadow: '0px -4px 12px rgba(0, 0, 0, 0.1)' } as any
+            : {
+                shadowColor: colors.shadow,
+                shadowOffset: { width: 0, height: -4 },
+                shadowOpacity: 0.1,
+                shadowRadius: 12,
+              }),
+        },
+        tabBarLabelStyle: {
+          fontSize: 11,
+          fontWeight: '600' as const,
+          marginTop: 4,
+        },
+        tabBarIconStyle: {
+          marginBottom: -4,
+        },
+      }}
+    >
+      <Tabs.Screen
+        name="home"
+        options={{
+          title: 'Home',
+          tabBarIcon: ({ color, focused }) => (
+            <View style={[styles.iconContainer, focused && { backgroundColor: `${colors.primary}15` }]}>
+              <Home size={22} color={color} strokeWidth={focused ? 2.5 : 2} />
+            </View>
+          ),
         }}
-      >
-        {/* Main Tab Navigation */}
-        <Stack.Screen 
-          name="(tabs)" 
-          options={{ headerShown: false }} 
-        />
-
-        {/* Customer Screens */}
-        <Stack.Screen 
-          name="(customer)" 
-          options={{ headerShown: false }} 
-        />
-
-        {/* Restaurant Owner Screens */}
-        <Stack.Screen 
-          name="(restaurant)" 
-          options={{ headerShown: false }} 
-        />
-
-        {/* Auth Screens */}
-        <Stack.Screen 
-          name="login" 
-          options={{ 
-            headerShown: false,
-            presentation: 'modal',
-          }} 
-        />
-
-        <Stack.Screen 
-          name="signup" 
-          options={{ 
-            headerShown: false,
-            presentation: 'modal',
-          }} 
-        />
-
-        <Stack.Screen 
-          name="partner" 
-          options={{ 
-            headerShown: false,
-            presentation: 'modal',
-          }} 
-        />
-
-        {/* Restaurant Detail (Direct Route) */}
-        <Stack.Screen 
-          name="restaurant/[id]" 
-          options={{ headerShown: false }} 
-        />
-
-        {/* Booking Screens */}
-        <Stack.Screen 
-          name="booking/[id]" 
-          options={{ 
-            title: 'Book a Table',
-            presentation: 'modal',
-            headerShown: true,
-          }} 
-        />
-
-        <Stack.Screen 
-          name="service-booking/[id]" 
-          options={{ 
-            title: 'Book Service',
-            presentation: 'modal',
-            headerShown: true,
-          }} 
-        />
-
-        {/* 404 Screen */}
-        <Stack.Screen 
-          name="+not-found" 
-          options={{ title: 'Not Found' }} 
-        />
-      </Stack>
-
-      {/* Development Health Check Button */}
-      {__DEV__ && <DevHealthCheckButton />}
-    </>
+      />
+      <Tabs.Screen
+        name="deals"
+        options={{
+          title: 'Explore',
+          tabBarIcon: ({ color, focused }) => (
+            <View style={[styles.iconContainer, focused && { backgroundColor: `${colors.primary}15` }]}>
+              <Search size={22} color={color} strokeWidth={focused ? 2.5 : 2} />
+            </View>
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="coupons"
+        options={{
+          title: 'Coupons',
+          tabBarIcon: ({ color, focused }) => (
+            <View style={[styles.iconContainer, focused && { backgroundColor: `${colors.primary}15` }]}>
+              <Ticket size={22} color={color} strokeWidth={focused ? 2.5 : 2} />
+            </View>
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="rewards"
+        options={{
+          title: 'Rewards',
+          tabBarIcon: ({ color, focused }) => (
+            <View style={[styles.iconContainer, focused && { backgroundColor: `${colors.primary}15` }]}>
+              <Gift size={22} color={color} strokeWidth={focused ? 2.5 : 2} />
+            </View>
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="profile"
+        options={{
+          title: 'Profile',
+          tabBarIcon: ({ color, focused }) => (
+            <View style={[styles.iconContainer, focused && { backgroundColor: `${colors.primary}15` }]}>
+              <User size={22} color={color} strokeWidth={focused ? 2.5 : 2} />
+            </View>
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="more"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="notifications"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="bookings"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="favorites"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="referral"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="test"
+        options={{
+          href: null,
+        }}
+      />
+    </Tabs>
   );
 }
-
-/* ──────────────────────────────────────────────────────────
-   Development Health Check Button
-────────────────────────────────────────────────────────── */
-
-function DevHealthCheckButton() {
-  const [checking, setChecking] = useState(false);
-
-  const checkBackend = async () => {
-    setChecking(true);
-    try {
-      console.log('🔍 Checking backend health...');
-      const health = await api.healthCheck();
-      console.log('✅ Backend Health:', health);
-      alert(`Backend Status: ${health.status}\n\nDatabase: ${health.database ? 'Connected ✓' : 'Disconnected ✗'}\n\nTimestamp: ${health.timestamp}`);
-    } catch (error: any) {
-      console.error('❌ Backend health check failed:', error);
-      alert(`Backend Error:\n\n${error.message}\n\nMake sure your backend is running on:\n${Constants.expoConfig?.extra?.apiUrl || 'http://localhost:8080'}`);
-    } finally {
-      setChecking(false);
-    }
-  };
-
-  return (
-    <View style={styles.devButton}>
-      <View style={styles.devButtonInner}>
-        <View style={styles.devButtonCircle}>
-          <ActivityIndicator 
-            size="small" 
-            color={checking ? '#fff' : 'transparent'} 
-            animating={checking}
-          />
-        </View>
-      </View>
-    </View>
-  );
-}
-
-/* ──────────────────────────────────────────────────────────
-   Root Layout with Providers
-────────────────────────────────────────────────────────── */
-
-export default function RootLayout() {
-  useEffect(() => {
-    const initialize = async () => {
-      console.log('🚀 Initializing Rork-FineDine...');
-      console.log('📱 Platform:', Platform.OS);
-      console.log('🌐 API URL:', Constants.expoConfig?.extra?.apiUrl || 'Not configured');
-      console.log('🔐 Supabase URL:', Constants.expoConfig?.extra?.supabaseUrl || 'Not configured');
-      console.log('🔧 Environment:', __DEV__ ? 'Development' : 'Production');
-
-      // Setup auth state listener
-      const {
-        data: { subscription },
-      } = supabase.auth.onAuthStateChange(async (event, session) => {
-        console.log('🔔 Auth event:', event);
-
-        if (session?.access_token) {
-          api.setAuthToken(session.access_token);
-        } else {
-          api.setAuthToken(null);
-        }
-
-        // Invalidate all queries on auth change
-        if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') {
-          queryClient.invalidateQueries();
-        }
-      });
-
-      return () => {
-        subscription.unsubscribe();
-      };
-    };
-
-    initialize();
-  }, []);
-
-  return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
-      <QueryClientProvider client={queryClient}>
-        <AuthProvider>
-          <RootLayoutInner />
-        </AuthProvider>
-      </QueryClientProvider>
-    </GestureHandlerRootView>
-  );
-}
-
-/* ──────────────────────────────────────────────────────────
-   Styles
-────────────────────────────────────────────────────────── */
 
 const styles = StyleSheet.create({
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
+  iconContainer: {
+    width: 40,
+    height: 32,
+    borderRadius: 16,
     alignItems: 'center',
-    backgroundColor: '#fff',
-  },
-  devButton: {
-    position: 'absolute',
-    bottom: Platform.OS === 'ios' ? 50 : 30,
-    right: 20,
-    zIndex: 9999,
-  },
-  devButtonInner: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: '#E85D04',
     justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 5,
-  },
-  devButtonCircle: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
 });
