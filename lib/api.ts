@@ -1,26 +1,55 @@
-import { config } from './config';
+// lib/api.ts
+import Constants from 'expo-constants';
+import { Platform } from 'react-native';
 
-const API_BASE_URL = config.api.baseUrl;
+/* ──────────────────────────────────────────────────────────
+   Environment Configuration
+────────────────────────────────────────────────────────── */
+
+const extra = Constants.expoConfig?.extra ?? {};
+
+// Determine API URL based on environment
+const getAPIUrl = (): string => {
+  if (__DEV__) {
+    // Development mode
+    if (Platform.OS === 'ios') {
+      return extra.apiUrl || 'http://localhost:8080/api/v1';
+    } else if (Platform.OS === 'android') {
+      // Android emulator uses 10.0.2.2 to access host machine's localhost
+      return extra.apiUrl?.replace('localhost', '10.0.2.2') || 'http://10.0.2.2:8080/api/v1';
+    }
+    return extra.apiUrl || 'http://localhost:8080/api/v1';
+  } else {
+    // Production mode
+    return extra.apiUrlProduction || 'https://rork-finedine-api.fly.dev/api/v1';
+  }
+};
+
+const API_BASE_URL = getAPIUrl();
 
 console.log('🌐 API Base URL:', API_BASE_URL);
+console.log('🔧 Environment:', __DEV__ ? 'Development' : 'Production');
+console.log('📱 Platform:', Platform.OS);
 
-// ============================================================================
-// SHARED TYPES
-// ============================================================================
+/* ──────────────────────────────────────────────────────────
+   Type Definitions
+────────────────────────────────────────────────────────── */
 
 export interface APIResponse<T> {
   data: T;
   cached?: boolean;
+  message?: string;
 }
 
 export interface APIError {
   error: string;
   details?: string;
+  statusCode?: number;
 }
 
-// ============================================================================
-// DOMAIN MODELS
-// ============================================================================
+/* ──────────────────────────────────────────────────────────
+   Domain Models
+────────────────────────────────────────────────────────── */
 
 export interface Restaurant {
   id: string;
@@ -32,12 +61,12 @@ export interface Restaurant {
   email?: string;
   cuisineType?: string;
   cuisineTypes?: string[];
-  priceRange?: number;
+  priceRange?: number; // 1-4
   rating?: number;
   totalReviews?: number;
   images?: string[];
   logo?: string;
-  openingHours?: string | Record<string, any>;
+  openingHours?: string | Record<string, { open: string; close: string }>;
   location?: {
     latitude: number;
     longitude: number;
@@ -49,7 +78,9 @@ export interface Restaurant {
   acceptsBooking?: boolean;
   bookingTerms?: string;
   categories?: string[];
-  menuItems?: MenuItem[];
+  ownerId?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface MenuItem {
@@ -65,6 +96,8 @@ export interface MenuItem {
   images?: string[];
   image?: string;
   isAvailable?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface OrderItem {
@@ -86,13 +119,7 @@ export interface Order {
   tax: number;
   deliveryFee: number;
   total: number;
-  status:
-    | 'pending'
-    | 'confirmed'
-    | 'preparing'
-    | 'ready'
-    | 'delivered'
-    | 'cancelled';
+  status: 'pending' | 'confirmed' | 'preparing' | 'ready' | 'delivered' | 'cancelled';
   paymentStatus?: 'pending' | 'paid' | 'failed' | 'refunded';
   createdAt: string;
   updatedAt: string;
@@ -113,7 +140,10 @@ export interface User {
   address?: string;
   role: 'customer' | 'restaurant_owner' | 'admin';
   loyaltyPoints?: number;
+  restaurantId?: string; // For restaurant owners
+  favorites?: string[];
   createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface Booking {
@@ -126,6 +156,7 @@ export interface Booking {
   status: 'pending' | 'confirmed' | 'cancelled';
   specialRequests?: string;
   createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface CreateBookingRequest {
@@ -141,6 +172,7 @@ export interface Favorite {
   userId: string;
   restaurantId: string;
   restaurant?: Restaurant;
+  createdAt?: string;
 }
 
 export interface Notification {
@@ -190,96 +222,163 @@ export interface AnalyticsData {
     transactions: number;
     revenue: number;
   }>;
-  offerTypeDistribution?: {
-    dinein: number;
-    takeout: number;
-    both: number;
-  };
-  discountPerformance?: Array<{
-    range: string;
-    conversions: number;
-    revenue: number;
-  }>;
-  recommendations?: Array<{
-    id: string;
-    type: string;
-    title: string;
-    description: string;
-    impact: string;
-    basedOn: string;
-  }>;
 }
 
-// ============================================================================
-// API CLIENT
-// ============================================================================
+/* ──────────────────────────────────────────────────────────
+   API Client Class
+────────────────────────────────────────────────────────── */
 
 interface RequestOptions extends RequestInit {
   requireAuth?: boolean;
+  timeout?: number;
 }
 
 class APIClient {
   private authToken: string | null = null;
+  private readonly baseURL: string;
+  private readonly defaultTimeout = 30000; // 30 seconds
 
+  constructor() {
+    this.baseURL = API_BASE_URL;
+  }
+
+  /**
+   * Set authentication token for API requests
+   */
   setAuthToken(token: string | null) {
     this.authToken = token;
     console.log('🔐 Auth token', token ? 'set' : 'cleared');
   }
 
+  /**
+   * Get current auth token
+   */
+  getAuthToken(): string | null {
+    return this.authToken;
+  }
+
+  /**
+   * Core request method with timeout, retry logic, and comprehensive error handling
+   */
   private async request<T>(
     endpoint: string,
     options: RequestOptions = {}
   ): Promise<APIResponse<T>> {
-    const { requireAuth = false, ...fetchOptions } = options;
+    const {
+      requireAuth = false,
+      timeout = this.defaultTimeout,
+      ...fetchOptions
+    } = options;
 
+    // Build headers
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
+      'Accept': 'application/json',
     };
 
     if (requireAuth && this.authToken) {
       headers['Authorization'] = `Bearer ${this.authToken}`;
     }
 
-    console.log('📡 API Request:', fetchOptions.method || 'GET', endpoint);
+    const method = fetchOptions.method || 'GET';
+    const url = `${this.baseURL}${endpoint}`;
+
+    console.log(`📡 API Request: ${method} ${endpoint}`);
+
+    // Create abort controller for timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
 
     try {
-      const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+      const response = await fetch(url, {
         ...fetchOptions,
         headers,
+        signal: controller.signal,
       });
 
+      clearTimeout(timeoutId);
+
+      // Handle non-OK responses
       if (!response.ok) {
-        const error: APIError = await response
+        const errorData: APIError = await response
           .json()
-          .catch(() => ({ error: 'Unknown error' }));
-        throw new Error(error.error || `HTTP ${response.status}`);
+          .catch(() => ({
+            error: 'Unknown error',
+            statusCode: response.status,
+          }));
+
+        console.error(`❌ API Error [${response.status}]:`, endpoint, errorData);
+
+        throw new Error(
+          errorData.error || `HTTP ${response.status}: ${response.statusText}`
+        );
       }
 
-      const data = await response.json();
-      console.log('✅ API Response:', endpoint, data.cached ? '(cached)' : '');
+      const data: APIResponse<T> = await response.json();
+      console.log(`✅ API Response: ${endpoint}`, data.cached ? '(cached)' : '');
+
       return data;
-    } catch (error) {
+    } catch (error: any) {
+      clearTimeout(timeoutId);
+
+      // Handle timeout
+      if (error.name === 'AbortError') {
+        console.error('⏱️ API Timeout:', endpoint);
+        throw new Error('Request timeout. Please try again.');
+      }
+
+      // Handle network errors
+      if (error.message === 'Network request failed' || error.message.includes('fetch')) {
+        console.error('🔌 Network Error:', endpoint);
+        throw new Error('Unable to connect. Please check your internet connection.');
+      }
+
+      // Re-throw other errors
       console.error('❌ API Error:', endpoint, error);
       throw error;
     }
   }
 
-  // ============================================================================
-  // RESTAURANTS (Customer & Owner)
-  // ============================================================================
+  /* ──────────────────────────────────────────────────────────
+     RESTAURANTS (Public & Owner)
+  ────────────────────────────────────────────────────────── */
 
+  /**
+   * Get all active restaurants
+   */
   getRestaurants() {
     return this.request<Restaurant[]>('/restaurants');
   }
 
+  /**
+   * Get single restaurant by ID
+   */
   getRestaurant(id: string) {
     return this.request<Restaurant>(`/restaurants/${id}`);
   }
 
+  /**
+   * Get menu items for a restaurant
+   */
   getRestaurantMenu(id: string) {
     return this.request<MenuItem[]>(`/restaurants/${id}/menu`);
   }
 
+  /**
+   * Search restaurants with filters
+   */
+  searchRestaurants(query: string, filters?: { cuisineType?: string; priceRange?: number }) {
+    const params = new URLSearchParams();
+    if (query) params.append('q', query);
+    if (filters?.cuisineType) params.append('cuisine', filters.cuisineType);
+    if (filters?.priceRange) params.append('priceRange', String(filters.priceRange));
+
+    return this.request<Restaurant[]>(`/restaurants/search?${params.toString()}`);
+  }
+
+  /**
+   * Create new restaurant (restaurant owner)
+   */
   createRestaurant(data: Partial<Restaurant>) {
     return this.request<Restaurant>('/restaurants', {
       method: 'POST',
@@ -288,6 +387,9 @@ class APIClient {
     });
   }
 
+  /**
+   * Update restaurant (restaurant owner)
+   */
   updateRestaurant(id: string, data: Partial<Restaurant>) {
     return this.request<Restaurant>(`/restaurants/${id}`, {
       method: 'PUT',
@@ -296,10 +398,13 @@ class APIClient {
     });
   }
 
-  // ============================================================================
-  // MENU ITEMS (Restaurant Owner)
-  // ============================================================================
+  /* ──────────────────────────────────────────────────────────
+     MENU ITEMS (Restaurant Owner)
+  ────────────────────────────────────────────────────────── */
 
+  /**
+   * Create menu item
+   */
   createMenuItem(restaurantId: string, data: Partial<MenuItem>) {
     return this.request<MenuItem>(`/restaurants/${restaurantId}/menu`, {
       method: 'POST',
@@ -308,6 +413,9 @@ class APIClient {
     });
   }
 
+  /**
+   * Update menu item
+   */
   updateMenuItem(id: string, data: Partial<MenuItem>) {
     return this.request<MenuItem>(`/menu-items/${id}`, {
       method: 'PUT',
@@ -316,6 +424,9 @@ class APIClient {
     });
   }
 
+  /**
+   * Delete menu item
+   */
   deleteMenuItem(id: string) {
     return this.request<{ success: boolean }>(`/menu-items/${id}`, {
       method: 'DELETE',
@@ -323,10 +434,20 @@ class APIClient {
     });
   }
 
-  // ============================================================================
-  // ORDERS (Customer & Owner)
-  // ============================================================================
+  /**
+   * Toggle menu item availability
+   */
+  toggleMenuItemAvailability(id: string, isAvailable: boolean) {
+    return this.updateMenuItem(id, { isAvailable });
+  }
 
+  /* ──────────────────────────────────────────────────────────
+     ORDERS (Customer & Owner)
+  ────────────────────────────────────────────────────────── */
+
+  /**
+   * Create new order
+   */
   createOrder(data: CreateOrderRequest) {
     return this.request<Order>('/orders', {
       method: 'POST',
@@ -335,24 +456,36 @@ class APIClient {
     });
   }
 
+  /**
+   * Get single order by ID
+   */
   getOrder(id: string) {
     return this.request<Order>(`/orders/${id}`, {
       requireAuth: true,
     });
   }
 
+  /**
+   * Get all orders for a user
+   */
   getUserOrders(userId: string) {
     return this.request<Order[]>(`/orders/user/${userId}`, {
       requireAuth: true,
     });
   }
 
+  /**
+   * Get all orders for a restaurant
+   */
   getRestaurantOrders(restaurantId: string) {
     return this.request<Order[]>(`/restaurants/${restaurantId}/orders`, {
       requireAuth: true,
     });
   }
 
+  /**
+   * Update order status (restaurant owner)
+   */
   updateOrderStatus(id: string, status: Order['status']) {
     return this.request<Order>(`/orders/${id}/status`, {
       method: 'PATCH',
@@ -361,16 +494,29 @@ class APIClient {
     });
   }
 
-  // ============================================================================
-  // USER / PROFILE
-  // ============================================================================
+  /**
+   * Cancel order (customer)
+   */
+  cancelOrder(id: string) {
+    return this.updateOrderStatus(id, 'cancelled');
+  }
 
+  /* ──────────────────────────────────────────────────────────
+     USER PROFILE
+  ────────────────────────────────────────────────────────── */
+
+  /**
+   * Get current user profile
+   */
   getUserProfile() {
     return this.request<User>('/profile', {
       requireAuth: true,
     });
   }
 
+  /**
+   * Update user profile
+   */
   updateUserProfile(data: Partial<User>) {
     return this.request<User>('/profile', {
       method: 'PUT',
@@ -379,10 +525,24 @@ class APIClient {
     });
   }
 
-  // ============================================================================
-  // BOOKINGS
-  // ============================================================================
+  /**
+   * Create user profile (called after signup)
+   */
+  createUserProfile(data: Partial<User>) {
+    return this.request<User>('/users', {
+      method: 'POST',
+      body: JSON.stringify(data),
+      requireAuth: true,
+    });
+  }
 
+  /* ──────────────────────────────────────────────────────────
+     BOOKINGS
+  ────────────────────────────────────────────────────────── */
+
+  /**
+   * Create new booking
+   */
   createBooking(data: CreateBookingRequest) {
     return this.request<Booking>('/bookings', {
       method: 'POST',
@@ -391,18 +551,27 @@ class APIClient {
     });
   }
 
+  /**
+   * Get user's bookings
+   */
   getUserBookings(userId: string) {
     return this.request<Booking[]>(`/bookings/user/${userId}`, {
       requireAuth: true,
     });
   }
 
+  /**
+   * Get restaurant's bookings
+   */
   getRestaurantBookings(restaurantId: string) {
     return this.request<Booking[]>(`/restaurants/${restaurantId}/bookings`, {
       requireAuth: true,
     });
   }
 
+  /**
+   * Update booking status
+   */
   updateBookingStatus(id: string, status: Booking['status']) {
     return this.request<Booking>(`/bookings/${id}/status`, {
       method: 'PATCH',
@@ -411,16 +580,22 @@ class APIClient {
     });
   }
 
-  // ============================================================================
-  // FAVORITES
-  // ============================================================================
+  /* ──────────────────────────────────────────────────────────
+     FAVORITES
+  ────────────────────────────────────────────────────────── */
 
+  /**
+   * Get user's favorite restaurants
+   */
   getFavorites() {
     return this.request<Favorite[]>('/favorites', {
       requireAuth: true,
     });
   }
 
+  /**
+   * Add restaurant to favorites
+   */
   addFavorite(restaurantId: string) {
     return this.request<Favorite>('/favorites', {
       method: 'POST',
@@ -429,70 +604,76 @@ class APIClient {
     });
   }
 
+  /**
+   * Remove restaurant from favorites
+   */
   removeFavorite(restaurantId: string) {
-    return this.request<{ success: boolean }>(
-      `/favorites/${restaurantId}`,
-      {
-        method: 'DELETE',
-        requireAuth: true,
-      }
-    );
+    return this.request<{ success: boolean }>(`/favorites/${restaurantId}`, {
+      method: 'DELETE',
+      requireAuth: true,
+    });
   }
 
-  // ============================================================================
-  // NOTIFICATIONS
-  // ============================================================================
+  /* ──────────────────────────────────────────────────────────
+     NOTIFICATIONS
+  ────────────────────────────────────────────────────────── */
 
+  /**
+   * Get user notifications
+   */
   getNotifications() {
     return this.request<Notification[]>('/notifications', {
       requireAuth: true,
     });
   }
 
+  /**
+   * Mark notification as read
+   */
   markNotificationRead(id: string) {
-    return this.request<{ success: boolean }>(
-      `/notifications/${id}/read`,
-      {
-        method: 'PATCH',
-        requireAuth: true,
-      }
-    );
+    return this.request<{ success: boolean }>(`/notifications/${id}/read`, {
+      method: 'PATCH',
+      requireAuth: true,
+    });
   }
 
+  /**
+   * Mark all notifications as read
+   */
   markAllNotificationsRead() {
-    return this.request<{ success: boolean }>(
-      '/notifications/read-all',
-      {
-        method: 'PATCH',
-        requireAuth: true,
-      }
-    );
+    return this.request<{ success: boolean }>('/notifications/read-all', {
+      method: 'PATCH',
+      requireAuth: true,
+    });
   }
 
-  // ============================================================================
-  // INVENTORY (Restaurant Owner)
-  // ============================================================================
+  /* ──────────────────────────────────────────────────────────
+     INVENTORY (Restaurant Owner)
+  ────────────────────────────────────────────────────────── */
 
+  /**
+   * Get restaurant inventory
+   */
   getRestaurantInventory(restaurantId: string) {
-    return this.request<InventoryItem[]>(
-      `/restaurants/${restaurantId}/inventory`,
-      {
-        requireAuth: true,
-      }
-    );
+    return this.request<InventoryItem[]>(`/restaurants/${restaurantId}/inventory`, {
+      requireAuth: true,
+    });
   }
 
+  /**
+   * Create inventory item
+   */
   createInventoryItem(restaurantId: string, data: Partial<InventoryItem>) {
-    return this.request<InventoryItem>(
-      `/restaurants/${restaurantId}/inventory`,
-      {
-        method: 'POST',
-        body: JSON.stringify(data),
-        requireAuth: true,
-      }
-    );
+    return this.request<InventoryItem>(`/restaurants/${restaurantId}/inventory`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+      requireAuth: true,
+    });
   }
 
+  /**
+   * Update inventory item
+   */
   updateInventoryItem(id: string, data: Partial<InventoryItem>) {
     return this.request<InventoryItem>(`/inventory/${id}`, {
       method: 'PUT',
@@ -501,6 +682,9 @@ class APIClient {
     });
   }
 
+  /**
+   * Delete inventory item
+   */
   deleteInventoryItem(id: string) {
     return this.request<{ success: boolean }>(`/inventory/${id}`, {
       method: 'DELETE',
@@ -508,35 +692,57 @@ class APIClient {
     });
   }
 
-  // ============================================================================
-  // ANALYTICS (Restaurant Owner)
-  // ============================================================================
+  /* ──────────────────────────────────────────────────────────
+     ANALYTICS (Restaurant Owner)
+  ────────────────────────────────────────────────────────── */
 
-  getRestaurantAnalytics(restaurantId: string, period?: string) {
-    const query = period ? `?period=${period}` : '';
+  /**
+   * Get restaurant analytics
+   * @param period - 'today' | 'week' | 'month'
+   */
+  getRestaurantAnalytics(restaurantId: string, period: 'today' | 'week' | 'month' = 'today') {
     return this.request<AnalyticsData>(
-      `/restaurants/${restaurantId}/analytics${query}`,
+      `/restaurants/${restaurantId}/analytics?period=${period}`,
       {
         requireAuth: true,
       }
     );
   }
 
-  // ============================================================================
-  // HEALTH CHECK
-  // ============================================================================
+  /* ──────────────────────────────────────────────────────────
+     HEALTH CHECK
+  ────────────────────────────────────────────────────────── */
 
-  async healthCheck() {
-    const response = await fetch(
-      `${API_BASE_URL.replace('/api/v1', '')}/health`
-    );
-    return response.json();
+  /**
+   * Check backend health status
+   */
+  async healthCheck(): Promise<{
+    status: string;
+    database: boolean;
+    cache: boolean;
+    timestamp: string;
+  }> {
+    try {
+      const response = await fetch(this.baseURL.replace('/api/v1', '/health'));
+      const data = await response.json();
+      console.log('💚 Health Check:', data);
+      return data;
+    } catch (error) {
+      console.error('❌ Health Check Failed:', error);
+      throw error;
+    }
   }
 }
 
-// ============================================================================
-// EXPORT SINGLETON
-// ============================================================================
+/* ──────────────────────────────────────────────────────────
+   Export Singleton Instance
+────────────────────────────────────────────────────────── */
 
 export const api = new APIClient();
+
+/**
+ * Hook for accessing API client
+ */
 export const useAPI = () => api;
+
+export default api;
