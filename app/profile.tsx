@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -61,20 +61,21 @@ export default function ProfileScreen() {
   });
 
   /* ---------------- FETCH PROFILE ---------------- */
-  const { data, isLoading, isError } = useQuery<ProfileResponse>({
+  const { data: profile, isLoading, isError } = useQuery<ProfileResponse>({
     queryKey: ['profile'],
     queryFn: () => apiFetch('/api/v1/profile'),
     enabled: !!user,
-    onSuccess: (profile) => {
-      setFormData({
-        name: profile?.name ?? '',
-        phone: profile?.phone ?? '',
-        address: profile?.address ?? '',
-      });
-    },
   });
 
-  const profile = data;
+  useEffect(() => {
+    if (profile) {
+      setFormData({
+        name: profile.name ?? '',
+        phone: profile.phone ?? '',
+        address: profile.address ?? '',
+      });
+    }
+  }, [profile]);
 
   /* ---------------- UPDATE PROFILE ---------------- */
   const updateMutation = useMutation({

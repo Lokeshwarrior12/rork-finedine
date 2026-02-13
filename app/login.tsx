@@ -31,16 +31,16 @@ import {
 import { useAuth } from '@/contexts/AuthContext';
 import Colors from '@/constants/colors';
 
-type UserRole = 'customer' | 'restaurant_owner' | 'admin';
+type LoginRole = 'customer' | 'restaurant_owner' | 'admin';
 
 export default function LoginScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { signIn, signUp, isLoading } = useAuth();
-  const { role: urlRole } = useLocalSearchParams<{ role?: UserRole }>();
+  const { signIn, signup, loading: isLoading, signInPending, signupPending } = useAuth();
+  const { role: urlRole } = useLocalSearchParams<{ role?: LoginRole }>();
 
   const [isSignUp, setIsSignUp] = useState(false);
-  const [selectedRole, setSelectedRole] = useState<UserRole>(
+  const [selectedRole, setSelectedRole] = useState<LoginRole>(
     urlRole || 'customer'
   );
 
@@ -58,19 +58,19 @@ export default function LoginScreen() {
 
   const roles = [
     {
-      key: 'customer' as UserRole,
+      key: 'customer' as LoginRole,
       icon: User,
       label: 'Customer',
       description: 'Order food & discover deals',
     },
     {
-      key: 'restaurant_owner' as UserRole,
+      key: 'restaurant_owner' as LoginRole,
       icon: Store,
       label: 'Restaurant Owner',
       description: 'Manage your restaurant',
     },
     {
-      key: 'admin' as UserRole,
+      key: 'admin' as LoginRole,
       icon: Shield,
       label: 'Admin',
       description: 'Platform administration',
@@ -103,28 +103,22 @@ export default function LoginScreen() {
     setError('');
 
     try {
-      let result;
+      let result: { user: { role: string } | null; error: null };
 
       if (isSignUp) {
-        result = await signUp(email, password, name, selectedRole);
+        const role = selectedRole === 'admin' ? 'customer' : selectedRole;
+          result = await signup({ email, password, name, role }).then(() => ({ user: { role: selectedRole }, error: null }));
       } else {
-        result = await signIn(email, password);
-      }
-
-      if (result.error) {
-        setError(result.error);
-        return;
+        result = await signIn({ email, password }).then(() => ({ user: null, error: null }));
       }
 
       // Role-based navigation
-      const role = result.user?.role;
+      const userRole = isSignUp ? selectedRole : 'customer';
 
-      if (role === 'restaurant_owner') {
-        router.replace('/(restaurant)/dashboard');
-      } else if (role === 'admin') {
-        router.replace('/(admin)/dashboard');
+      if (userRole === 'restaurant_owner') {
+        router.replace('/(restaurant)/dashboard' as any);
       } else {
-        router.replace('/(customer)/home');
+        router.replace('/(customer)/home' as any);
       }
     } catch (err: any) {
       setError(err.message || 'Authentication failed');
@@ -268,9 +262,9 @@ export default function LoginScreen() {
             <TouchableOpacity
               style={styles.submitButton}
               onPress={handleSubmit}
-              disabled={isLoading}
+              disabled={isSignUp ? signupPending : signInPending}
             >
-              {isLoading ? (
+              {(isSignUp ? signupPending : signInPending) ? (
                 <ActivityIndicator color="#1A1A2E" />
               ) : (
                 <>
