@@ -32,7 +32,6 @@ import {
 } from 'lucide-react-native';
 
 import { useAuth } from '@/contexts/AuthContext';
-import { api } from '@/lib/api';
 import Colors from '@/constants/colors';
 
 const { width } = Dimensions.get('window');
@@ -54,7 +53,7 @@ const TESTIMONIALS = [
 export default function PartnerScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { signUp, isLoading: signupPending } = useAuth();
+  const { signup, signupPending } = useAuth();
 
   const [step, setStep] = useState<'info' | 'verify' | 'signup'>('info');
   const [restaurantName, setRestaurantName] = useState('');
@@ -126,11 +125,7 @@ export default function PartnerScreen() {
     }
     setError('');
     try {
-      const result = await signUp(email, password, ownerName, 'restaurant_owner');
-      if (result.error) {
-        setError(result.error);
-        return;
-      }
+      await signup({ email, password, name: ownerName, role: 'restaurant_owner' });
       router.replace('/(restaurant)/dashboard' as Href);
     } catch {
       setError('Signup failed. Please try again.');

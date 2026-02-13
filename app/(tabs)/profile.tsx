@@ -6,7 +6,7 @@ import { User, Mail, Phone, MapPin, LogOut, Save } from 'lucide-react-native';
 import Colors from '@/constants/colors';
 
 export default function ProfileScreen() {
-  const { user, logout, updateUser } = useAuth();
+  const { user, signOut, updateUser } = useAuth();
   
   const [name, setName] = useState(user?.name || '');
   const [phone, setPhone] = useState(user?.phone || '');
@@ -35,7 +35,7 @@ export default function ProfileScreen() {
   const handleLogout = () => {
     Alert.alert('Sign Out', 'Are you sure?', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Sign Out', style: 'destructive', onPress: logout },
+      { text: 'Sign Out', style: 'destructive', onPress: () => signOut() },
     ]);
   };
 

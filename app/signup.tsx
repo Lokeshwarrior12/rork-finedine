@@ -42,8 +42,7 @@ export default function SignupScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { role } = useLocalSearchParams<{ role: string }>();
-  const { signUp } = useAuth();
-  const signupPending = false;
+  const { signup, signupPending } = useAuth();
 
   const isRestaurant = role === 'restaurant_owner';
 
@@ -118,11 +117,7 @@ export default function SignupScreen() {
     }
     setError('');
     try {
-      const result = await signup(email, password, name, (role as UserRole) || 'customer');
-      if (result.error) {
-        setError(result.error);
-        return;
-      }
+      await signup({ email, password, name, phone, role: (role as UserRole) || 'customer' });
       if (isRestaurant) {
         router.replace('/(restaurant)/dashboard' as Href);
       } else {

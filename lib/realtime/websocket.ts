@@ -21,7 +21,7 @@ const config: WebSocketConfig = {
 
 class WebSocketClient {
   private ws: WebSocket | null = null;
-  private reconnectTimer: NodeJS.Timeout | null = null;
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private listeners: Map<string, Set<(data: any) => void>> = new Map();
 
   connect() {

@@ -2,16 +2,14 @@ import { View, Text, Button, StyleSheet, Alert } from 'react-native';
 import { useAuth } from '@/contexts/AuthContext';
 
 export default function TestScreen() {
-  const { session, user, isAuthenticated, signIn, signUp } = useAuth();
+  const { session, user, signIn, signup } = useAuth();
+
+  const isAuthenticated = !!session;
 
   const testLogin = async () => {
     try {
-      const result = await signIn('test@example.com', 'password123');
-      if (result.error) {
-        Alert.alert('Login Error', result.error);
-      } else {
-        Alert.alert('Success', 'Login successful!');
-      }
+      await signIn({ email: 'test@example.com', password: 'password123' });
+      Alert.alert('Success', 'Login successful!');
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
       Alert.alert('Login Error', errorMessage);
@@ -20,12 +18,8 @@ export default function TestScreen() {
 
   const testSignup = async () => {
     try {
-      const result = await signUp('test@example.com', 'password123', 'Test User');
-      if (result.error) {
-        Alert.alert('Signup Error', result.error);
-      } else {
-        Alert.alert('Success', 'Signup successful!');
-      }
+      await signup({ email: 'test@example.com', password: 'password123', name: 'Test User' });
+      Alert.alert('Success', 'Signup successful!');
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
       Alert.alert('Signup Error', errorMessage);

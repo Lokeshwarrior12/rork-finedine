@@ -45,7 +45,7 @@ interface MenuSection {
 export default function MoreScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { user, logout } = useAuth();
+  const { user, signOut } = useAuth();
 
   const handleLogout = () => {
     Alert.alert(
@@ -56,8 +56,8 @@ export default function MoreScreen() {
         {
           text: 'Sign Out',
           style: 'destructive',
-          onPress: () => {
-            logout();
+          onPress: async () => {
+            await signOut();
             router.replace('/');
           },
         },

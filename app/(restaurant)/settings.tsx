@@ -51,7 +51,7 @@ export default function SettingsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
-  const { logout } = useAuth();
+  const { signOut } = useAuth();
   const { colors, isDark } = useTheme();
   const restaurantId = 'restaurant-123'; // Replace with actual restaurant ID from context/auth
 
@@ -271,8 +271,8 @@ export default function SettingsScreen() {
       {
         text: 'Sign Out',
         style: 'destructive',
-        onPress: () => {
-          logout();
+        onPress: async () => {
+          await signOut();
           router.replace('/');
         },
       },

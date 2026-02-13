@@ -36,7 +36,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 export default function ProfileScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { user, logout } = useAuth();
+  const { user, signOut } = useAuth();
   const { colors, isDark, toggleTheme } = useTheme();
 
   const menuItems = [
@@ -48,8 +48,8 @@ export default function ProfileScreen() {
     { icon: HelpCircle, label: 'Help & Support', route: null },
   ];
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    await signOut();
     router.replace('/');
   };
 

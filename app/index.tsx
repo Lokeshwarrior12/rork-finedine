@@ -6,7 +6,6 @@ import {
   Pressable,
   Animated,
   Dimensions,
-  Alert,
   Platform,
 } from 'react-native';
 import { useRouter, Href } from 'expo-router';
@@ -15,14 +14,13 @@ import { Utensils, Store, ChevronRight } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/contexts/AuthContext';
 import Colors from '@/constants/colors';
-import { API_URL } from '@/lib/config';
 
 const { width } = Dimensions.get('window');
 
 export default function WelcomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { user, isLoading } = useAuth();
+  const { user, loading: isLoading } = useAuth();
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;

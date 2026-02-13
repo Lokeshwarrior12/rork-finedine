@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, Pressable, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, Pressable, StyleSheet, ActivityIndicator, Alert } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -12,7 +12,7 @@ export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { colors } = useTheme();
-  const { user, logout: signOut } = useAuth();
+  const { user, signOut } = useAuth();
 
   const { data: profile, isLoading } = useQuery({
     queryKey: ['profile'],
@@ -66,16 +66,6 @@ export default function ProfileScreen() {
               {displayProfile?.email || 'Not set'}
             </Text>
           </View>
-          <View style={styles.container}>
-            <Text style={styles.title}>Profile</Text>
-            {user && (
-          <>
-            <Text>Email: {user.email}</Text>
-            <Text>User ID: {user.id}</Text>
-          </>
-        )}
-            <Button title="Sign Out" onPress={handleSignOut} />
-          </View>
 
           <View style={[styles.pointsCard, { backgroundColor: colors.primaryLight }]}>
             <Star size={24} color={colors.primary} />
@@ -89,7 +79,7 @@ export default function ProfileScreen() {
 
           <Pressable
             style={[styles.logoutButton, { backgroundColor: colors.error }]}
-            onPress={handleLogout}
+            onPress={handleSignOut}
           >
             <LogOut size={20} color="#fff" />
             <Text style={styles.logoutText}>Logout</Text>
