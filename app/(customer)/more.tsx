@@ -21,12 +21,12 @@ import {
   Bell,
   HelpCircle,
   FileText,
-  LucideIcon,
   Heart,
   Calendar,
+  LucideIcon,
 } from 'lucide-react-native';
 import { useAuth } from '@/contexts/AuthContext';
-import Colors from '@/constants/colors';
+import { useTheme } from '@/contexts/ThemeContext';
 
 interface MenuItem {
   icon: LucideIcon;
@@ -46,6 +46,7 @@ export default function MoreScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { user, signOut } = useAuth();
+  const { colors } = useTheme();
 
   const handleLogout = () => {
     Alert.alert(
@@ -57,8 +58,15 @@ export default function MoreScreen() {
           text: 'Sign Out',
           style: 'destructive',
           onPress: async () => {
-            await signOut();
-            router.replace('/');
+            try {
+              console.log('🔄 Signing out user...');
+              await signOut();
+              console.log('✅ User signed out successfully');
+              router.replace('/');
+            } catch (error) {
+              console.error('❌ Sign out error:', error);
+              Alert.alert('Error', 'Failed to sign out. Please try again.');
+            }
           },
         },
       ]
@@ -69,30 +77,89 @@ export default function MoreScreen() {
     {
       title: 'Dashboard',
       items: [
-        { icon: User, label: 'Profile', route: '/(customer)/profile', color: Colors.primary },
-        { icon: Flame, label: 'Hot Deals', route: '/(customer)/deals', color: Colors.error },
-        { icon: Ticket, label: 'My Coupons', route: '/(customer)/coupons', color: Colors.accent },
-        { icon: Award, label: 'Rewards', route: '/(customer)/rewards', color: Colors.success, badge: `${user?.points || 0} pts` },
-        { icon: Heart, label: 'Favorites', route: '/(customer)/favorites', color: Colors.error },
-        { icon: Calendar, label: 'My Bookings', route: '/(customer)/bookings', color: Colors.primary },
+        { 
+          icon: User, 
+          label: 'Profile', 
+          route: '/(customer)/profile', 
+          color: colors.primary 
+        },
+        { 
+          icon: Flame, 
+          label: 'Hot Deals', 
+          route: '/(customer)/deals', 
+          color: colors.error 
+        },
+        { 
+          icon: Ticket, 
+          label: 'My Coupons', 
+          route: '/(customer)/coupons', 
+          color: colors.accent 
+        },
+        { 
+          icon: Award, 
+          label: 'Rewards', 
+          route: '/(customer)/rewards', 
+          color: colors.success, 
+          badge: `${user?.loyaltyPoints || 0} pts` 
+        },
+        { 
+          icon: Heart, 
+          label: 'Favorites', 
+          route: '/(customer)/favorites', 
+          color: colors.error 
+        },
+        { 
+          icon: Calendar, 
+          label: 'My Bookings', 
+          route: '/(customer)/bookings', 
+          color: colors.primary 
+        },
       ],
     },
     {
       title: 'Actions',
       items: [
-        { icon: Gift, label: 'Refer a Friend', route: '/(customer)/referral', color: Colors.primary, subtitle: 'Get 50 pts + free meal deal' },
-        { icon: Store, label: 'Become a Partner', route: '/partner', color: Colors.secondary },
+        { 
+          icon: Gift, 
+          label: 'Refer a Friend', 
+          route: '/(customer)/referral', 
+          color: colors.primary, 
+          subtitle: 'Get 50 pts + free meal deal' 
+        },
+        { 
+          icon: Store, 
+          label: 'Become a Partner', 
+          route: '/partner', 
+          color: colors.secondary 
+        },
       ],
     },
     {
       title: 'Settings',
       items: [
-        { icon: Bell, label: 'Notifications', route: '/(customer)/notifications', color: Colors.textSecondary },
-        { icon: HelpCircle, label: 'Help & Support', route: null, color: Colors.textSecondary },
-        { icon: FileText, label: 'Terms & Privacy', route: null, color: Colors.textSecondary },
+        { 
+          icon: Bell, 
+          label: 'Notifications', 
+          route: '/(customer)/notifications', 
+          color: colors.textSecondary 
+        },
+        { 
+          icon: HelpCircle, 
+          label: 'Help & Support', 
+          route: null, 
+          color: colors.textSecondary 
+        },
+        { 
+          icon: FileText, 
+          label: 'Terms & Privacy', 
+          route: null, 
+          color: colors.textSecondary 
+        },
       ],
     },
   ];
+
+  const styles = createStyles(colors);
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -112,7 +179,17 @@ export default function MoreScreen() {
                 <React.Fragment key={itemIndex}>
                   <Pressable
                     style={styles.menuItem}
-                    onPress={() => item.route && router.push(item.route as any)}
+                    onPress={() => {
+                      if (item.route) {
+                        console.log('📱 Navigating to:', item.route);
+                        router.push(item.route as any);
+                      } else {
+                        Alert.alert(
+                          item.label,
+                          'This feature is coming soon!'
+                        );
+                      }
+                    }}
                   >
                     <View style={[styles.menuIcon, { backgroundColor: `${item.color}15` }]}>
                       <item.icon size={20} color={item.color} />
@@ -128,7 +205,7 @@ export default function MoreScreen() {
                         <Text style={styles.badgeText}>{item.badge}</Text>
                       </View>
                     ) : (
-                      <ChevronRight size={20} color={Colors.textLight} />
+                      <ChevronRight size={20} color={colors.textMuted} />
                     )}
                   </Pressable>
                   {itemIndex < section.items.length - 1 && <View style={styles.menuDivider} />}
@@ -140,19 +217,22 @@ export default function MoreScreen() {
 
         <View style={styles.section}>
           <Pressable style={styles.logoutButton} onPress={handleLogout}>
-            <LogOut size={20} color={Colors.error} />
+            <LogOut size={20} color={colors.error} />
             <Text style={styles.logoutText}>Sign Out</Text>
           </Pressable>
         </View>
+
+        {/* App Version */}
+        <Text style={styles.versionText}>Version 1.0.0</Text>
       </ScrollView>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: colors.background,
   },
   header: {
     paddingHorizontal: 20,
@@ -162,7 +242,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 28,
     fontWeight: '700' as const,
-    color: Colors.text,
+    color: colors.text,
   },
   section: {
     paddingHorizontal: 20,
@@ -171,19 +251,21 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 14,
     fontWeight: '600' as const,
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
     marginBottom: 12,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   menuCard: {
-    backgroundColor: Colors.surface,
+    backgroundColor: colors.surface,
     borderRadius: 16,
-    shadowColor: Colors.cardShadow,
+    shadowColor: colors.cardShadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 1,
     shadowRadius: 8,
     elevation: 3,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
   },
   menuItem: {
     flexDirection: 'row',
@@ -204,20 +286,20 @@ const styles = StyleSheet.create({
   menuLabel: {
     fontSize: 16,
     fontWeight: '500' as const,
-    color: Colors.text,
+    color: colors.text,
   },
   menuSubtitle: {
     fontSize: 13,
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
     marginTop: 2,
   },
   menuDivider: {
     height: 1,
-    backgroundColor: Colors.borderLight,
+    backgroundColor: colors.divider,
     marginLeft: 70,
   },
   badge: {
-    backgroundColor: Colors.primary,
+    backgroundColor: colors.primary,
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
@@ -225,22 +307,29 @@ const styles = StyleSheet.create({
   badgeText: {
     fontSize: 12,
     fontWeight: '600' as const,
-    color: Colors.surface,
+    color: '#fff',
   },
   logoutButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 10,
-    backgroundColor: Colors.surface,
+    backgroundColor: colors.surface,
     padding: 16,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: Colors.error,
+    borderColor: colors.error,
   },
   logoutText: {
     fontSize: 16,
     fontWeight: '600' as const,
-    color: Colors.error,
+    color: colors.error,
+  },
+  versionText: {
+    fontSize: 13,
+    color: colors.textMuted,
+    textAlign: 'center',
+    marginTop: 24,
+    marginBottom: 20,
   },
 });
