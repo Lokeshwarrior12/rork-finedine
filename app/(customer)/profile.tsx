@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -6,10 +6,13 @@ import {
   ScrollView,
   Pressable,
   Switch,
+  ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   User,
   Mail,
@@ -33,15 +36,51 @@ import {
 } from 'lucide-react-native';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
+import { api } from '@/lib/api';
+
 export default function ProfileScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { user, signOut } = useAuth();
   const { colors, isDark, toggleTheme } = useTheme();
+  const queryClient = useQueryClient();
+
+  // REAL API QUERY - Fetch user profile from backend
+  const { 
+    data: profileResponse, 
+    isLoading,
+    error,
+    refetch 
+  } = useQuery({
+    queryKey: ['profile'],
+    queryFn: async () => {
+      console.log('🔄 Fetching user profile from API...');
+      const result = await api.getUserProfile();
+      console.log('✅ Profile fetched:', result.data?.email);
+      return result;
+    },
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+    enabled: !!user, // Only fetch if user is logged in
+  });
+
+  // REAL API QUERY - Fetch favorites count
+  const { data: favoritesResponse } = useQuery({
+    queryKey: ['favorites'],
+    queryFn: async () => {
+      console.log('🔄 Fetching favorites...');
+      const result = await api.getFavorites();
+      console.log('✅ Favorites fetched:', result.data?.length || 0);
+      return result;
+    },
+    enabled: !!user,
+  });
+
+  const profile = profileResponse?.data || user;
+  const favoritesCount = favoritesResponse?.data?.length || 0;
 
   const menuItems = [
     { icon: Bookmark, label: 'My Bookings', route: '/(customer)/bookings' },
-    { icon: Heart, label: 'Favorites', route: '/(customer)/favorites', badge: user?.favorites.length },
+    { icon: Heart, label: 'Favorites', route: '/(customer)/favorites', badge: favoritesCount },
     { icon: Bell, label: 'Notifications', route: '/(customer)/notifications' },
     { icon: Calendar, label: 'Referral Program', route: '/(customer)/referral' },
     { icon: Shield, label: 'Privacy & Security', route: null },
@@ -49,11 +88,65 @@ export default function ProfileScreen() {
   ];
 
   const handleLogout = async () => {
-    await signOut();
-    router.replace('/');
+    Alert.alert(
+      'Sign Out',
+      'Are you sure you want to sign out?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Sign Out',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              console.log('🔄 Signing out user...');
+              await signOut();
+              console.log('✅ User signed out successfully');
+              router.replace('/');
+            } catch (error) {
+              console.error('❌ Sign out error:', error);
+              Alert.alert('Error', 'Failed to sign out. Please try again.');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleEditProfile = () => {
+    Alert.alert(
+      'Edit Profile',
+      'This feature is coming soon! You will be able to update your profile information here.',
+      [{ text: 'OK' }]
+    );
   };
 
   const styles = createStyles(colors, isDark);
+
+  // Loading State
+  if (isLoading && !profileResponse) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top, justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={[styles.loadingText, { marginTop: 16 }]}>Loading profile...</Text>
+      </View>
+    );
+  }
+
+  // Error State
+  if (error && !profileResponse) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 20 }]}>
+        <User size={48} color={colors.textMuted} />
+        <Text style={styles.errorTitle}>Unable to load profile</Text>
+        <Text style={styles.errorText}>
+          {error instanceof Error ? error.message : 'Please check your connection'}
+        </Text>
+        <Pressable style={styles.retryButton} onPress={() => refetch()}>
+          <Text style={styles.retryButtonText}>Retry</Text>
+        </Pressable>
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -64,7 +157,7 @@ export default function ProfileScreen() {
         <View style={styles.header}>
           <View style={styles.headerTop}>
             <Text style={styles.headerTitle}>Profile</Text>
-            <Pressable style={styles.settingsBtn}>
+            <Pressable style={styles.settingsBtn} onPress={handleEditProfile}>
               <Settings size={22} color={colors.text} />
             </Pressable>
           </View>
@@ -72,20 +165,20 @@ export default function ProfileScreen() {
           <View style={styles.profileCard}>
             <View style={styles.avatarSection}>
               <View style={styles.avatarContainer}>
-                {user?.photo ? (
-                  <Image source={{ uri: user.photo }} style={styles.avatar} contentFit="cover" />
+                {profile?.photo ? (
+                  <Image source={{ uri: profile.photo }} style={styles.avatar} contentFit="cover" />
                 ) : (
                   <View style={styles.avatarPlaceholder}>
                     <User size={40} color={colors.textMuted} />
                   </View>
                 )}
-                <Pressable style={styles.editAvatarButton}>
+                <Pressable style={styles.editAvatarButton} onPress={handleEditProfile}>
                   <Edit3 size={14} color="#fff" />
                 </Pressable>
               </View>
               <View style={styles.profileInfo}>
-                <Text style={styles.userName}>{user?.name || 'Guest'}</Text>
-                <Text style={styles.userEmail}>{user?.email || 'guest@email.com'}</Text>
+                <Text style={styles.userName}>{profile?.name || 'Guest'}</Text>
+                <Text style={styles.userEmail}>{profile?.email || 'guest@email.com'}</Text>
               </View>
             </View>
 
@@ -94,7 +187,7 @@ export default function ProfileScreen() {
                 <View style={[styles.statIcon, { backgroundColor: colors.accentLight }]}>
                   <Award size={20} color={colors.accent} />
                 </View>
-                <Text style={styles.statValue}>{user?.points || 0}</Text>
+                <Text style={styles.statValue}>{profile?.loyaltyPoints || 0}</Text>
                 <Text style={styles.statLabel}>Points</Text>
               </View>
               <View style={styles.statDivider} />
@@ -102,7 +195,7 @@ export default function ProfileScreen() {
                 <View style={[styles.statIcon, { backgroundColor: colors.errorLight }]}>
                   <Heart size={20} color={colors.error} />
                 </View>
-                <Text style={styles.statValue}>{user?.favorites.length || 0}</Text>
+                <Text style={styles.statValue}>{favoritesCount}</Text>
                 <Text style={styles.statLabel}>Favorites</Text>
               </View>
               <View style={styles.statDivider} />
@@ -117,6 +210,7 @@ export default function ProfileScreen() {
           </View>
         </View>
 
+        {/* Appearance Section */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Appearance</Text>
           <View style={styles.themeCard}>
@@ -145,67 +239,70 @@ export default function ProfileScreen() {
           </View>
         </View>
 
+        {/* Personal Information */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Personal Information</Text>
           <View style={styles.infoCard}>
-            <View style={styles.infoRow}>
+            <Pressable style={styles.infoRow} onPress={handleEditProfile}>
               <User size={20} color={colors.primary} />
               <View style={styles.infoContent}>
                 <Text style={styles.infoLabel}>Name</Text>
-                <Text style={styles.infoValue}>{user?.name || '-'}</Text>
+                <Text style={styles.infoValue}>{profile?.name || '-'}</Text>
               </View>
               <ChevronRight size={20} color={colors.textMuted} />
-            </View>
+            </Pressable>
             <View style={styles.infoDivider} />
-            <View style={styles.infoRow}>
+            <Pressable style={styles.infoRow} onPress={handleEditProfile}>
               <Mail size={20} color={colors.primary} />
               <View style={styles.infoContent}>
                 <Text style={styles.infoLabel}>Email</Text>
-                <Text style={styles.infoValue}>{user?.email || '-'}</Text>
+                <Text style={styles.infoValue}>{profile?.email || '-'}</Text>
               </View>
               <ChevronRight size={20} color={colors.textMuted} />
-            </View>
+            </Pressable>
             <View style={styles.infoDivider} />
-            <View style={styles.infoRow}>
+            <Pressable style={styles.infoRow} onPress={handleEditProfile}>
               <Phone size={20} color={colors.primary} />
               <View style={styles.infoContent}>
                 <Text style={styles.infoLabel}>Phone</Text>
-                <Text style={styles.infoValue}>{user?.phone || '-'}</Text>
+                <Text style={styles.infoValue}>{profile?.phone || '-'}</Text>
               </View>
               <ChevronRight size={20} color={colors.textMuted} />
-            </View>
+            </Pressable>
             <View style={styles.infoDivider} />
-            <View style={styles.infoRow}>
+            <Pressable style={styles.infoRow} onPress={handleEditProfile}>
               <MapPin size={20} color={colors.primary} />
               <View style={styles.infoContent}>
                 <Text style={styles.infoLabel}>Address</Text>
-                <Text style={styles.infoValue} numberOfLines={1}>{user?.address || '-'}</Text>
+                <Text style={styles.infoValue} numberOfLines={1}>{profile?.address || '-'}</Text>
               </View>
               <ChevronRight size={20} color={colors.textMuted} />
-            </View>
+            </Pressable>
           </View>
         </View>
 
+        {/* Payment Method */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Payment Method</Text>
-          <View style={styles.paymentCard}>
+          <Pressable style={styles.paymentCard} onPress={handleEditProfile}>
             <View style={styles.cardVisual}>
               <CreditCard size={28} color="#fff" />
-              <Text style={styles.cardNumber}>•••• •••• •••• {user?.cardDetails?.lastFour || '0000'}</Text>
+              <Text style={styles.cardNumber}>•••• •••• •••• {profile?.cardDetails?.lastFour || '0000'}</Text>
             </View>
             <View style={styles.cardDetails}>
               <View>
                 <Text style={styles.cardLabel}>Card Type</Text>
-                <Text style={styles.cardValue}>{user?.cardDetails?.cardType || 'N/A'}</Text>
+                <Text style={styles.cardValue}>{profile?.cardDetails?.cardType || 'Not Added'}</Text>
               </View>
               <View>
                 <Text style={styles.cardLabel}>Expires</Text>
-                <Text style={styles.cardValue}>{user?.cardDetails?.expiryDate || 'N/A'}</Text>
+                <Text style={styles.cardValue}>{profile?.cardDetails?.expiryDate || 'N/A'}</Text>
               </View>
             </View>
-          </View>
+          </Pressable>
         </View>
 
+        {/* Menu Section */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Menu</Text>
           <View style={styles.menuCard}>
@@ -213,7 +310,14 @@ export default function ProfileScreen() {
               <React.Fragment key={item.label}>
                 <Pressable 
                   style={styles.menuRow}
-                  onPress={() => item.route && router.push(item.route as any)}
+                  onPress={() => {
+                    if (item.route) {
+                      console.log('📱 Navigating to:', item.route);
+                      router.push(item.route as any);
+                    } else {
+                      Alert.alert(item.label, 'This feature is coming soon!');
+                    }
+                  }}
                 >
                   <View style={styles.menuLeft}>
                     <item.icon size={22} color={colors.textSecondary} />
@@ -234,6 +338,7 @@ export default function ProfileScreen() {
           </View>
         </View>
 
+        {/* Logout Button */}
         <Pressable style={styles.logoutBtn} onPress={handleLogout}>
           <LogOut size={20} color={colors.error} />
           <Text style={styles.logoutText}>Log Out</Text>
@@ -527,5 +632,33 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     textAlign: 'center',
     marginTop: 20,
     marginBottom: 20,
+  },
+  loadingText: {
+    fontSize: 16,
+    color: colors.textSecondary,
+  },
+  errorTitle: {
+    fontSize: 18,
+    fontWeight: '600' as const,
+    color: colors.text,
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  errorText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  retryButton: {
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    backgroundColor: colors.primary,
+    borderRadius: 12,
+  },
+  retryButtonText: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: '#fff',
   },
 });
