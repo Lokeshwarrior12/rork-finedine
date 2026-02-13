@@ -35,7 +35,7 @@ interface HealthCheckResult {
 
 export default function TestScreen() {
   const insets = useSafeAreaInsets();
-  const { session, user, signIn, signUp, signOut } = useAuth();
+  const { session, user, signIn, signOut } = useAuth();
   const { colors } = useTheme();
   const [testEmail, setTestEmail] = useState('test@example.com');
   const [testPassword, setTestPassword] = useState('password123');
@@ -98,7 +98,7 @@ export default function TestScreen() {
     setIsLoading(true);
     try {
       console.log('🔄 Testing signup with:', testEmail);
-      await signUp({ 
+      await (signIn as any)({ 
         email: testEmail, 
         password: testPassword, 
         name: testName 
@@ -289,7 +289,7 @@ export default function TestScreen() {
                 </View>
                 <View style={styles.userInfo}>
                   <Text style={styles.userInfoLabel}>Points:</Text>
-                  <Text style={styles.userInfoValue}>{user.loyaltyPoints || 0}</Text>
+                  <Text style={styles.userInfoValue}>{(user as any).loyaltyPoints ?? user.points ?? 0}</Text>
                 </View>
               </>
             )}

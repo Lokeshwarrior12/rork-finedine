@@ -60,10 +60,11 @@ export default function FavoritesScreen() {
     staleTime: 60000, // 1 minute
   });
 
-  // Add type casting:
-const favoriteRestaurants = (favoritesData?.data || []) as Restaurant[];
-// Replace Colors.textMuted → Colors.textSecondary
-  const favoriteRestaurants = favoritesData?.data || [];
+  const favorites = favoritesData?.data || [];
+  const favoriteRestaurants = favorites.map((fav: any) => {
+    if (fav.restaurant) return fav.restaurant;
+    return fav;
+  }) as Restaurant[];
 
   /* ---------------- REMOVE FAVORITE MUTATION ---------------- */
   const removeFavoriteMutation = useMutation({
@@ -244,7 +245,7 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     fontSize: 16,
-    color: Colors.textMuted,
+    color: Colors.textSecondary,
   },
   errorContainer: {
     flex: 1,

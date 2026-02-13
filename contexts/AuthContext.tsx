@@ -164,7 +164,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         const { error: insertError } = await db
           .users()
-          .insert(newProfile)
+          .insert(newProfile as any)
           .select()
           .single();
 
@@ -182,20 +182,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Build user profile
       const profile: User = {
         id: authUser.id,
-        name: data?.name || authUser.user_metadata?.name || 'User',
-        email: data?.email || authUser.email || '',
-        phone: data?.phone || authUser.user_metadata?.phone || '',
-        address: data?.address || '',
-        role: data?.role || (authUser.user_metadata?.role as UserRole) || 'customer',
+        name: (data as any)?.name || authUser.user_metadata?.name || 'User',
+        email: (data as any)?.email || authUser.email || '',
+        phone: (data as any)?.phone || authUser.user_metadata?.phone || '',
+        address: (data as any)?.address || '',
+        role: (data as any)?.role || (authUser.user_metadata?.role as UserRole) || 'customer',
         points: storedPoints
           ? parseInt(storedPoints, 10)
-          : data?.loyalty_points || 0,
+          : (data as any)?.loyalty_points || 0,
         favorites: storedFavorites
           ? JSON.parse(storedFavorites)
-          : data?.favorites || [],
-        photo: data?.photo || authUser.user_metadata?.avatar_url,
-        restaurantId: data?.restaurant_id || undefined,
-        cardDetails: data?.card_details as CardDetails | undefined,
+          : (data as any)?.favorites || [],
+        photo: (data as any)?.photo || authUser.user_metadata?.avatar_url,
+        restaurantId: (data as any)?.restaurant_id || undefined,
+        cardDetails: (data as any)?.card_details as CardDetails | undefined,
       };
 
       setUser(profile);
@@ -417,7 +417,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (data.photo !== undefined) dbData.photo = data.photo;
       if (data.cardDetails !== undefined) dbData.card_details = data.cardDetails;
 
-      const { error } = await db.users().update(dbData).eq('id', user.id);
+      const { error } = await (db.users() as any).update(dbData).eq('id', user.id);
 
       if (error) throw error;
 

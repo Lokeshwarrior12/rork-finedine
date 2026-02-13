@@ -125,7 +125,7 @@ export default function OrdersScreen() {
   // REAL DATA: Update order status
   const updateStatusMutation = useMutation({
     mutationFn: ({ orderId, status }: { orderId: string; status: OrderStatus }) =>
-      api.updateOrderStatus(orderId, status),
+      api.updateOrderStatus(orderId, status as any),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['restaurant-orders', restaurantId] });
       setShowOrderModal(false);
@@ -135,7 +135,7 @@ export default function OrdersScreen() {
     },
   });
 
-  const orders = (ordersData?.data || []) as Order[];
+  const orders = (ordersData?.data || []) as unknown as Order[];
 
   // REAL-TIME: Subscribe to new orders
   useEffect(() => {

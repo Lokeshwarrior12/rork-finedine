@@ -139,42 +139,42 @@ export default function AnalyticsScreen() {
       value: `$${analytics?.revenue?.toFixed(2) || '0.00'}`,
       icon: DollarSign,
       color: colors.success,
-      trend: analytics?.revenueTrend || '+0%',
-      trendUp: (analytics?.revenueTrend || '').startsWith('+'),
+      trend: (analytics as any)?.revenueTrend || '+0%',
+      trendUp: ((analytics as any)?.revenueTrend || '').startsWith('+'),
     },
     {
       label: 'Transactions',
       value: analytics?.transactions?.toString() || '0',
       icon: ShoppingBag,
       color: colors.primary,
-      trend: analytics?.transactionsTrend || '+0%',
-      trendUp: (analytics?.transactionsTrend || '').startsWith('+'),
+      trend: (analytics as any)?.transactionsTrend || '+0%',
+      trendUp: ((analytics as any)?.transactionsTrend || '').startsWith('+'),
     },
     {
       label: 'Avg. Order',
       value: `$${analytics?.avgOrderValue?.toFixed(2) || '0.00'}`,
       icon: TrendingUp,
       color: colors.accent,
-      trend: analytics?.avgOrderTrend || '+0%',
-      trendUp: (analytics?.avgOrderTrend || '').startsWith('+'),
+      trend: (analytics as any)?.avgOrderTrend || '+0%',
+      trendUp: ((analytics as any)?.avgOrderTrend || '').startsWith('+'),
     },
     {
       label: 'New Customers',
       value: analytics?.newCustomers?.toString() || '0',
       icon: Clock,
       color: colors.secondary,
-      trend: analytics?.customerTrend || '+0%',
-      trendUp: (analytics?.customerTrend || '').startsWith('+'),
+      trend: (analytics as any)?.customerTrend || '+0%',
+      trendUp: ((analytics as any)?.customerTrend || '').startsWith('+'),
     },
   ];
 
   // REAL DATA: Get max values for chart scaling
-  const maxRevenue = analytics?.dailyTrend?.length > 0
-    ? Math.max(...analytics.dailyTrend.map((d: any) => d.revenue))
+  const maxRevenue = (analytics?.dailyTrend?.length ?? 0) > 0
+    ? Math.max(...(analytics?.dailyTrend ?? []).map((d: any) => d.revenue))
     : 1;
 
-  const maxPeakTransactions = analytics?.peakHours?.length > 0
-    ? Math.max(...analytics.peakHours.map((h: any) => h.transactions))
+  const maxPeakTransactions = (analytics?.peakHours?.length ?? 0) > 0
+    ? Math.max(...(analytics?.peakHours ?? []).map((h: any) => h.transactions))
     : 1;
 
   return (
@@ -237,7 +237,7 @@ export default function AnalyticsScreen() {
         </View>
 
         {/* AI Recommendations - REAL DATA */}
-        {analytics?.recommendations && analytics.recommendations.length > 0 && (
+        {(analytics as any)?.recommendations && (analytics as any).recommendations.length > 0 && (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <View style={styles.sectionTitleRow}>
@@ -250,7 +250,7 @@ export default function AnalyticsScreen() {
               </View>
             </View>
 
-            {analytics.recommendations.map((rec: any, index: number) => (
+            {(analytics as any).recommendations.map((rec: any, index: number) => (
               <View key={rec.id || index} style={styles.recommendationCard}>
                 <View style={[styles.recIcon, { backgroundColor: colors.primaryLight }]}>
                   <Lightbulb size={20} color={colors.primary} />

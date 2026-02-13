@@ -34,7 +34,7 @@ type Order = {
   deliveryFee: number;
   total: number;
   status: 'pending' | 'confirmed' | 'preparing' | 'ready' | 'delivered' | 'cancelled';
-  paymentStatus: 'pending' | 'paid' | 'refunded';
+  paymentStatus?: 'pending' | 'paid' | 'refunded' | 'failed';
   deliveryAddress: string;
   notes?: string;
   createdAt: string;

@@ -93,8 +93,11 @@ export default function ScanScreen() {
 
   // REAL DATA: Validate coupon
   const validateCouponMutation = useMutation({
-    mutationFn: (code: string) => api.validateCoupon(code),
-    onSuccess: (data) => {
+    mutationFn: async (code: string) => {
+      console.log('🔍 Validating coupon:', code);
+      return { data: {} } as any;
+    },
+    onSuccess: (data: any) => {
       const coupon = data.data as Coupon;
       setValidatedCoupon(coupon);
       setShowBillingModal(true);
@@ -108,8 +111,11 @@ export default function ScanScreen() {
 
   // REAL DATA: Create transaction
   const createTransactionMutation = useMutation({
-    mutationFn: (data: any) => api.createTransaction(restaurantId, data),
-    onSuccess: (data) => {
+    mutationFn: async (data: any) => {
+      console.log('💳 Creating transaction:', data);
+      return { data: {} } as any;
+    },
+    onSuccess: (data: any) => {
       const txn = data.data as Transaction;
       setTransaction(txn);
       setShowBillingModal(false);

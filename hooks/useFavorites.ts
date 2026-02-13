@@ -32,7 +32,7 @@ export function useFavorites() {
           .eq('user_id', user.id)
          .eq('restaurant_id', restaurantId);
       } else {
-        await db.favorites()
+        await (db.favorites() as any)
           .insert({ user_id: user.id, restaurant_id: restaurantId });
       }
     } catch {

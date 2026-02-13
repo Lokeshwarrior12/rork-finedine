@@ -28,22 +28,23 @@ import Colors from '@/constants/colors';
 import { api } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
 
-type BookingStatus = 'upcoming' | 'completed' | 'cancelled';
+type BookingStatus = 'upcoming' | 'completed' | 'cancelled' | 'pending' | 'confirmed';
 
 interface Booking {
   id: string;
+  userId?: string;
   restaurantId: string;
-  restaurantName: string;
-  restaurantImage: string;
+  restaurantName?: string;
+  restaurantImage?: string;
   date: string;
   time: string;
   guests: number;
-  tableType: string;
-  status: BookingStatus;
+  tableType?: string;
+  status: string;
   specialRequests?: string;
-  confirmationCode: string;
-  createdAt: string;
-  updatedAt: string;
+  confirmationCode?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export default function BookingsScreen() {
@@ -75,7 +76,7 @@ export default function BookingsScreen() {
 
   /* ---------------- CANCEL BOOKING MUTATION ---------------- */
   const cancelBookingMutation = useMutation({
-    mutationFn: (bookingId: string) => api.cancelBooking(bookingId),
+    mutationFn: (bookingId: string) => api.updateBookingStatus(bookingId, 'cancelled'),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['bookings', user?.id] });
       Alert.alert('Success', 'Booking cancelled successfully');
@@ -129,25 +130,33 @@ export default function BookingsScreen() {
     },
   ];
 
-  const getStatusIcon = (status: BookingStatus) => {
+  const getStatusIcon = (status: string) => {
     switch (status) {
       case 'upcoming':
+      case 'pending':
+      case 'confirmed':
         return <Clock size={14} color={Colors.primary} />;
       case 'completed':
         return <CheckCircle size={14} color={Colors.success} />;
       case 'cancelled':
         return <X size={14} color={Colors.error} />;
+      default:
+        return <Clock size={14} color={Colors.primary} />;
     }
   };
 
-  const getStatusColor = (status: BookingStatus) => {
+  const getStatusColor = (status: string) => {
     switch (status) {
       case 'upcoming':
+      case 'pending':
+      case 'confirmed':
         return { bg: `${Colors.primary}15`, text: Colors.primary };
       case 'completed':
         return { bg: `${Colors.success}15`, text: Colors.success };
       case 'cancelled':
         return { bg: `${Colors.error}15`, text: Colors.error };
+      default:
+        return { bg: `${Colors.primary}15`, text: Colors.primary };
     }
   };
 
@@ -233,16 +242,16 @@ export default function BookingsScreen() {
               onPress={() => navigateToRestaurant(booking.restaurantId)}
             >
               <Image
-                source={{ uri: booking.restaurantImage }}
+                source={{ uri: booking.restaurantImage || 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=400' }}
                 style={styles.bookingImage}
                 contentFit="cover"
               />
               <View style={styles.bookingContent}>
                 <View style={styles.bookingHeader}>
-                  <Text style={styles.restaurantName}>{booking.restaurantName}</Text>
-                  <View style={[styles.statusBadge, { backgroundColor: statusColors.bg }]}>
+                  <Text style={styles.restaurantName}>{booking.restaurantName || 'Restaurant'}</Text>
+                  <View style={[styles.statusBadge, { backgroundColor: statusColors?.bg || `${Colors.primary}15` }]}>
                     {getStatusIcon(booking.status)}
-                    <Text style={[styles.statusText, { color: statusColors.text }]}>
+                    <Text style={[styles.statusText, { color: statusColors?.text || Colors.primary }]}>
                       {booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
                     </Text>
                   </View>
@@ -266,7 +275,7 @@ export default function BookingsScreen() {
                 <View style={styles.bookingFooter}>
                   <View style={styles.confirmationCode}>
                     <Text style={styles.confirmationLabel}>Confirmation:</Text>
-                    <Text style={styles.confirmationValue}>{booking.confirmationCode}</Text>
+                    <Text style={styles.confirmationValue}>{booking.confirmationCode || booking.id.slice(0, 8).toUpperCase()}</Text>
                   </View>
 
                   {booking.status === 'upcoming' && (
@@ -337,7 +346,7 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     fontSize: 16,
-    color: Colors.textMuted,
+    color: Colors.textSecondary,
   },
   errorContainer: {
     flex: 1,

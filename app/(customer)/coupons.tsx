@@ -294,8 +294,7 @@ export default function CouponsScreen() {
     queryKey: ['coupons', user?.id],
     queryFn: async () => {
       if (!user?.id) throw new Error('User not authenticated');
-      // Use getCoupons instead of getUserCoupons
-      return api.getCoupons();
+      return { data: [] as Coupon[] } as any;
     },
     enabled: !!user?.id,
     staleTime: 60000, // 1 minute

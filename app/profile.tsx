@@ -67,7 +67,10 @@ export default function ProfileScreen() {
   /* ---------------- FETCH PROFILE FROM REAL API ---------------- */
   const { data: profile, isLoading, isError } = useQuery<UserProfile>({
     queryKey: ['profile'],
-    queryFn: () => api.getUserProfile(),
+    queryFn: async () => {
+      const result = await api.getUserProfile();
+      return result.data as unknown as UserProfile;
+    },
     enabled: !!user,
   });
 
@@ -221,7 +224,7 @@ export default function ProfileScreen() {
             <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>Name</Text>
               <View style={styles.inputContainer}>
-                <User size={20} color={Colors.textMuted} />
+                <User size={20} color={Colors.textSecondary} />
                 <TextInput
                   style={styles.input}
                   placeholder="Full Name"
@@ -234,7 +237,7 @@ export default function ProfileScreen() {
             <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>Phone</Text>
               <View style={styles.inputContainer}>
-                <Phone size={20} color={Colors.textMuted} />
+                <Phone size={20} color={Colors.textSecondary} />
                 <TextInput
                   style={styles.input}
                   placeholder="Phone Number"
@@ -248,7 +251,7 @@ export default function ProfileScreen() {
             <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>Address</Text>
               <View style={styles.inputContainer}>
-                <MapPin size={20} color={Colors.textMuted} />
+                <MapPin size={20} color={Colors.textSecondary} />
                 <TextInput
                   style={styles.input}
                   placeholder="Delivery Address"
@@ -284,7 +287,7 @@ export default function ProfileScreen() {
               <Text style={styles.sectionTitle}>Personal Information</Text>
               
               <View style={styles.infoRow}>
-                <User size={20} color={Colors.textMuted} />
+                <User size={20} color={Colors.textSecondary} />
                 <View style={styles.infoContent}>
                   <Text style={styles.infoLabel}>Name</Text>
                   <Text style={styles.infoValue}>{profile?.name || 'Not set'}</Text>
@@ -292,7 +295,7 @@ export default function ProfileScreen() {
               </View>
 
               <View style={styles.infoRow}>
-                <Phone size={20} color={Colors.textMuted} />
+                <Phone size={20} color={Colors.textSecondary} />
                 <View style={styles.infoContent}>
                   <Text style={styles.infoLabel}>Phone</Text>
                   <Text style={styles.infoValue}>{profile?.phone || 'Not set'}</Text>
@@ -300,7 +303,7 @@ export default function ProfileScreen() {
               </View>
 
               <View style={styles.infoRow}>
-                <MapPin size={20} color={Colors.textMuted} />
+                <MapPin size={20} color={Colors.textSecondary} />
                 <View style={styles.infoContent}>
                   <Text style={styles.infoLabel}>Address</Text>
                   <Text style={styles.infoValue}>{profile?.address || 'Not set'}</Text>
@@ -326,7 +329,7 @@ export default function ProfileScreen() {
               >
                 <Heart size={22} color={Colors.textSecondary} />
                 <Text style={styles.menuItemText}>Favorites</Text>
-                <ChevronRight size={22} color={Colors.textMuted} />
+                <ChevronRight size={22} color={Colors.textSecondary} />
               </Pressable>
 
               <Pressable 
@@ -335,31 +338,31 @@ export default function ProfileScreen() {
               >
                 <ShoppingBag size={22} color={Colors.textSecondary} />
                 <Text style={styles.menuItemText}>Order History</Text>
-                <ChevronRight size={22} color={Colors.textMuted} />
+                <ChevronRight size={22} color={Colors.textSecondary} />
               </Pressable>
 
               <Pressable style={styles.menuItem}>
                 <CreditCard size={22} color={Colors.textSecondary} />
                 <Text style={styles.menuItemText}>Payment Methods</Text>
-                <ChevronRight size={22} color={Colors.textMuted} />
+                <ChevronRight size={22} color={Colors.textSecondary} />
               </Pressable>
 
               <Pressable style={styles.menuItem}>
                 <Gift size={22} color={Colors.textSecondary} />
                 <Text style={styles.menuItemText}>Rewards</Text>
-                <ChevronRight size={22} color={Colors.textMuted} />
+                <ChevronRight size={22} color={Colors.textSecondary} />
               </Pressable>
 
               <Pressable style={styles.menuItem}>
                 <Shield size={22} color={Colors.textSecondary} />
                 <Text style={styles.menuItemText}>Privacy & Security</Text>
-                <ChevronRight size={22} color={Colors.textMuted} />
+                <ChevronRight size={22} color={Colors.textSecondary} />
               </Pressable>
 
               <Pressable style={styles.menuItem}>
                 <HelpCircle size={22} color={Colors.textSecondary} />
                 <Text style={styles.menuItemText}>Help & Support</Text>
-                <ChevronRight size={22} color={Colors.textMuted} />
+                <ChevronRight size={22} color={Colors.textSecondary} />
               </Pressable>
             </View>
 
@@ -379,14 +382,14 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 16 },
-  loadingText: { fontSize: 16, color: Colors.textMuted },
+  loadingText: { fontSize: 16, color: Colors.textSecondary },
   errorContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 16, paddingHorizontal: 32 },
   errorText: { fontSize: 18, color: Colors.error, textAlign: 'center' },
   retryButton: { paddingHorizontal: 24, paddingVertical: 12, backgroundColor: Colors.primary, borderRadius: 12 },
   retryButtonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
   notLoggedIn: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 16, paddingHorizontal: 32 },
   notLoggedInTitle: { fontSize: 24, fontWeight: '700', color: Colors.text },
-  notLoggedInText: { fontSize: 16, color: Colors.textMuted, textAlign: 'center' },
+  notLoggedInText: { fontSize: 16, color: Colors.textSecondary, textAlign: 'center' },
   loginButton: { paddingHorizontal: 32, paddingVertical: 14, backgroundColor: Colors.primary, borderRadius: 12, marginTop: 8 },
   loginButtonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
   header: { paddingBottom: 20, paddingHorizontal: 16 },
@@ -436,7 +439,7 @@ const styles = StyleSheet.create({
   infoSection: { gap: 16 },
   infoRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: Colors.border },
   infoContent: { flex: 1 },
-  infoLabel: { fontSize: 13, color: Colors.textMuted, marginBottom: 2 },
+  infoLabel: { fontSize: 13, color: Colors.textSecondary, marginBottom: 2 },
   infoValue: { fontSize: 16, color: Colors.text, fontWeight: '500' },
   menuSection: { gap: 4 },
   menuItem: {

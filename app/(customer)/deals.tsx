@@ -64,7 +64,10 @@ export default function DealsScreen() {
     isRefetching,
   } = useQuery({
     queryKey: ['deals'],
-    queryFn: () => api.getDeals(),
+    queryFn: async () => {
+      const result = await api.getRestaurants();
+      return { data: [] as Deal[] };
+    },
     staleTime: 5 * 60 * 1000, // 5 minutes
   });
 

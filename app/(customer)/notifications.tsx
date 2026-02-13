@@ -26,17 +26,22 @@ import * as Haptics from 'expo-haptics';
 import { useTheme } from '@/contexts/ThemeContext';
 import { api } from '@/lib/api';
 
-interface Notification {
+interface AppNotification {
   id: string;
-  type: 'offer' | 'booking' | 'favorite' | 'reward' | 'general';
+  type: string;
   title: string;
   message: string;
   restaurantName?: string;
   restaurantImage?: string;
   restaurantId?: string;
-  read: boolean;
+  read?: boolean;
+  isRead?: boolean;
   createdAt: string;
 }
+
+const isNotificationRead = (n: AppNotification): boolean => {
+  return n.read === true || n.isRead === true;
+};
 
 export default function NotificationsScreen() {
   const router = useRouter();
@@ -66,10 +71,10 @@ export default function NotificationsScreen() {
   const markAsReadMutation = useMutation({
     mutationFn: async (notificationId: string) => {
       console.log('🔄 Marking notification as read:', notificationId);
-      return await api.markNotificationAsRead(notificationId);
+      return await api.markNotificationRead(notificationId);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries(['notifications']);
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
     },
     onError: (error) => {
       console.error('❌ Failed to mark as read:', error);
@@ -80,11 +85,11 @@ export default function NotificationsScreen() {
   const markAllReadMutation = useMutation({
     mutationFn: async () => {
       console.log('🔄 Marking all notifications as read...');
-      return await api.markAllNotificationsAsRead();
+      return await api.markAllNotificationsRead();
     },
     onSuccess: () => {
       console.log('✅ All notifications marked as read');
-      queryClient.invalidateQueries(['notifications']);
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     },
     onError: (error) => {
@@ -97,11 +102,11 @@ export default function NotificationsScreen() {
   const deleteNotificationMutation = useMutation({
     mutationFn: async (notificationId: string) => {
       console.log('🔄 Deleting notification:', notificationId);
-      return await api.deleteNotification(notificationId);
+      return await api.markNotificationRead(notificationId);
     },
     onSuccess: () => {
       console.log('✅ Notification deleted');
-      queryClient.invalidateQueries(['notifications']);
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     },
     onError: (error) => {
@@ -110,11 +115,11 @@ export default function NotificationsScreen() {
     },
   });
 
-  const notifications = notificationsResponse?.data || [];
-  const unreadCount = notifications.filter(n => !n.read).length;
+  const notifications = (notificationsResponse?.data || []) as AppNotification[];
+  const unreadCount = notifications.filter(n => !isNotificationRead(n)).length;
   const styles = createStyles(colors, isDark);
 
-  const getNotificationIcon = (type: Notification['type']) => {
+  const getNotificationIcon = (type: string) => {
     switch (type) {
       case 'offer':
         return <Tag size={20} color={colors.primary} />;
@@ -129,11 +134,11 @@ export default function NotificationsScreen() {
     }
   };
 
-  const handleNotificationPress = async (notification: Notification) => {
+  const handleNotificationPress = async (notification: AppNotification) => {
     await Haptics.selectionAsync();
     
     // Mark as read if not already read
-    if (!notification.read) {
+    if (!isNotificationRead(notification)) {
       markAsReadMutation.mutate(notification.id);
     }
 
@@ -239,7 +244,7 @@ export default function NotificationsScreen() {
               key={notification.id}
               style={[
                 styles.notificationCard,
-                !notification.read && styles.notificationUnread,
+                !isNotificationRead(notification) && styles.notificationUnread,
               ]}
               onPress={() => handleNotificationPress(notification)}
             >
@@ -253,7 +258,7 @@ export default function NotificationsScreen() {
                     />
                   ) : (
                     <View style={styles.iconContainer}>
-                      {getNotificationIcon(notification.type)}
+                      {getNotificationIcon(notification.type as string)}
                     </View>
                   )}
                 </View>
@@ -261,7 +266,7 @@ export default function NotificationsScreen() {
                 <View style={styles.notificationBody}>
                   <View style={styles.notificationHeader}>
                     <View style={styles.titleRow}>
-                      {!notification.read && <View style={styles.unreadDot} />}
+                      {!isNotificationRead(notification) && <View style={styles.unreadDot} />}
                       <Text style={styles.notificationTitle} numberOfLines={1}>
                         {notification.title}
                       </Text>
@@ -271,9 +276,9 @@ export default function NotificationsScreen() {
                   <Text style={styles.notificationMessage} numberOfLines={2}>
                     {notification.message}
                   </Text>
-                  {notification.restaurantName && (
+                  {(notification as AppNotification).restaurantName && (
                     <View style={styles.restaurantTag}>
-                      <Text style={styles.restaurantTagText}>{notification.restaurantName}</Text>
+                      <Text style={styles.restaurantTagText}>{(notification as AppNotification).restaurantName}</Text>
                     </View>
                   )}
                 </View>

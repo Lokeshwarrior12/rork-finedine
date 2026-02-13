@@ -193,6 +193,64 @@ export interface Database {
           created_at: string;
         };
       };
+      deals: {
+        Row: {
+          id: string;
+          restaurant_id: string;
+          restaurant_name: string;
+          restaurant_image: string | null;
+          title: string;
+          description: string | null;
+          discount_percent: number;
+          offer_type: string;
+          max_coupons: number;
+          claimed_coupons: number;
+          min_order: number;
+          valid_till: string;
+          valid_from: string | null;
+          valid_until: string | null;
+          days_available: string[];
+          start_time: string;
+          end_time: string;
+          is_active: boolean;
+          terms_conditions: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+      };
+      coupons: {
+        Row: {
+          id: string;
+          deal_id: string;
+          user_id: string;
+          deal_title: string;
+          restaurant_name: string;
+          restaurant_image: string | null;
+          discount_percent: number;
+          status: string;
+          claimed_at: string;
+          expires_at: string;
+          code: string;
+          created_at: string;
+        };
+      };
+      food_waste: {
+        Row: {
+          id: string;
+          restaurant_id: string;
+          item_name: string;
+          category: string | null;
+          quantity: number;
+          unit: string;
+          reason: string;
+          cost_per_unit: number;
+          total_cost: number;
+          date: string;
+          time: string;
+          notes: string | null;
+          created_at: string;
+        };
+      };
     };
   };
 }
@@ -443,6 +501,9 @@ export const db = {
   favorites: () => supabase.from('favorites'),
   inventory: () => supabase.from('inventory'),
   notifications: () => supabase.from('notifications'),
+  deals: () => supabase.from('deals'),
+  coupons: () => supabase.from('coupons'),
+  foodWaste: () => supabase.from('food_waste'),
 };
 
 /* ──────────────────────────────────────────────────────────

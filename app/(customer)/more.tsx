@@ -100,7 +100,7 @@ export default function MoreScreen() {
           label: 'Rewards', 
           route: '/(customer)/rewards', 
           color: colors.success, 
-          badge: `${user?.loyaltyPoints || 0} pts` 
+          badge: `${(user as any)?.loyaltyPoints ?? user?.points ?? 0} pts` 
         },
         { 
           icon: Heart, 

@@ -20,7 +20,7 @@ export default function RestaurantLayout() {
   }
 
   if (user.role !== 'restaurant_owner') {
-    return <Redirect href="/(tabs)" />;
+    return <Redirect href="/" />;
   }
 
   return (

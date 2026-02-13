@@ -199,8 +199,8 @@ export function useClaimDeal() {
               const couponCode = `${dealId.slice(0, 4).toUpperCase()}${Date.now().toString(36).toUpperCase()}`;
               const dealData = snakeToCamel(deal as Record<string, unknown>) as unknown as Deal;
 
-              const { data: coupon, error } = await supabase
-                .from('coupons')
+              const { data: coupon, error } = await (supabase
+                .from('coupons') as any)
                 .insert([{
                   deal_id: dealId,
                   user_id: userId,
@@ -217,8 +217,8 @@ export function useClaimDeal() {
                 .single();
 
               if (!error && coupon) {
-                await supabase
-                  .from('deals')
+                await (supabase
+                  .from('deals') as any)
                   .update({ claimed_coupons: (dealData.claimedCoupons || 0) + 1 })
                   .eq('id', dealId);
 
@@ -330,8 +330,8 @@ export function useCreateTableBooking() {
           const userId = session?.session?.user?.id;
 
           if (userId) {
-            const { data: booking, error } = await supabase
-              .from('bookings')
+            const { data: booking, error } = await (supabase
+              .from('bookings') as any)
               .insert([{
                 restaurant_id: data.restaurantId,
                 user_id: userId,
@@ -388,8 +388,8 @@ export function useCreateServiceBooking() {
           const userId = session?.session?.user?.id;
 
           if (userId) {
-            const { data: booking, error } = await supabase
-              .from('bookings')
+            const { data: booking, error } = await (supabase
+              .from('bookings') as any)
               .insert([{
                 restaurant_id: data.restaurantId,
                 service_id: data.serviceId,
@@ -533,8 +533,8 @@ export function useCreateOrder() {
           const userId = session?.session?.user?.id;
 
           if (userId) {
-            const { data: order, error } = await supabase
-              .from('orders')
+            const { data: order, error } = await (supabase
+              .from('orders') as any)
               .insert([{
                 restaurant_id: data.restaurantId,
                 user_id: userId,
@@ -624,8 +624,8 @@ export function useMarkNotificationRead() {
     mutationFn: async (id: string) => {
       if (isSupabaseConfigured) {
         try {
-          await supabase
-            .from('notifications')
+          await (supabase
+            .from('notifications') as any)
             .update({ read: true })
             .eq('id', id);
         } catch (err) {
@@ -699,8 +699,8 @@ export function useCreateMenuItem() {
       image?: string;
     }) => {
       if (isSupabaseConfigured) {
-        const { data: item, error } = await supabase
-          .from('menu_items')
+        const { data: item, error } = await (supabase
+          .from('menu_items') as any)
           .insert([{
             restaurant_id: data.restaurantId,
             name: data.name,
@@ -756,8 +756,8 @@ export function useUpdateMenuItem() {
         if (data.isAvailable !== undefined) updateData.is_available = data.isAvailable;
         if (data.image !== undefined) updateData.image = data.image;
 
-        const { data: item, error } = await supabase
-          .from('menu_items')
+        const { data: item, error } = await (supabase
+          .from('menu_items') as any)
           .update(updateData)
           .eq('id', id)
           .select()
@@ -833,8 +833,8 @@ export function useUpdateProfile() {
         if (data.phone !== undefined) updateData.phone = data.phone;
         if (data.address !== undefined) updateData.address = data.address;
 
-        const { data: user, error } = await supabase
-          .from('users')
+        const { data: user, error } = await (supabase
+          .from('users') as any)
           .update(updateData)
           .eq('id', data.userId)
           .select()
@@ -882,8 +882,8 @@ export function useUpdateOrderStatus() {
   return useMutation({
     mutationFn: async ({ orderId, status, restaurantId }: { orderId: string; status: string; restaurantId: string }) => {
       if (isSupabaseConfigured) {
-        const { data, error } = await supabase
-          .from('orders')
+        const { data, error } = await (supabase
+          .from('orders') as any)
           .update({ status })
           .eq('id', orderId)
           .select()
@@ -971,8 +971,8 @@ export function useCreateInventoryItem() {
       supplier?: string;
     }) => {
       if (isSupabaseConfigured) {
-        const { data: item, error } = await supabase
-          .from('inventory')
+        const { data: item, error } = await (supabase
+          .from('inventory') as any)
           .insert([{
             restaurant_id: data.restaurantId,
             name: data.name,
@@ -1022,8 +1022,8 @@ export function useUpdateInventoryItem() {
         if (data.costPerUnit !== undefined) updateData.cost_per_unit = data.costPerUnit;
         if (data.supplier !== undefined) updateData.supplier = data.supplier;
 
-        const { data: item, error } = await supabase
-          .from('inventory')
+        const { data: item, error } = await (supabase
+          .from('inventory') as any)
           .update(updateData)
           .eq('id', id)
           .select()
@@ -1111,8 +1111,8 @@ export function useCreateDeal() {
       termsConditions?: string;
     }) => {
       if (isSupabaseConfigured) {
-        const { data: deal, error } = await supabase
-          .from('deals')
+        const { data: deal, error } = await (supabase
+          .from('deals') as any)
           .insert([{
             restaurant_id: data.restaurantId,
             restaurant_name: data.restaurantName,
@@ -1191,8 +1191,8 @@ export function useCreateFoodWaste() {
       notes?: string;
     }) => {
       if (isSupabaseConfigured) {
-        const { data: record, error } = await supabase
-          .from('food_waste')
+        const { data: record, error } = await (supabase
+          .from('food_waste') as any)
           .insert([{
             restaurant_id: data.restaurantId,
             item_name: data.itemName,

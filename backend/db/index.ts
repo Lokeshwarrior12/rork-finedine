@@ -1,5 +1,5 @@
 // backend/db/index.ts
-import { createServerSupabase } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase';
 import { User, Restaurant, Deal, Coupon, Service, BookingSlot, TableBooking, ServiceBooking, Order, FoodWasteRecord, Employee, WeeklySchedule } from '@/types';
 import { Notification, CallBooking } from './schema';
 
@@ -35,7 +35,7 @@ export interface MenuItem {
 
 const svc = (() => {
   try {
-    return createServerSupabase();
+    return supabase;
   } catch (err) {
     console.warn('Supabase service client not configured:', err);
     return null as any;

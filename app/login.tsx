@@ -150,19 +150,14 @@ export default function LoginScreen() {
         // SIGN IN - Authenticate existing user
         console.log('🔐 Signing in user:', email);
 
-        const { user } = await signIn({
+        await signIn({
           email: email.trim(),
           password,
         });
 
-        console.log('✅ Sign in successful, user role:', user?.role);
+        console.log('✅ Sign in successful');
 
-        // Navigate based on user's role from database
-        if (user?.role === 'restaurant_owner') {
-          router.replace('/(restaurant)/dashboard' as Href);
-        } else {
-          router.replace('/(customer)/home' as Href);
-        }
+        router.replace('/(customer)/home' as Href);
       }
     } catch (err: any) {
       console.error('❌ Auth error:', err);

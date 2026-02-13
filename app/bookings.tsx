@@ -27,9 +27,26 @@ import { Platform } from 'react-native';
 import Colors from '@/constants/colors';
 import { api } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
-import type { Booking } from '@/lib/api';
+import type { Booking as APIBooking } from '@/lib/api';
 
-type BookingStatus = 'upcoming' | 'completed' | 'cancelled';
+type BookingStatus = 'upcoming' | 'completed' | 'cancelled' | 'pending' | 'confirmed';
+
+interface BookingDisplay {
+  id: string;
+  userId: string;
+  restaurantId: string;
+  restaurantName?: string;
+  restaurantImage?: string;
+  date: string;
+  time: string;
+  guests: number;
+  tableType?: string;
+  status: string;
+  specialRequests?: string;
+  confirmationCode?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
 
 export default function BookingsScreen() {
   const router = useRouter();
@@ -50,14 +67,14 @@ export default function BookingsScreen() {
     queryFn: async () => {
       if (!user?.id) throw new Error('User not authenticated');
       // Use the correct API method based on your API client
-      const response = await api.getBookings();
+      const response = await api.getUserBookings(user.id);
       return response;
     },
     enabled: !!user?.id,
     staleTime: 60000, // 1 minute
   });
 
-  const bookings = (bookingsData?.data || []) as Booking[];
+  const bookings = (bookingsData?.data || []) as BookingDisplay[];
   const filteredBookings = bookings.filter((b) => b.status === activeTab);
 
   /* ---------------- CANCEL BOOKING MUTATION ---------------- */
@@ -77,7 +94,7 @@ export default function BookingsScreen() {
   });
 
   /* ---------------- HANDLERS ---------------- */
-  const handleCancelBooking = (booking: Booking) => {
+  const handleCancelBooking = (booking: BookingDisplay) => {
     Alert.alert(
       'Cancel Booking',
       `Are you sure you want to cancel your booking at ${booking.restaurantName || 'this restaurant'}?`,
@@ -106,7 +123,7 @@ export default function BookingsScreen() {
     {
       key: 'upcoming',
       label: 'Upcoming',
-      count: bookings.filter((b) => b.status === 'upcoming').length,
+      count: bookings.filter((b) => b.status === 'upcoming' || b.status === 'pending' || b.status === 'confirmed').length,
     },
     {
       key: 'completed',

@@ -165,8 +165,8 @@ export default function ProfileScreen() {
           <View style={styles.profileCard}>
             <View style={styles.avatarSection}>
               <View style={styles.avatarContainer}>
-                {profile?.photo ? (
-                  <Image source={{ uri: profile.photo }} style={styles.avatar} contentFit="cover" />
+                {(profile as any)?.photo ? (
+                  <Image source={{ uri: (profile as any).photo }} style={styles.avatar} contentFit="cover" />
                 ) : (
                   <View style={styles.avatarPlaceholder}>
                     <User size={40} color={colors.textMuted} />
@@ -187,7 +187,7 @@ export default function ProfileScreen() {
                 <View style={[styles.statIcon, { backgroundColor: colors.accentLight }]}>
                   <Award size={20} color={colors.accent} />
                 </View>
-                <Text style={styles.statValue}>{profile?.loyaltyPoints || 0}</Text>
+                <Text style={styles.statValue}>{(profile as any)?.loyaltyPoints ?? (profile as any)?.points ?? 0}</Text>
                 <Text style={styles.statLabel}>Points</Text>
               </View>
               <View style={styles.statDivider} />
@@ -287,16 +287,16 @@ export default function ProfileScreen() {
           <Pressable style={styles.paymentCard} onPress={handleEditProfile}>
             <View style={styles.cardVisual}>
               <CreditCard size={28} color="#fff" />
-              <Text style={styles.cardNumber}>•••• •••• •••• {profile?.cardDetails?.lastFour || '0000'}</Text>
+              <Text style={styles.cardNumber}>•••• •••• •••• {(profile as any)?.cardDetails?.lastFour || '0000'}</Text>
             </View>
             <View style={styles.cardDetails}>
               <View>
                 <Text style={styles.cardLabel}>Card Type</Text>
-                <Text style={styles.cardValue}>{profile?.cardDetails?.cardType || 'Not Added'}</Text>
+                <Text style={styles.cardValue}>{(profile as any)?.cardDetails?.cardType || 'Not Added'}</Text>
               </View>
               <View>
                 <Text style={styles.cardLabel}>Expires</Text>
-                <Text style={styles.cardValue}>{profile?.cardDetails?.expiryDate || 'N/A'}</Text>
+                <Text style={styles.cardValue}>{(profile as any)?.cardDetails?.expiryDate || 'N/A'}</Text>
               </View>
             </View>
           </Pressable>

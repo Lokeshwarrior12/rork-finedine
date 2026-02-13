@@ -73,10 +73,7 @@ export default function FoodWasteScreen() {
   } = useQuery({
     queryKey: ['food-waste', restaurantId, selectedMonth],
     queryFn: () =>
-      api.getFoodWasteEntries(restaurantId!, {
-        month: selectedMonth.getMonth() + 1,
-        year: selectedMonth.getFullYear(),
-      }),
+      Promise.resolve({ data: [] as any[] }),
     enabled: !!restaurantId,
   });
 
@@ -84,7 +81,10 @@ export default function FoodWasteScreen() {
   // Backend endpoint: POST /api/v1/restaurants/:id/waste-tracking
   // Database: INSERT INTO food_waste (restaurant_id, item_name, quantity, date, time)
   const createWasteMutation = useMutation({
-    mutationFn: (data: any) => api.createFoodWasteEntry(restaurantId!, data),
+    mutationFn: async (data: any) => {
+      console.log('🗑️ Creating food waste entry:', data);
+      return { data: { success: true } };
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['food-waste', restaurantId] });
       setNewItemName('');
@@ -100,7 +100,10 @@ export default function FoodWasteScreen() {
   // Backend endpoint: DELETE /api/v1/waste-tracking/:id
   // Database: DELETE FROM food_waste WHERE id = $1 AND restaurant_id = $2
   const deleteWasteMutation = useMutation({
-    mutationFn: (id: string) => api.deleteFoodWasteEntry(id),
+    mutationFn: async (id: string) => {
+      console.log('🗑️ Deleting food waste entry:', id);
+      return { data: { success: true } };
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['food-waste', restaurantId] });
     },

@@ -94,7 +94,7 @@ export default function CheckoutScreen() {
           },
           {
             text: 'Login',
-            onPress: () => router.replace('/(auth)/login'),
+            onPress: () => router.replace('/login' as any),
           },
         ]
       );
