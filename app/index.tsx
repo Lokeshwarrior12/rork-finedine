@@ -42,6 +42,7 @@ export default function WelcomeScreen() {
 
   useEffect(() => {
     if (!isLoading && user) {
+      // Route based on user role from real backend
       router.replace(
         (user.role === 'customer'
           ? '/(customer)/home'
@@ -87,12 +88,15 @@ export default function WelcomeScreen() {
           <View style={styles.logoCircle}>
             <Utensils size={48} color={Colors.surface} />
           </View>
-          <Text style={styles.logoText}>PrimeDine</Text>
-          <Text style={styles.tagline}>Discover • Dine • Save</Text>
+          <Text style={styles.logoText}>FineDine</Text>
+          <Text style={styles.tagline}>Discover • Order • Enjoy</Text>
         </View>
 
         <View style={styles.cardsContainer}>
-          <Pressable style={styles.card} onPress={() => router.push('/login?role=customer' as Href)}>
+          <Pressable 
+            style={styles.card} 
+            onPress={() => router.push('/login?role=customer' as Href)}
+          >
             <LinearGradient
               colors={[Colors.primary, Colors.primaryDark]}
               style={styles.cardGradient}
@@ -103,7 +107,10 @@ export default function WelcomeScreen() {
             </LinearGradient>
           </Pressable>
 
-          <Pressable style={styles.card} onPress={() => router.push('/login?role=restaurant_owner' as Href)}>
+          <Pressable 
+            style={styles.card} 
+            onPress={() => router.push('/partner' as Href)}
+          >
             <LinearGradient
               colors={[Colors.secondary, '#2D2D4A']}
               style={styles.cardGradient}
@@ -149,8 +156,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  logoText: { fontSize: 36, fontWeight: '700', color: Colors.surface },
-  tagline: { fontSize: 16, color: Colors.textLight },
+  logoText: { 
+    fontSize: 36, 
+    fontWeight: '700', 
+    color: Colors.surface,
+    marginTop: 16,
+  },
+  tagline: { 
+    fontSize: 16, 
+    color: Colors.textLight,
+    marginTop: 8,
+  },
   cardsContainer: { gap: 16 },
   card: { borderRadius: 20, overflow: 'hidden' },
   cardGradient: {
@@ -159,14 +175,11 @@ const styles = StyleSheet.create({
     padding: 20,
     justifyContent: 'space-between',
   },
-  cardTitle: { fontSize: 18, fontWeight: '600', color: Colors.surface },
-  debugButton: {
-    alignSelf: 'center',
-    marginTop: 20,
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.15)',
+  cardTitle: { 
+    fontSize: 18, 
+    fontWeight: '600', 
+    color: Colors.surface,
+    flex: 1,
+    marginLeft: 16,
   },
-  debugText: { color: Colors.surface, fontWeight: '600' },
 });
