@@ -68,9 +68,9 @@
       "apiUrl": "http://localhost:8080/api/v1",
       "apiUrlProduction": "https://primedine.fly.dev/",
       "supabaseUrl": "https://qtmvztgxfvqmqekdhnxw.supabase.co",
-      "supabaseAnonKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF0bXZ6dGd4ZnZxbXFla2RobnhXIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MDkxMjM0NTYsImV4cCI6MjAyNDY5OTQ1Nn0.xxxxx",
+      "supabaseAnonKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlieXloandyaGFlaGhtem55YWR6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjgxMTIyNzEsImV4cCI6MjA4MzY4ODI3MX0.yTOtqjeKEIuRdZ-8BgWK3x2zVbT8XgaAlCqj1EbsYvs",
       "eas": {
-        "projectId": "your-eas-project-id"
+        "projectId": "70eb24db"
       }
     },
     "updates": {
