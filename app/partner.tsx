@@ -10,6 +10,7 @@ import {
   ScrollView,
   ActivityIndicator,
   Dimensions,
+  Alert,
 } from 'react-native';
 import { useRouter, Href } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -29,6 +30,7 @@ import {
   Star,
   ArrowRight,
   Phone,
+  User,
 } from 'lucide-react-native';
 
 import { useAuth } from '@/contexts/AuthContext';
@@ -39,8 +41,8 @@ const { width } = Dimensions.get('window');
 const FEATURES = [
   { icon: TrendingUp, title: 'Analytics Dashboard', desc: 'Real-time insights & reports' },
   { icon: Users, title: 'Customer Management', desc: 'Build lasting relationships' },
-  { icon: Calendar, title: 'Table Booking System', desc: 'Automated reservations' },
-  { icon: BarChart3, title: 'Inventory Tracking', desc: 'Smart stock management' },
+  { icon: Calendar, title: 'Order Management', desc: 'Streamline operations' },
+  { icon: BarChart3, title: 'Revenue Tracking', desc: 'Monitor performance' },
   { icon: Utensils, title: 'Menu Management', desc: 'Digital menu builder' },
   { icon: Shield, title: 'Secure Platform', desc: 'Enterprise-grade security' },
 ];
@@ -55,57 +57,15 @@ export default function PartnerScreen() {
   const insets = useSafeAreaInsets();
   const { signup, signupPending } = useAuth();
 
-  const [step, setStep] = useState<'info' | 'verify' | 'signup'>('info');
+  const [step, setStep] = useState<'info' | 'signup'>('info');
   const [restaurantName, setRestaurantName] = useState('');
   const [ownerName, setOwnerName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
-  const [verificationCode, setVerificationCode] = useState('');
   const [error, setError] = useState('');
-  const [isLoadingCode, setIsLoadingCode] = useState(false);
-  const [isVerifyingCode, setIsVerifyingCode] = useState(false);
 
-  const handleSendCode = async () => {
-    setIsLoadingCode(true);
-    setError('');
-    try {
-      // TODO: Implement actual API call when backend endpoint is ready
-      // await api.sendVerificationCode({ email });
-      
-      // For now, simulate success
-      console.log('Verification code would be sent to:', email);
-      setStep('verify');
-    } catch (err: any) {
-      setError(err.message || 'Failed to send verification code');
-    } finally {
-      setIsLoadingCode(false);
-    }
-  };
-
-  const handleVerifyCode = async () => {
-    if (verificationCode.length !== 6) {
-      setError('Please enter the 6-digit code');
-      return;
-    }
-    
-    setIsVerifyingCode(true);
-    setError('');
-    try {
-      // TODO: Implement actual API call when backend endpoint is ready
-      // await api.verifyCode({ email, code: verificationCode });
-      
-      // For now, simulate success
-      console.log('Verifying code:', verificationCode, 'for email:', email);
-      setStep('signup');
-    } catch (err: any) {
-      setError(err.message || 'Invalid verification code');
-    } finally {
-      setIsVerifyingCode(false);
-    }
-  };
-
-  const handleContinueToVerify = () => {
+  const handleContinueToSignup = () => {
     if (!restaurantName || !ownerName || !email || !phone) {
       setError('Please fill in all fields');
       return;
@@ -115,7 +75,7 @@ export default function PartnerScreen() {
       return;
     }
     setError('');
-    handleSendCode();
+    setStep('signup');
   };
 
   const handleSignup = async () => {
@@ -124,11 +84,29 @@ export default function PartnerScreen() {
       return;
     }
     setError('');
+    
     try {
-      await signup({ email, password, name: ownerName, role: 'restaurant_owner' });
-      router.replace('/(restaurant)/dashboard' as Href);
-    } catch {
-      setError('Signup failed. Please try again.');
+      // Sign up with real backend API
+      await signup({ 
+        email, 
+        password, 
+        name: ownerName, 
+        phone,
+        role: 'restaurant_owner',
+      });
+      
+      Alert.alert(
+        'Success!', 
+        'Account created successfully. Please complete your restaurant profile.',
+        [
+          {
+            text: 'Continue',
+            onPress: () => router.replace('/(restaurant)/dashboard' as Href),
+          },
+        ]
+      );
+    } catch (err: any) {
+      setError(err.message || 'Signup failed. Please try again.');
     }
   };
 
@@ -207,7 +185,7 @@ export default function PartnerScreen() {
         </View>
 
         <View style={styles.inputContainer}>
-          <Users size={20} color="rgba(255,255,255,0.5)" style={styles.inputIcon} />
+          <User size={20} color="rgba(255,255,255,0.5)" style={styles.inputIcon} />
           <TextInput
             style={styles.input}
             placeholder="Owner Name"
@@ -246,17 +224,10 @@ export default function PartnerScreen() {
 
         <Pressable 
           style={styles.primaryButton} 
-          onPress={handleContinueToVerify}
-          disabled={isLoadingCode}
+          onPress={handleContinueToSignup}
         >
-          {isLoadingCode ? (
-            <ActivityIndicator color="#1A1A2E" />
-          ) : (
-            <>
-              <Text style={styles.primaryButtonText}>Continue</Text>
-              <ArrowRight size={20} color="#1A1A2E" />
-            </>
-          )}
+          <Text style={styles.primaryButtonText}>Continue</Text>
+          <ArrowRight size={20} color="#1A1A2E" />
         </Pressable>
 
         <View style={styles.loginRow}>
@@ -269,65 +240,12 @@ export default function PartnerScreen() {
     </>
   );
 
-  const renderVerifyStep = () => (
-    <View style={styles.verifyContainer}>
-      <View style={styles.verifyIconWrap}>
-        <Mail size={48} color={Colors.primary} />
-      </View>
-      <Text style={styles.verifyTitle}>Verify Your Email</Text>
-      <Text style={styles.verifySubtitle}>
-        We&apos;ve sent a 6-digit code to{'\n'}
-        <Text style={styles.verifyEmail}>{email}</Text>
-      </Text>
-
-      <View style={styles.codeInputContainer}>
-        <TextInput
-          style={styles.codeInput}
-          placeholder="000000"
-          placeholderTextColor="rgba(255,255,255,0.3)"
-          value={verificationCode}
-          onChangeText={setVerificationCode}
-          keyboardType="number-pad"
-          maxLength={6}
-        />
-      </View>
-
-      {error ? <Text style={styles.errorText}>{error}</Text> : null}
-
-      <Pressable 
-        style={styles.primaryButton} 
-        onPress={handleVerifyCode}
-        disabled={isVerifyingCode}
-      >
-        {isVerifyingCode ? (
-          <ActivityIndicator color="#1A1A2E" />
-        ) : (
-          <Text style={styles.primaryButtonText}>Verify Email</Text>
-        )}
-      </Pressable>
-
-      <Pressable 
-        style={styles.resendButton}
-        onPress={handleSendCode}
-        disabled={isLoadingCode}
-      >
-        <Text style={styles.resendText}>
-          {isLoadingCode ? 'Sending...' : 'Resend Code'}
-        </Text>
-      </Pressable>
-
-      <Pressable style={styles.backButton} onPress={() => setStep('info')}>
-        <Text style={styles.backText}>← Back</Text>
-      </Pressable>
-    </View>
-  );
-
   const renderSignupStep = () => (
     <View style={styles.signupContainer}>
       <View style={styles.verifyIconWrap}>
         <CheckCircle size={48} color={Colors.success} />
       </View>
-      <Text style={styles.verifyTitle}>Email Verified!</Text>
+      <Text style={styles.verifyTitle}>Almost There!</Text>
       <Text style={styles.verifySubtitle}>
         Create a secure password to complete your registration
       </Text>
@@ -344,6 +262,10 @@ export default function PartnerScreen() {
         <View style={styles.summaryRow}>
           <Text style={styles.summaryLabel}>Email</Text>
           <Text style={styles.summaryValue}>{email}</Text>
+        </View>
+        <View style={styles.summaryRow}>
+          <Text style={styles.summaryLabel}>Phone</Text>
+          <Text style={styles.summaryValue}>{phone}</Text>
         </View>
       </View>
 
@@ -376,7 +298,7 @@ export default function PartnerScreen() {
         )}
       </Pressable>
 
-      <Pressable style={styles.backButton} onPress={() => setStep('verify')}>
+      <Pressable style={styles.backButton} onPress={() => setStep('info')}>
         <Text style={styles.backText}>← Back</Text>
       </Pressable>
     </View>
@@ -416,7 +338,6 @@ export default function PartnerScreen() {
           </View>
 
           {step === 'info' && renderInfoStep()}
-          {step === 'verify' && renderVerifyStep()}
           {step === 'signup' && renderSignupStep()}
         </ScrollView>
       </KeyboardAvoidingView>
@@ -425,16 +346,9 @@ export default function PartnerScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  keyboardView: {
-    flex: 1,
-  },
-  scrollContent: {
-    flexGrow: 1,
-    paddingHorizontal: 24,
-  },
+  container: { flex: 1 },
+  keyboardView: { flex: 1 },
+  scrollContent: { flexGrow: 1, paddingHorizontal: 24 },
   closeButton: {
     width: 40,
     height: 40,
@@ -444,11 +358,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignSelf: 'flex-end',
   },
-  header: {
-    alignItems: 'center',
-    marginTop: 16,
-    marginBottom: 24,
-  },
+  header: { alignItems: 'center', marginTop: 16, marginBottom: 24 },
   logoWrap: {
     width: 60,
     height: 60,
@@ -458,22 +368,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: 16,
   },
-  title: {
-    fontSize: 26,
-    fontWeight: '700' as const,
-    color: '#fff',
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  subtitle: {
-    fontSize: 15,
-    color: 'rgba(255, 255, 255, 0.6)',
-    textAlign: 'center',
-  },
-  heroSection: {
-    alignItems: 'center',
-    marginBottom: 24,
-  },
+  title: { fontSize: 26, fontWeight: '700', color: '#fff', marginBottom: 8, textAlign: 'center' },
+  subtitle: { fontSize: 15, color: 'rgba(255, 255, 255, 0.6)', textAlign: 'center' },
+  heroSection: { alignItems: 'center', marginBottom: 24 },
   priceBadge: {
     backgroundColor: 'rgba(232, 93, 4, 0.15)',
     borderRadius: 20,
@@ -483,83 +380,20 @@ const styles = StyleSheet.create({
     borderColor: Colors.primary,
     alignItems: 'center',
   },
-  priceLabel: {
-    fontSize: 12,
-    color: Colors.primary,
-    fontWeight: '600' as const,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-    marginBottom: 4,
-  },
-  priceRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-  },
-  currency: {
-    fontSize: 24,
-    color: '#fff',
-    fontWeight: '600' as const,
-    marginTop: 4,
-  },
-  price: {
-    fontSize: 56,
-    color: '#fff',
-    fontWeight: '700' as const,
-  },
-  pricePeriod: {
-    fontSize: 16,
-    color: 'rgba(255, 255, 255, 0.6)',
-    marginTop: 8,
-    marginLeft: 4,
-  },
-  priceNote: {
-    fontSize: 12,
-    color: 'rgba(255, 255, 255, 0.5)',
-    marginTop: 4,
-  },
-  statsRow: {
-    flexDirection: 'row',
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 24,
-  },
-  statItem: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  statNumber: {
-    fontSize: 22,
-    fontWeight: '700' as const,
-    color: '#fff',
-  },
-  statLabel: {
-    fontSize: 12,
-    color: 'rgba(255, 255, 255, 0.5)',
-    marginTop: 2,
-  },
-  statDivider: {
-    width: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600' as const,
-    color: '#fff',
-    marginBottom: 16,
-  },
-  featuresGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-    marginBottom: 24,
-  },
-  featureCard: {
-    width: (width - 60) / 2,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    borderRadius: 14,
-    padding: 14,
-  },
+  priceLabel: { fontSize: 12, color: Colors.primary, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 },
+  priceRow: { flexDirection: 'row', alignItems: 'flex-start' },
+  currency: { fontSize: 24, color: '#fff', fontWeight: '600', marginTop: 4 },
+  price: { fontSize: 56, color: '#fff', fontWeight: '700' },
+  pricePeriod: { fontSize: 16, color: 'rgba(255, 255, 255, 0.6)', marginTop: 8, marginLeft: 4 },
+  priceNote: { fontSize: 12, color: 'rgba(255, 255, 255, 0.5)', marginTop: 4 },
+  statsRow: { flexDirection: 'row', backgroundColor: 'rgba(255, 255, 255, 0.05)', borderRadius: 16, padding: 16, marginBottom: 24 },
+  statItem: { flex: 1, alignItems: 'center' },
+  statNumber: { fontSize: 22, fontWeight: '700', color: '#fff' },
+  statLabel: { fontSize: 12, color: 'rgba(255, 255, 255, 0.5)', marginTop: 2 },
+  statDivider: { width: 1, backgroundColor: 'rgba(255, 255, 255, 0.1)' },
+  sectionTitle: { fontSize: 18, fontWeight: '600', color: '#fff', marginBottom: 16 },
+  featuresGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 24 },
+  featureCard: { width: (width - 60) / 2, backgroundColor: 'rgba(255, 255, 255, 0.05)', borderRadius: 14, padding: 14 },
   featureIconWrap: {
     width: 36,
     height: 36,
@@ -569,55 +403,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: 10,
   },
-  featureTitle: {
-    fontSize: 13,
-    fontWeight: '600' as const,
-    color: '#fff',
-    marginBottom: 2,
-  },
-  featureDesc: {
-    fontSize: 11,
-    color: 'rgba(255, 255, 255, 0.5)',
-  },
-  testimonialsSection: {
-    marginBottom: 24,
-  },
-  testimonialCard: {
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    borderRadius: 14,
-    padding: 16,
-    marginBottom: 12,
-  },
-  testimonialStars: {
-    flexDirection: 'row',
-    gap: 2,
-    marginBottom: 8,
-  },
-  testimonialQuote: {
-    fontSize: 14,
-    color: '#fff',
-    fontStyle: 'italic',
-    lineHeight: 20,
-    marginBottom: 8,
-  },
-  testimonialAuthor: {
-    fontSize: 13,
-    fontWeight: '600' as const,
-    color: '#fff',
-  },
-  testimonialRestaurant: {
-    fontSize: 12,
-    color: 'rgba(255, 255, 255, 0.5)',
-  },
-  form: {
-    gap: 14,
-  },
-  formTitle: {
-    fontSize: 18,
-    fontWeight: '600' as const,
-    color: '#fff',
-    marginBottom: 4,
-  },
+  featureTitle: { fontSize: 13, fontWeight: '600', color: '#fff', marginBottom: 2 },
+  featureDesc: { fontSize: 11, color: 'rgba(255, 255, 255, 0.5)' },
+  testimonialsSection: { marginBottom: 24 },
+  testimonialCard: { backgroundColor: 'rgba(255, 255, 255, 0.05)', borderRadius: 14, padding: 16, marginBottom: 12 },
+  testimonialStars: { flexDirection: 'row', gap: 2, marginBottom: 8 },
+  testimonialQuote: { fontSize: 14, color: '#fff', fontStyle: 'italic', lineHeight: 20, marginBottom: 8 },
+  testimonialAuthor: { fontSize: 13, fontWeight: '600', color: '#fff' },
+  testimonialRestaurant: { fontSize: 12, color: 'rgba(255, 255, 255, 0.5)' },
+  form: { gap: 14 },
+  formTitle: { fontSize: 18, fontWeight: '600', color: '#fff', marginBottom: 4 },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -628,19 +423,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.1)',
   },
-  inputIcon: {
-    marginRight: 12,
-  },
-  input: {
-    flex: 1,
-    fontSize: 15,
-    color: '#fff',
-  },
-  errorText: {
-    color: '#FF6B6B',
-    fontSize: 13,
-    textAlign: 'center',
-  },
+  inputIcon: { marginRight: 12 },
+  input: { flex: 1, fontSize: 15, color: '#fff' },
+  errorText: { color: '#FF6B6B', fontSize: 13, textAlign: 'center' },
   primaryButton: {
     flexDirection: 'row',
     backgroundColor: Colors.primary,
@@ -651,92 +436,22 @@ const styles = StyleSheet.create({
     gap: 8,
     marginTop: 8,
   },
-  primaryButtonText: {
-    fontSize: 16,
-    fontWeight: '600' as const,
-    color: '#1A1A2E',
-  },
-  loginRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    marginTop: 16,
-  },
-  loginText: {
-    color: 'rgba(255, 255, 255, 0.6)',
-    fontSize: 14,
-  },
-  loginLink: {
-    color: Colors.primary,
-    fontSize: 14,
-    fontWeight: '600' as const,
-  },
-  verifyContainer: {
-    alignItems: 'center',
-    paddingTop: 20,
-  },
+  primaryButtonText: { fontSize: 16, fontWeight: '600', color: '#1A1A2E' },
+  loginRow: { flexDirection: 'row', justifyContent: 'center', marginTop: 16 },
+  loginText: { color: 'rgba(255, 255, 255, 0.6)', fontSize: 14 },
+  loginLink: { color: Colors.primary, fontSize: 14, fontWeight: '600' },
+  signupContainer: { alignItems: 'center', paddingTop: 20 },
   verifyIconWrap: {
     width: 88,
     height: 88,
     borderRadius: 44,
-    backgroundColor: 'rgba(232, 93, 4, 0.15)',
+    backgroundColor: 'rgba(76, 175, 80, 0.15)',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 24,
   },
-  verifyTitle: {
-    fontSize: 24,
-    fontWeight: '700' as const,
-    color: '#fff',
-    marginBottom: 8,
-  },
-  verifySubtitle: {
-    fontSize: 15,
-    color: 'rgba(255, 255, 255, 0.6)',
-    textAlign: 'center',
-    lineHeight: 22,
-    marginBottom: 24,
-  },
-  verifyEmail: {
-    color: Colors.primary,
-    fontWeight: '600' as const,
-  },
-  codeInputContainer: {
-    width: '100%',
-    marginBottom: 16,
-  },
-  codeInput: {
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    borderRadius: 14,
-    height: 60,
-    fontSize: 28,
-    fontWeight: '600' as const,
-    color: '#fff',
-    textAlign: 'center',
-    letterSpacing: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
-  },
-  resendButton: {
-    marginTop: 16,
-    padding: 12,
-  },
-  resendText: {
-    color: Colors.primary,
-    fontSize: 14,
-    fontWeight: '600' as const,
-  },
-  backButton: {
-    marginTop: 8,
-    padding: 12,
-  },
-  backText: {
-    color: 'rgba(255, 255, 255, 0.6)',
-    fontSize: 14,
-  },
-  signupContainer: {
-    alignItems: 'center',
-    paddingTop: 20,
-  },
+  verifyTitle: { fontSize: 24, fontWeight: '700', color: '#fff', marginBottom: 8 },
+  verifySubtitle: { fontSize: 15, color: 'rgba(255, 255, 255, 0.6)', textAlign: 'center', lineHeight: 22, marginBottom: 24 },
   summaryCard: {
     width: '100%',
     backgroundColor: 'rgba(255, 255, 255, 0.05)',
@@ -745,17 +460,9 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     gap: 12,
   },
-  summaryRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  summaryLabel: {
-    fontSize: 13,
-    color: 'rgba(255, 255, 255, 0.5)',
-  },
-  summaryValue: {
-    fontSize: 13,
-    color: '#fff',
-    fontWeight: '500' as const,
-  },
+  summaryRow: { flexDirection: 'row', justifyContent: 'space-between' },
+  summaryLabel: { fontSize: 13, color: 'rgba(255, 255, 255, 0.5)' },
+  summaryValue: { fontSize: 13, color: '#fff', fontWeight: '500' },
+  backButton: { marginTop: 8, padding: 12 },
+  backText: { color: 'rgba(255, 255, 255, 0.6)', fontSize: 14 },
 });
