@@ -1,7 +1,7 @@
 // app/(customer)/checkout.tsx
-// Checkout & Order Placement Screen
+// Checkout & Order Placement Screen with Real Backend Integration
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -23,9 +23,27 @@ import {
 } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { api } from '@/lib/api';
+import { api, CreateOrderRequest } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
-import Colors from '@/constants/colors';
+
+/* ──────────────────────────────────────────────────────────
+   Constants
+────────────────────────────────────────────────────────── */
+
+const Colors = {
+  primary: '#F97316',
+  success: '#4CAF50',
+  error: '#FF3B30',
+  text: '#333',
+  textSecondary: '#666',
+  background: '#fff',
+  surface: '#f9f9f9',
+  border: '#f0f0f0',
+};
+
+/* ──────────────────────────────────────────────────────────
+   Types
+────────────────────────────────────────────────────────── */
 
 interface CartItem {
   menuItem: {
@@ -36,47 +54,92 @@ interface CartItem {
   quantity: number;
 }
 
+/* ──────────────────────────────────────────────────────────
+   Component
+────────────────────────────────────────────────────────── */
+
 export default function CheckoutScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const { user } = useAuth();
+  
   const { restaurantId, cartData } = useLocalSearchParams<{
     restaurantId: string;
     cartData: string;
   }>();
 
+  // Parse cart data
   const cart: CartItem[] = cartData ? JSON.parse(cartData) : [];
 
+  // Local state
   const [deliveryAddress, setDeliveryAddress] = useState('');
   const [notes, setNotes] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<'card' | 'cash'>('card');
 
+  /* ────────────────────────────────────────────────────────
+     Authentication Check
+  ──────────────────────────────────────────────────────── */
+
+  useEffect(() => {
+    if (!user) {
+      Alert.alert(
+        'Login Required',
+        'Please log in to place an order',
+        [
+          {
+            text: 'Cancel',
+            style: 'cancel',
+            onPress: () => router.back(),
+          },
+          {
+            text: 'Login',
+            onPress: () => router.replace('/(auth)/login'),
+          },
+        ]
+      );
+    }
+  }, [user]);
+
+  /* ────────────────────────────────────────────────────────
+     Data Fetching
+  ──────────────────────────────────────────────────────── */
+
   // Fetch restaurant details
-  const { data: restaurantData } = useQuery({
+  const { data: restaurantData, isLoading: restaurantLoading } = useQuery({
     queryKey: ['restaurant', restaurantId],
     queryFn: () => api.getRestaurant(restaurantId!),
     enabled: !!restaurantId,
   });
 
   // Fetch user profile for default address
-  const { data: profileData } = useQuery({
+  const { data: profileData, isLoading: profileLoading } = useQuery({
     queryKey: ['profile'],
     queryFn: () => api.getUserProfile(),
     enabled: !!user,
   });
 
-  React.useEffect(() => {
+  // Pre-fill address from profile
+  useEffect(() => {
     if (profileData?.data?.address && !deliveryAddress) {
       setDeliveryAddress(profileData.data.address);
     }
   }, [profileData]);
 
-  // Create order mutation
+  /* ────────────────────────────────────────────────────────
+     Order Creation Mutation
+  ──────────────────────────────────────────────────────── */
+
   const createOrderMutation = useMutation({
-    mutationFn: (orderData: any) => api.createOrder(orderData),
+    mutationFn: (orderData: CreateOrderRequest) => api.createOrder(orderData),
     onSuccess: (response) => {
+      console.log('✅ Order created:', response.data.id);
+      
+      // Invalidate orders cache
       queryClient.invalidateQueries({ queryKey: ['orders'] });
+      queryClient.invalidateQueries({ queryKey: ['user-orders'] });
+
+      // Navigate to order tracking
       Alert.alert(
         'Order Placed!',
         'Your order has been placed successfully.',
@@ -89,6 +152,7 @@ export default function CheckoutScreen() {
       );
     },
     onError: (error: any) => {
+      console.error('❌ Order creation failed:', error);
       Alert.alert(
         'Order Failed',
         error.message || 'Failed to place order. Please try again.'
@@ -98,13 +162,24 @@ export default function CheckoutScreen() {
 
   const restaurant = restaurantData?.data;
 
-  // Calculate totals
-  const subtotal = cart.reduce((sum, item) => sum + item.menuItem.price * item.quantity, 0);
+  /* ────────────────────────────────────────────────────────
+     Order Calculations
+  ──────────────────────────────────────────────────────── */
+
+  const subtotal = cart.reduce(
+    (sum, item) => sum + item.menuItem.price * item.quantity,
+    0
+  );
   const tax = subtotal * 0.1; // 10% tax
   const deliveryFee = 5.0;
   const total = subtotal + tax + deliveryFee;
 
+  /* ────────────────────────────────────────────────────────
+     Order Submission
+  ──────────────────────────────────────────────────────── */
+
   const handlePlaceOrder = () => {
+    // Validation
     if (!deliveryAddress.trim()) {
       Alert.alert('Missing Address', 'Please enter a delivery address.');
       return;
@@ -115,9 +190,14 @@ export default function CheckoutScreen() {
       return;
     }
 
+    if (!restaurantId) {
+      Alert.alert('Error', 'Restaurant information is missing.');
+      return;
+    }
+
     // Prepare order data
-    const orderData = {
-      restaurantId: restaurantId!,
+    const orderData: CreateOrderRequest = {
+      restaurantId: restaurantId,
       items: cart.map((item) => ({
         menuItemId: item.menuItem.id,
         name: item.menuItem.name,
@@ -125,18 +205,38 @@ export default function CheckoutScreen() {
         price: item.menuItem.price,
       })),
       deliveryAddress: deliveryAddress.trim(),
-      notes: notes.trim(),
+      notes: notes.trim() || undefined,
     };
 
+    console.log('📦 Placing order:', orderData);
+
+    // Submit order
     createOrderMutation.mutate(orderData);
   };
+
+  /* ────────────────────────────────────────────────────────
+     Loading State
+  ──────────────────────────────────────────────────────── */
+
+  if (restaurantLoading || profileLoading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={Colors.primary} />
+        <Text style={styles.loadingText}>Loading...</Text>
+      </View>
+    );
+  }
+
+  /* ────────────────────────────────────────────────────────
+     Render
+  ──────────────────────────────────────────────────────── */
 
   return (
     <View style={styles.container}>
       {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
         <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-          <ArrowLeft size={24} color="#333" />
+          <ArrowLeft size={24} color={Colors.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Checkout</Text>
         <View style={{ width: 40 }} />
@@ -147,6 +247,7 @@ export default function CheckoutScreen() {
           styles.scrollContent,
           { paddingBottom: insets.bottom + 100 },
         ]}
+        showsVerticalScrollIndicator={false}
       >
         {/* Restaurant Info */}
         {restaurant && (
@@ -156,7 +257,7 @@ export default function CheckoutScreen() {
               <Text style={styles.restaurantName}>{restaurant.name}</Text>
               <Text style={styles.restaurantAddress}>{restaurant.address}</Text>
               <View style={styles.estimatedTime}>
-                <Clock size={14} color="#666" />
+                <Clock size={14} color={Colors.textSecondary} />
                 <Text style={styles.estimatedTimeText}>30-45 min</Text>
               </View>
             </View>
@@ -183,10 +284,11 @@ export default function CheckoutScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Delivery Address</Text>
           <View style={styles.inputContainer}>
-            <MapPin size={20} color="#666" style={styles.inputIcon} />
+            <MapPin size={20} color={Colors.textSecondary} style={styles.inputIcon} />
             <TextInput
               style={styles.input}
               placeholder="Enter delivery address"
+              placeholderTextColor="#999"
               value={deliveryAddress}
               onChangeText={setDeliveryAddress}
               multiline
@@ -201,6 +303,7 @@ export default function CheckoutScreen() {
           <TextInput
             style={styles.notesInput}
             placeholder="Add any special instructions for the restaurant..."
+            placeholderTextColor="#999"
             value={notes}
             onChangeText={setNotes}
             multiline
@@ -221,7 +324,7 @@ export default function CheckoutScreen() {
             onPress={() => setPaymentMethod('card')}
           >
             <View style={styles.paymentOptionLeft}>
-              <CreditCard size={20} color="#666" />
+              <CreditCard size={20} color={Colors.textSecondary} />
               <Text style={styles.paymentOptionText}>Credit/Debit Card</Text>
             </View>
             {paymentMethod === 'card' && (
@@ -293,10 +396,25 @@ export default function CheckoutScreen() {
   );
 }
 
+/* ──────────────────────────────────────────────────────────
+   Styles
+────────────────────────────────────────────────────────── */
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: Colors.background,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: Colors.background,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: Colors.textSecondary,
   },
   header: {
     flexDirection: 'row',
@@ -305,7 +423,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: Colors.border,
+    backgroundColor: Colors.background,
   },
   backButton: {
     width: 40,
@@ -316,7 +435,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#333',
+    color: Colors.text,
   },
   scrollContent: {
     padding: 16,
@@ -327,23 +446,25 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#333',
+    color: Colors.text,
     marginBottom: 12,
   },
   restaurantCard: {
-    backgroundColor: '#f9f9f9',
+    backgroundColor: Colors.surface,
     borderRadius: 12,
     padding: 16,
+    borderWidth: 1,
+    borderColor: Colors.border,
   },
   restaurantName: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#333',
+    color: Colors.text,
     marginBottom: 4,
   },
   restaurantAddress: {
     fontSize: 13,
-    color: '#666',
+    color: Colors.textSecondary,
     marginBottom: 8,
   },
   estimatedTime: {
@@ -353,20 +474,20 @@ const styles = StyleSheet.create({
   },
   estimatedTimeText: {
     fontSize: 13,
-    color: '#666',
+    color: Colors.textSecondary,
   },
   orderItem: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: Colors.border,
   },
   orderItemQuantity: {
     width: 32,
     height: 32,
     borderRadius: 6,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: Colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
@@ -374,26 +495,26 @@ const styles = StyleSheet.create({
   orderItemQuantityText: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#333',
+    color: Colors.text,
   },
   orderItemName: {
     flex: 1,
     fontSize: 14,
-    color: '#333',
+    color: Colors.text,
   },
   orderItemPrice: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#333',
+    color: Colors.text,
   },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    backgroundColor: '#f9f9f9',
+    backgroundColor: Colors.surface,
     borderRadius: 12,
     padding: 16,
     borderWidth: 1,
-    borderColor: '#f0f0f0',
+    borderColor: Colors.border,
   },
   inputIcon: {
     marginRight: 12,
@@ -402,24 +523,24 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     fontSize: 14,
-    color: '#333',
+    color: Colors.text,
     minHeight: 40,
   },
   notesInput: {
-    backgroundColor: '#f9f9f9',
+    backgroundColor: Colors.surface,
     borderRadius: 12,
     padding: 16,
     fontSize: 14,
-    color: '#333',
+    color: Colors.text,
     borderWidth: 1,
-    borderColor: '#f0f0f0',
+    borderColor: Colors.border,
     minHeight: 80,
   },
   paymentOption: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#f9f9f9',
+    backgroundColor: Colors.surface,
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
@@ -438,7 +559,7 @@ const styles = StyleSheet.create({
   paymentOptionText: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#333',
+    color: Colors.text,
   },
   cashIcon: {
     fontSize: 20,
@@ -450,22 +571,22 @@ const styles = StyleSheet.create({
   },
   billLabel: {
     fontSize: 14,
-    color: '#666',
+    color: Colors.textSecondary,
   },
   billValue: {
     fontSize: 14,
-    color: '#333',
+    color: Colors.text,
     fontWeight: '500',
   },
   billDivider: {
     height: 1,
-    backgroundColor: '#f0f0f0',
+    backgroundColor: Colors.border,
     marginVertical: 12,
   },
   billTotalLabel: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#333',
+    color: Colors.text,
   },
   billTotalValue: {
     fontSize: 16,
@@ -477,9 +598,9 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: '#fff',
+    backgroundColor: Colors.background,
     borderTopWidth: 1,
-    borderTopColor: '#f0f0f0',
+    borderTopColor: Colors.border,
     padding: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -2 },
