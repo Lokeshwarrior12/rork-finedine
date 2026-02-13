@@ -46,3 +46,5 @@ rork-eslint.config.js
 firebase-adminsdk-*.json
 
 core
+node_modules
+.expo

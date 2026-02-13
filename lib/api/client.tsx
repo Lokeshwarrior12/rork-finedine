@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { auth } from '@/lib/supabase';
+import { auth, supabase } from '@/lib/supabase';
+import { API_URL } from '@/lib/config';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface User {
@@ -25,12 +26,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Check for existing session
     checkSession();
 
-    // Listen for auth state changes
-    const { data: authListener } = auth.onAuthStateChange(async (event, session) => {
-      console.log('Auth state changed:', event);
+    const { data: authListener } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      console.log('Auth state changed:', _event);
       if (session?.user) {
         const userData = await loadUserData(session.user.id);
         setUser(userData);
@@ -47,7 +46,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const checkSession = async () => {
     try {
       const session = await auth.getSession();
-      if (session?.user) {
+      if (session) {
         const userData = await loadUserData(session.user.id);
         setUser(userData);
       }
@@ -66,7 +65,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       // Fetch from your backend
-      const response = await fetch(`${process.env.EXPO_PUBLIC_API_URL}/api/v1/profile`, {
+      const response = await fetch(`${API_URL}/api/v1/profile`, {
         headers: {
           'Authorization': `Bearer ${(await auth.getSession())?.access_token}`,
         },
@@ -83,9 +82,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signIn = async (email: string, password: string) => {
     try {
-      const { data, error } = await auth.signIn(email, password);
-      if (error) throw error;
-
+      const data = await auth.signIn(email, password);
       if (data.user) {
         const userData = await loadUserData(data.user.id);
         setUser(userData);
@@ -98,13 +95,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signUp = async (email: string, password: string, name: string, role: string) => {
     try {
-      const { data, error } = await auth.signUp(email, password, {
-        name,
-        role,
-      });
-
-      if (error) throw error;
-
+      const data = await auth.signUp(email, password, { name, role });
       if (data.user) {
         const userData = { id: data.user.id, email, name, role: role as any };
         await AsyncStorage.setItem('userData', JSON.stringify(userData));
@@ -129,7 +120,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const updateProfile = async (data: Partial<User>) => {
     try {
       const session = await auth.getSession();
-      const response = await fetch(`${process.env.EXPO_PUBLIC_API_URL}/api/v1/profile`, {
+      const response = await fetch(`${API_URL}/api/v1/profile`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -153,6 +144,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       {children}
     </AuthContext.Provider>
   );
+}
+
+export async function apiFetch(path: string, options?: RequestInit) {
+  const baseUrl = API_URL || '';
+  const url = `${baseUrl}${path}`;
+  
+  try {
+    const session = await auth.getSession();
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...(options?.headers as Record<string, string>),
+    };
+    
+    if (session?.access_token) {
+      headers['Authorization'] = `Bearer ${session.access_token}`;
+    }
+
+    const response = await fetch(url, {
+      ...options,
+      headers,
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || `API error: ${response.status}`);
+    }
+
+    return response.json();
+  } catch (error) {
+    console.error(`API Error: ${path}`, error);
+    throw error;
+  }
 }
 
 export const useAuth = () => {
