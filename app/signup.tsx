@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -10,16 +10,29 @@ import {
   ScrollView,
   ActivityIndicator,
   Dimensions,
+  Alert,
 } from 'react-native';
 import { useRouter, useLocalSearchParams, Href } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { User, Mail, Lock, Phone, MapPin, X, ChevronRight, Star, Check, Shield } from 'lucide-react-native';
+import { 
+  User, 
+  Mail, 
+  Lock, 
+  Phone, 
+  MapPin, 
+  X, 
+  ChevronRight, 
+  Star, 
+  Check,
+  Shield,
+  ArrowLeft,
+} from 'lucide-react-native';
 import { Image } from 'expo-image';
+
 import { useAuth } from '@/contexts/AuthContext';
 import Colors from '@/constants/colors';
 import { UserRole } from '@/types';
-import { restaurants } from '@/mocks/data';
 
 const { width } = Dimensions.get('window');
 
@@ -41,44 +54,29 @@ const CUISINE_TYPES = [
 export default function SignupScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { role } = useLocalSearchParams<{ role: string }>();
+  const { role } = useLocalSearchParams<{ role?: string }>();
   const { signup, signupPending } = useAuth();
 
-  const isRestaurant = role === 'restaurant_owner';
+  const isCustomer = !role || role === 'customer';
 
-  useEffect(() => {
-    if (isRestaurant) {
-      router.replace('/partner' as Href);
-    }
-  }, [isRestaurant, router]);
-
-  const [step, setStep] = useState<'preferences' | 'details' | 'verify' | 'password'>('preferences');
+  const [step, setStep] = useState<'preferences' | 'details' | 'password'>(
+    isCustomer ? 'preferences' : 'details'
+  );
   const [selectedCuisines, setSelectedCuisines] = useState<string[]>([]);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
   const [password, setPassword] = useState('');
-  const [verificationCode, setVerificationCode] = useState('');
   const [error, setError] = useState('');
-
-  const [sendingCode] = useState(false);
-  const [verifyingCode] = useState(false);
 
   const toggleCuisine = (cuisineId: string) => {
     if (selectedCuisines.includes(cuisineId)) {
-      setSelectedCuisines(prev => prev.filter(c => c !== cuisineId));
+      setSelectedCuisines((prev) => prev.filter((c) => c !== cuisineId));
     } else if (selectedCuisines.length < 3) {
-      setSelectedCuisines(prev => [...prev, cuisineId]);
+      setSelectedCuisines((prev) => [...prev, cuisineId]);
     }
   };
-
-  const suggestedRestaurants = restaurants
-    .filter(r => selectedCuisines.some(c => 
-      r.cuisineType.toLowerCase().includes(c.toLowerCase()) ||
-      c.toLowerCase().includes(r.cuisineType.toLowerCase())
-    ))
-    .slice(0, 3);
 
   const handleContinueFromPreferences = () => {
     if (selectedCuisines.length < 3) {
@@ -102,40 +100,43 @@ export default function SignupScreen() {
     setStep('password');
   };
 
-  const handleVerifyCode = () => {
-    if (verificationCode.length !== 6) {
-      setError('Please enter the 6-digit code');
-      return;
-    }
-    setStep('password');
-  };
-
   const handleSignup = async () => {
     if (!password || password.length < 6) {
       setError('Password must be at least 6 characters');
       return;
     }
     setError('');
+
     try {
-      await signup({ email, password, name, phone, role: (role as UserRole) || 'customer' });
-      if (isRestaurant) {
+      // Sign up with real backend API
+      await signup({
+        email,
+        password,
+        name,
+        phone,
+        role: (role as UserRole) || 'customer',
+      });
+
+      // Navigate based on role
+      if (role === 'restaurant_owner') {
         router.replace('/(restaurant)/dashboard' as Href);
       } else {
         router.replace('/(customer)/home' as Href);
       }
-    } catch {
-      setError('Signup failed. Please try again.');
+    } catch (err: any) {
+      setError(err.message || 'Signup failed. Please try again.');
     }
   };
 
-  if (!isRestaurant && step === 'preferences') {
+  /* ---------------- STEP 1: CUISINE PREFERENCES (Customer Only) ---------------- */
+  if (isCustomer && step === 'preferences') {
     return (
       <View style={styles.container}>
         <LinearGradient
           colors={[Colors.primary, Colors.primaryDark]}
           style={StyleSheet.absoluteFill}
         />
-        
+
         <ScrollView
           contentContainerStyle={[
             styles.scrollContent,
@@ -149,7 +150,7 @@ export default function SignupScreen() {
           <View style={styles.header}>
             <Text style={styles.title}>What do you love?</Text>
             <Text style={styles.subtitle}>
-              Select your 3 favorite cuisines and we&apos;ll suggest the best restaurants for you
+              Select your 3 favorite cuisines to personalize your experience
             </Text>
           </View>
 
@@ -159,15 +160,19 @@ export default function SignupScreen() {
                 key={cuisine.id}
                 style={[
                   styles.cuisineCard,
-                  selectedCuisines.includes(cuisine.id) && styles.cuisineCardSelected,
+                  selectedCuisines.includes(cuisine.id) &&
+                    styles.cuisineCardSelected,
                 ]}
                 onPress={() => toggleCuisine(cuisine.id)}
               >
                 <Text style={styles.cuisineEmoji}>{cuisine.emoji}</Text>
-                <Text style={[
-                  styles.cuisineName,
-                  selectedCuisines.includes(cuisine.id) && styles.cuisineNameSelected,
-                ]}>
+                <Text
+                  style={[
+                    styles.cuisineName,
+                    selectedCuisines.includes(cuisine.id) &&
+                      styles.cuisineNameSelected,
+                  ]}
+                >
                   {cuisine.name}
                 </Text>
                 {selectedCuisines.includes(cuisine.id) && (
@@ -182,29 +187,6 @@ export default function SignupScreen() {
           <Text style={styles.selectedCount}>
             {selectedCuisines.length}/3 selected
           </Text>
-
-          {selectedCuisines.length === 3 && suggestedRestaurants.length > 0 && (
-            <View style={styles.suggestionsSection}>
-              <Text style={styles.suggestionsTitle}>Top Picks for You</Text>
-              {suggestedRestaurants.map((restaurant) => (
-                <View key={restaurant.id} style={styles.suggestionCard}>
-                  <Image
-                    source={{ uri: restaurant.images[0] }}
-                    style={styles.suggestionImage}
-                    contentFit="cover"
-                  />
-                  <View style={styles.suggestionInfo}>
-                    <Text style={styles.suggestionName}>{restaurant.name}</Text>
-                    <Text style={styles.suggestionCuisine}>{restaurant.cuisineType}</Text>
-                    <View style={styles.suggestionRating}>
-                      <Star size={12} color={Colors.rating} fill={Colors.rating} />
-                      <Text style={styles.suggestionRatingText}>{restaurant.rating}</Text>
-                    </View>
-                  </View>
-                </View>
-              ))}
-            </View>
-          )}
 
           {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
@@ -224,14 +206,15 @@ export default function SignupScreen() {
     );
   }
 
-  if (!isRestaurant && step === 'details') {
+  /* ---------------- STEP 2: PERSONAL DETAILS ---------------- */
+  if (step === 'details') {
     return (
       <View style={styles.container}>
         <LinearGradient
           colors={[Colors.primary, Colors.primaryDark]}
           style={StyleSheet.absoluteFill}
         />
-        
+
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.keyboardView}
@@ -243,9 +226,18 @@ export default function SignupScreen() {
             ]}
             keyboardShouldPersistTaps="handled"
           >
-            <Pressable style={styles.closeButton} onPress={() => router.back()}>
-              <X size={24} color={Colors.surface} />
-            </Pressable>
+            {isCustomer ? (
+              <Pressable
+                style={styles.backButton}
+                onPress={() => setStep('preferences')}
+              >
+                <ArrowLeft size={24} color={Colors.surface} />
+              </Pressable>
+            ) : (
+              <Pressable style={styles.closeButton} onPress={() => router.back()}>
+                <X size={24} color={Colors.surface} />
+              </Pressable>
+            )}
 
             <View style={styles.header}>
               <Text style={styles.title}>Your Details</Text>
@@ -254,23 +246,31 @@ export default function SignupScreen() {
               </Text>
             </View>
 
-            <View style={styles.preferencesPreview}>
-              <Text style={styles.preferencesLabel}>Your preferences:</Text>
-              <View style={styles.preferencesChips}>
-                {selectedCuisines.map(cuisineId => {
-                  const cuisine = CUISINE_TYPES.find(c => c.id === cuisineId);
-                  return cuisine ? (
-                    <View key={cuisineId} style={styles.preferenceChip}>
-                      <Text style={styles.preferenceChipText}>{cuisine.emoji} {cuisine.name}</Text>
-                    </View>
-                  ) : null;
-                })}
+            {isCustomer && selectedCuisines.length > 0 && (
+              <View style={styles.preferencesPreview}>
+                <Text style={styles.preferencesLabel}>Your preferences:</Text>
+                <View style={styles.preferencesChips}>
+                  {selectedCuisines.map((cuisineId) => {
+                    const cuisine = CUISINE_TYPES.find((c) => c.id === cuisineId);
+                    return cuisine ? (
+                      <View key={cuisineId} style={styles.preferenceChip}>
+                        <Text style={styles.preferenceChipText}>
+                          {cuisine.emoji} {cuisine.name}
+                        </Text>
+                      </View>
+                    ) : null;
+                  })}
+                </View>
               </View>
-            </View>
+            )}
 
             <View style={styles.form}>
               <View style={styles.inputContainer}>
-                <User size={20} color={Colors.textLight} style={styles.inputIcon} />
+                <User
+                  size={20}
+                  color={Colors.textLight}
+                  style={styles.inputIcon}
+                />
                 <TextInput
                   style={styles.input}
                   placeholder="Full Name"
@@ -281,7 +281,11 @@ export default function SignupScreen() {
               </View>
 
               <View style={styles.inputContainer}>
-                <Mail size={20} color={Colors.textLight} style={styles.inputIcon} />
+                <Mail
+                  size={20}
+                  color={Colors.textLight}
+                  style={styles.inputIcon}
+                />
                 <TextInput
                   style={styles.input}
                   placeholder="Email"
@@ -294,7 +298,11 @@ export default function SignupScreen() {
               </View>
 
               <View style={styles.inputContainer}>
-                <Phone size={20} color={Colors.textLight} style={styles.inputIcon} />
+                <Phone
+                  size={20}
+                  color={Colors.textLight}
+                  style={styles.inputIcon}
+                />
                 <TextInput
                   style={styles.input}
                   placeholder="Phone Number"
@@ -306,7 +314,11 @@ export default function SignupScreen() {
               </View>
 
               <View style={styles.inputContainer}>
-                <MapPin size={20} color={Colors.textLight} style={styles.inputIcon} />
+                <MapPin
+                  size={20}
+                  color={Colors.textLight}
+                  style={styles.inputIcon}
+                />
                 <TextInput
                   style={styles.input}
                   placeholder="Address"
@@ -319,19 +331,11 @@ export default function SignupScreen() {
               {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
               <Pressable
-                style={[styles.signupButton, sendingCode && styles.signupButtonDisabled]}
+                style={styles.signupButton}
                 onPress={handleContinueFromDetails}
-                disabled={sendingCode}
               >
-                {sendingCode ? (
-                  <ActivityIndicator color={Colors.primary} />
-                ) : (
-                  <Text style={styles.signupButtonText}>Continue</Text>
-                )}
-              </Pressable>
-
-              <Pressable style={styles.backLink} onPress={() => setStep('preferences')}>
-                <Text style={styles.backLinkText}>← Back to preferences</Text>
+                <Text style={styles.signupButtonText}>Continue</Text>
+                <ChevronRight size={20} color={Colors.primary} />
               </Pressable>
             </View>
           </ScrollView>
@@ -340,160 +344,14 @@ export default function SignupScreen() {
     );
   }
 
-  if (!isRestaurant && step === 'verify') {
-    return (
-      <View style={styles.container}>
-        <LinearGradient
-          colors={[Colors.primary, Colors.primaryDark]}
-          style={StyleSheet.absoluteFill}
-        />
-        
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={styles.keyboardView}
-        >
-          <ScrollView
-            contentContainerStyle={[
-              styles.scrollContent,
-              { paddingTop: insets.top + 20, paddingBottom: insets.bottom + 20 },
-            ]}
-            keyboardShouldPersistTaps="handled"
-          >
-            <Pressable style={styles.closeButton} onPress={() => router.back()}>
-              <X size={24} color={Colors.surface} />
-            </Pressable>
-
-            <View style={styles.verifyContainer}>
-              <View style={styles.verifyIconWrap}>
-                <Mail size={48} color={Colors.surface} />
-              </View>
-              <Text style={styles.verifyTitle}>Verify Your Email</Text>
-              <Text style={styles.verifySubtitle}>
-                We&apos;ve sent a 6-digit code to{'\n'}
-                <Text style={styles.verifyEmail}>{email}</Text>
-              </Text>
-
-              <View style={styles.codeInputContainer}>
-                <TextInput
-                  style={styles.codeInput}
-                  placeholder="000000"
-                  placeholderTextColor="rgba(255,255,255,0.3)"
-                  value={verificationCode}
-                  onChangeText={setVerificationCode}
-                  keyboardType="number-pad"
-                  maxLength={6}
-                />
-              </View>
-
-              {error ? <Text style={styles.errorText}>{error}</Text> : null}
-
-              <Pressable
-                style={[styles.signupButton, verifyingCode && styles.signupButtonDisabled]}
-                onPress={handleVerifyCode}
-                disabled={verifyingCode}
-              >
-                {verifyingCode ? (
-                  <ActivityIndicator color={Colors.primary} />
-                ) : (
-                  <Text style={styles.signupButtonText}>Verify Email</Text>
-                )}
-              </Pressable>
-
-              <Pressable 
-                style={styles.resendButton}
-                onPress={() => console.log('Resend code for:', email)}
-                disabled={sendingCode}
-              >
-                <Text style={styles.resendText}>
-                  {sendingCode ? 'Sending...' : 'Resend Code'}
-                </Text>
-              </Pressable>
-
-              <Pressable style={styles.backLink} onPress={() => setStep('details')}>
-                <Text style={styles.backLinkText}>← Back</Text>
-              </Pressable>
-            </View>
-          </ScrollView>
-        </KeyboardAvoidingView>
-      </View>
-    );
-  }
-
-  if (!isRestaurant && step === 'password') {
-    return (
-      <View style={styles.container}>
-        <LinearGradient
-          colors={[Colors.primary, Colors.primaryDark]}
-          style={StyleSheet.absoluteFill}
-        />
-        
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={styles.keyboardView}
-        >
-          <ScrollView
-            contentContainerStyle={[
-              styles.scrollContent,
-              { paddingTop: insets.top + 20, paddingBottom: insets.bottom + 20 },
-            ]}
-            keyboardShouldPersistTaps="handled"
-          >
-            <Pressable style={styles.closeButton} onPress={() => router.back()}>
-              <X size={24} color={Colors.surface} />
-            </Pressable>
-
-            <View style={styles.verifyContainer}>
-              <View style={[styles.verifyIconWrap, { backgroundColor: 'rgba(76, 175, 80, 0.2)' }]}>
-                <Shield size={48} color="#4CAF50" />
-              </View>
-              <Text style={styles.verifyTitle}>Almost Done!</Text>
-              <Text style={styles.verifySubtitle}>
-                Create a secure password to protect your account
-              </Text>
-
-              <View style={[styles.inputContainer, { width: '100%', marginTop: 20 }]}>
-                <Lock size={20} color={Colors.textLight} style={styles.inputIcon} />
-                <TextInput
-                  style={styles.input}
-                  placeholder="Create Password (min 6 chars)"
-                  placeholderTextColor={Colors.textLight}
-                  value={password}
-                  onChangeText={setPassword}
-                  secureTextEntry
-                />
-              </View>
-
-              {error ? <Text style={styles.errorText}>{error}</Text> : null}
-
-              <Pressable
-                style={[styles.signupButton, { width: '100%' }, signupPending && styles.signupButtonDisabled]}
-                onPress={handleSignup}
-                disabled={signupPending}
-              >
-                {signupPending ? (
-                  <ActivityIndicator color={Colors.primary} />
-                ) : (
-                  <Text style={styles.signupButtonText}>Create Account</Text>
-                )}
-              </Pressable>
-
-              <Pressable style={styles.backLink} onPress={() => setStep('verify')}>
-                <Text style={styles.backLinkText}>← Back</Text>
-              </Pressable>
-            </View>
-          </ScrollView>
-        </KeyboardAvoidingView>
-      </View>
-    );
-  }
-
+  /* ---------------- STEP 3: PASSWORD ---------------- */
   return (
     <View style={styles.container}>
       <LinearGradient
-        colors={isRestaurant ? ['#1A1A2E', '#16213E'] : [Colors.primary, Colors.primaryDark]}
+        colors={[Colors.primary, Colors.primaryDark]}
         style={StyleSheet.absoluteFill}
       />
-      
+
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.keyboardView}
@@ -505,70 +363,51 @@ export default function SignupScreen() {
           ]}
           keyboardShouldPersistTaps="handled"
         >
-          <Pressable style={styles.closeButton} onPress={() => router.back()}>
-            <X size={24} color={Colors.surface} />
+          <Pressable
+            style={styles.backButton}
+            onPress={() => setStep('details')}
+          >
+            <ArrowLeft size={24} color={Colors.surface} />
           </Pressable>
 
-          <View style={styles.header}>
-            <Text style={styles.title}>Create Account</Text>
-            <Text style={styles.subtitle}>
-              {isRestaurant ? 'Set up your restaurant account' : 'Join us and start saving'}
+          <View style={styles.verifyContainer}>
+            <View
+              style={[
+                styles.verifyIconWrap,
+                { backgroundColor: 'rgba(76, 175, 80, 0.2)' },
+              ]}
+            >
+              <Shield size={48} color="#4CAF50" />
+            </View>
+            <Text style={styles.verifyTitle}>Almost Done!</Text>
+            <Text style={styles.verifySubtitle}>
+              Create a secure password to protect your account
             </Text>
-          </View>
 
-          <View style={styles.form}>
-            <View style={styles.inputContainer}>
-              <User size={20} color={Colors.textLight} style={styles.inputIcon} />
-              <TextInput
-                style={styles.input}
-                placeholder="Full Name"
-                placeholderTextColor={Colors.textLight}
-                value={name}
-                onChangeText={setName}
-              />
+            <View style={styles.summaryCard}>
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Name</Text>
+                <Text style={styles.summaryValue}>{name}</Text>
+              </View>
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Email</Text>
+                <Text style={styles.summaryValue}>{email}</Text>
+              </View>
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Phone</Text>
+                <Text style={styles.summaryValue}>{phone}</Text>
+              </View>
             </View>
 
-            <View style={styles.inputContainer}>
-              <Mail size={20} color={Colors.textLight} style={styles.inputIcon} />
-              <TextInput
-                style={styles.input}
-                placeholder="Email"
-                placeholderTextColor={Colors.textLight}
-                value={email}
-                onChangeText={setEmail}
-                keyboardType="email-address"
-                autoCapitalize="none"
+            <View style={[styles.inputContainer, { width: '100%' }]}>
+              <Lock
+                size={20}
+                color={Colors.textLight}
+                style={styles.inputIcon}
               />
-            </View>
-
-            <View style={styles.inputContainer}>
-              <Phone size={20} color={Colors.textLight} style={styles.inputIcon} />
               <TextInput
                 style={styles.input}
-                placeholder="Phone Number"
-                placeholderTextColor={Colors.textLight}
-                value={phone}
-                onChangeText={setPhone}
-                keyboardType="phone-pad"
-              />
-            </View>
-
-            <View style={styles.inputContainer}>
-              <MapPin size={20} color={Colors.textLight} style={styles.inputIcon} />
-              <TextInput
-                style={styles.input}
-                placeholder="Address"
-                placeholderTextColor={Colors.textLight}
-                value={address}
-                onChangeText={setAddress}
-              />
-            </View>
-
-            <View style={styles.inputContainer}>
-              <Lock size={20} color={Colors.textLight} style={styles.inputIcon} />
-              <TextInput
-                style={styles.input}
-                placeholder="Password"
+                placeholder="Create Password (min 6 chars)"
                 placeholderTextColor={Colors.textLight}
                 value={password}
                 onChangeText={setPassword}
@@ -579,16 +418,21 @@ export default function SignupScreen() {
             {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
             <Pressable
-              style={[styles.signupButton, signupPending && styles.signupButtonDisabled]}
+              style={[
+                styles.signupButton,
+                { width: '100%' },
+                signupPending && styles.signupButtonDisabled,
+              ]}
               onPress={handleSignup}
               disabled={signupPending}
             >
               {signupPending ? (
-                <ActivityIndicator color={isRestaurant ? Colors.surface : Colors.primary} />
+                <ActivityIndicator color={Colors.primary} />
               ) : (
-                <Text style={[styles.signupButtonText, isRestaurant && { color: Colors.surface }]}>
-                  Create Account
-                </Text>
+                <>
+                  <Text style={styles.signupButtonText}>Create Account</Text>
+                  <ChevronRight size={20} color={Colors.primary} />
+                </>
               )}
             </Pressable>
 
@@ -598,15 +442,6 @@ export default function SignupScreen() {
                 <Text style={styles.loginLink}>Sign In</Text>
               </Pressable>
             </View>
-
-            {!isRestaurant && (
-              <Pressable 
-                style={styles.partnerButton}
-                onPress={() => router.push('/partner' as Href)}
-              >
-                <Text style={styles.partnerButtonText}>Become a Partner Restaurant</Text>
-              </Pressable>
-            )}
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -614,17 +449,11 @@ export default function SignupScreen() {
   );
 }
 
+/* ---------------- STYLES ---------------- */
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  keyboardView: {
-    flex: 1,
-  },
-  scrollContent: {
-    flexGrow: 1,
-    paddingHorizontal: 24,
-  },
+  container: { flex: 1 },
+  keyboardView: { flex: 1 },
+  scrollContent: { flexGrow: 1, paddingHorizontal: 24 },
   closeButton: {
     width: 40,
     height: 40,
@@ -634,27 +463,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignSelf: 'flex-end',
   },
-  header: {
-    marginTop: 20,
-    marginBottom: 24,
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'flex-start',
   },
-  title: {
-    fontSize: 32,
-    fontWeight: '700' as const,
-    color: Colors.surface,
-    marginBottom: 8,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: 'rgba(255, 255, 255, 0.7)',
-    lineHeight: 22,
-  },
-  cuisineGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-    marginBottom: 16,
-  },
+  header: { marginTop: 20, marginBottom: 24 },
+  title: { fontSize: 32, fontWeight: '700', color: Colors.surface, marginBottom: 8 },
+  subtitle: { fontSize: 16, color: 'rgba(255, 255, 255, 0.7)', lineHeight: 22 },
+  cuisineGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 16 },
   cuisineCard: {
     width: (width - 68) / 3,
     backgroundColor: 'rgba(255, 255, 255, 0.15)',
@@ -668,18 +489,9 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.95)',
     borderColor: Colors.surface,
   },
-  cuisineEmoji: {
-    fontSize: 28,
-    marginBottom: 6,
-  },
-  cuisineName: {
-    fontSize: 12,
-    fontWeight: '600' as const,
-    color: Colors.surface,
-  },
-  cuisineNameSelected: {
-    color: Colors.primary,
-  },
+  cuisineEmoji: { fontSize: 28, marginBottom: 6 },
+  cuisineName: { fontSize: 12, fontWeight: '600', color: Colors.surface },
+  cuisineNameSelected: { color: Colors.primary },
   selectedBadge: {
     position: 'absolute',
     top: 6,
@@ -691,62 +503,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  selectedCount: {
-    fontSize: 14,
-    color: 'rgba(255, 255, 255, 0.8)',
-    textAlign: 'center',
-    marginBottom: 20,
-  },
-  suggestionsSection: {
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 20,
-  },
-  suggestionsTitle: {
-    fontSize: 16,
-    fontWeight: '600' as const,
-    color: Colors.surface,
-    marginBottom: 12,
-  },
-  suggestionCard: {
-    flexDirection: 'row',
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    borderRadius: 12,
-    padding: 10,
-    marginBottom: 8,
-  },
-  suggestionImage: {
-    width: 50,
-    height: 50,
-    borderRadius: 10,
-  },
-  suggestionInfo: {
-    flex: 1,
-    marginLeft: 12,
-    justifyContent: 'center',
-  },
-  suggestionName: {
-    fontSize: 14,
-    fontWeight: '600' as const,
-    color: Colors.surface,
-  },
-  suggestionCuisine: {
-    fontSize: 12,
-    color: 'rgba(255, 255, 255, 0.7)',
-    marginTop: 2,
-  },
-  suggestionRating: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    marginTop: 4,
-  },
-  suggestionRatingText: {
-    fontSize: 12,
-    fontWeight: '600' as const,
-    color: Colors.surface,
-  },
+  selectedCount: { fontSize: 14, color: 'rgba(255, 255, 255, 0.8)', textAlign: 'center', marginBottom: 20 },
   continueButton: {
     flexDirection: 'row',
     backgroundColor: Colors.surface,
@@ -757,43 +514,24 @@ const styles = StyleSheet.create({
     marginTop: 8,
     gap: 8,
   },
-  continueButtonDisabled: {
-    opacity: 0.5,
-  },
-  continueButtonText: {
-    fontSize: 18,
-    fontWeight: '600' as const,
-    color: Colors.primary,
-  },
+  continueButtonDisabled: { opacity: 0.5 },
+  continueButtonText: { fontSize: 18, fontWeight: '600', color: Colors.primary },
   preferencesPreview: {
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
     borderRadius: 12,
     padding: 12,
     marginBottom: 16,
   },
-  preferencesLabel: {
-    fontSize: 12,
-    color: 'rgba(255, 255, 255, 0.7)',
-    marginBottom: 8,
-  },
-  preferencesChips: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
+  preferencesLabel: { fontSize: 12, color: 'rgba(255, 255, 255, 0.7)', marginBottom: 8 },
+  preferencesChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   preferenceChip: {
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 20,
   },
-  preferenceChipText: {
-    fontSize: 13,
-    color: Colors.surface,
-  },
-  form: {
-    gap: 14,
-  },
+  preferenceChipText: { fontSize: 13, color: Colors.surface },
+  form: { gap: 14 },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -804,81 +542,30 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.2)',
   },
-  inputIcon: {
-    marginRight: 12,
-  },
-  input: {
-    flex: 1,
-    fontSize: 16,
-    color: Colors.surface,
-  },
-  errorText: {
-    color: Colors.error,
-    fontSize: 14,
-    textAlign: 'center',
-  },
+  inputIcon: { marginRight: 12 },
+  input: { flex: 1, fontSize: 16, color: Colors.surface },
+  errorText: { color: Colors.error, fontSize: 14, textAlign: 'center' },
   signupButton: {
+    flexDirection: 'row',
     backgroundColor: Colors.surface,
     height: 56,
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 8,
+    gap: 8,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
     shadowRadius: 8,
     elevation: 4,
   },
-  signupButtonDisabled: {
-    opacity: 0.7,
-  },
-  signupButtonText: {
-    fontSize: 18,
-    fontWeight: '600' as const,
-    color: Colors.primary,
-  },
-  loginRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    marginTop: 16,
-  },
-  loginText: {
-    color: 'rgba(255, 255, 255, 0.7)',
-    fontSize: 15,
-  },
-  loginLink: {
-    color: Colors.surface,
-    fontSize: 15,
-    fontWeight: '600' as const,
-  },
-  partnerButton: {
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
-    height: 48,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 8,
-  },
-  partnerButtonText: {
-    fontSize: 15,
-    fontWeight: '500' as const,
-    color: Colors.surface,
-  },
-  backLink: {
-    alignItems: 'center',
-    marginTop: 16,
-    padding: 8,
-  },
-  backLinkText: {
-    color: 'rgba(255, 255, 255, 0.7)',
-    fontSize: 14,
-  },
-  verifyContainer: {
-    alignItems: 'center',
-    paddingTop: 40,
-  },
+  signupButtonDisabled: { opacity: 0.7 },
+  signupButtonText: { fontSize: 18, fontWeight: '600', color: Colors.primary },
+  loginRow: { flexDirection: 'row', justifyContent: 'center', marginTop: 16 },
+  loginText: { color: 'rgba(255, 255, 255, 0.7)', fontSize: 15 },
+  loginLink: { color: Colors.surface, fontSize: 15, fontWeight: '600' },
+  verifyContainer: { alignItems: 'center', paddingTop: 40 },
   verifyIconWrap: {
     width: 100,
     height: 100,
@@ -888,12 +575,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: 24,
   },
-  verifyTitle: {
-    fontSize: 26,
-    fontWeight: '700' as const,
-    color: Colors.surface,
-    marginBottom: 8,
-  },
+  verifyTitle: { fontSize: 26, fontWeight: '700', color: Colors.surface, marginBottom: 8 },
   verifySubtitle: {
     fontSize: 15,
     color: 'rgba(255, 255, 255, 0.7)',
@@ -901,33 +583,15 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     marginBottom: 24,
   },
-  verifyEmail: {
-    color: Colors.surface,
-    fontWeight: '600' as const,
-  },
-  codeInputContainer: {
+  summaryCard: {
     width: '100%',
-    marginBottom: 16,
-  },
-  codeInput: {
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 16,
-    height: 64,
-    fontSize: 32,
-    fontWeight: '600' as const,
-    color: Colors.surface,
-    textAlign: 'center',
-    letterSpacing: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 20,
+    gap: 12,
   },
-  resendButton: {
-    marginTop: 16,
-    padding: 12,
-  },
-  resendText: {
-    color: Colors.surface,
-    fontSize: 14,
-    fontWeight: '600' as const,
-  },
+  summaryRow: { flexDirection: 'row', justifyContent: 'space-between' },
+  summaryLabel: { fontSize: 13, color: 'rgba(255, 255, 255, 0.6)' },
+  summaryValue: { fontSize: 13, color: Colors.surface, fontWeight: '500' },
 });
