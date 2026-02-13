@@ -7,8 +7,19 @@ import React from 'react';
 import { Platform, View, StyleSheet } from 'react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 
+// Fallback colors in case theme context is not available
+const fallbackColors = {
+  primary: '#E85D04',
+  textMuted: '#9CA3AF',
+  tabBar: '#FFFFFF',
+  tabBarBorder: '#E5E7EB',
+  shadow: '#000000',
+};
+
 export default function CustomerLayout() {
-  const { colors } = useTheme();
+  // Safely destructure with fallback
+  const themeContext = useTheme();
+  const colors = themeContext?.colors || fallbackColors;
 
   return (
     <Tabs
