@@ -1,29 +1,30 @@
 {
   "expo": {
-    "name": "PrimeDine",
-    "slug": "primedine",
+    "name": "Rork-FineDine",
+    "slug": "rork-finedine",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "primedine",
+    "scheme": "rorkfinedine",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
-
     "splash": {
       "image": "./assets/images/splash.png",
       "resizeMode": "contain",
       "backgroundColor": "#F97316"
     },
-
     "assetBundlePatterns": ["**/*"],
-
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.primedine.app"
+      "bundleIdentifier": "com.rorkfinedine.app",
+      "infoPlist": {
+        "NSCameraUsageDescription": "This app uses the camera to upload restaurant and menu photos.",
+        "NSLocationWhenInUseUsageDescription": "This app uses your location to show nearby restaurants.",
+        "NSPhotoLibraryUsageDescription": "This app needs access to your photos to upload images."
+      }
     },
-
     "android": {
-      "package": "com.primedine.app",
+      "package": "com.rorkfinedine.app",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#F97316"
@@ -34,15 +35,14 @@
         "WRITE_EXTERNAL_STORAGE",
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
-        "VIBRATE"
+        "VIBRATE",
+        "POST_NOTIFICATIONS"
       ]
     },
-
     "web": {
       "favicon": "./assets/images/favicon.png",
       "bundler": "metro"
     },
-
     "plugins": [
       [
         "expo-router",
@@ -52,22 +52,32 @@
       ],
       "expo-font",
       "expo-web-browser",
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/notification-icon.png",
+          "color": "#F97316"
+        }
+      ]
     ],
-
     "experiments": {
       "typedRoutes": true
     },
-
     "extra": {
       "apiUrl": "http://localhost:8080/api/v1",
-
-      "supabaseUrl": "https://ibyyhjwrhaehhmznyadz.supabase.co",
-      "supabaseAnonKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlieXloandyaGFlaGhtem55YWR6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjgxMTIyNzEsImV4cCI6MjA4MzY4ODI3MX0.yTOtqjeKEIuRdZ-8BgWK3x2zVbT8XgaAlCqj1EbsYvs",
-
+      "apiUrlProduction": "https://rork-finedine-api.fly.dev/api/v1",
+      "supabaseUrl": "https://qtmvztgxfvqmqekdhnxw.supabase.co",
+      "supabaseAnonKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF0bXZ6dGd4ZnZxbXFla2RobnhXIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MDkxMjM0NTYsImV4cCI6MjAyNDY5OTQ1Nn0.xxxxx",
       "eas": {
-        "projectId": "70eb24db"
+        "projectId": "your-eas-project-id"
       }
+    },
+    "updates": {
+      "url": "https://u.expo.dev/your-eas-project-id"
+    },
+    "runtimeVersion": {
+      "policy": "sdkVersion"
     }
   }
 }
