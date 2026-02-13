@@ -12,11 +12,13 @@ import {
   Modal,
   ActivityIndicator,
   Platform,
+  Alert,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter, Href } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useQuery } from '@tanstack/react-query';
 import {
   Search,
   MapPin,
@@ -54,8 +56,7 @@ import {
 } from 'lucide-react-native';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
-import { cuisineTypes, serviceCategories, serviceFilters, diningCategories } from '@/mocks/data';
-import { useRestaurants, useDeals } from '@/hooks/useApi';
+import { api } from '@/lib/api';
 import { useLocation } from '@/hooks/useLocation';
 import { useDebounce } from '@/hooks/useDebounce';
 
@@ -67,6 +68,43 @@ interface FilterState {
   services: string[];
   categories: string[];
 }
+
+// Cuisine types for filter
+const cuisineTypes = [
+  { id: 'indian', name: 'Indian', image: 'https://images.unsplash.com/photo-1565557623262-b51c2513a641?w=100' },
+  { id: 'chinese', name: 'Chinese', image: 'https://images.unsplash.com/photo-1582878826629-29b7ad1cdc43?w=100' },
+  { id: 'italian', name: 'Italian', image: 'https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?w=100' },
+  { id: 'mexican', name: 'Mexican', image: 'https://images.unsplash.com/photo-1565299507177-b0ac66763828?w=100' },
+  { id: 'thai', name: 'Thai', image: 'https://images.unsplash.com/photo-1559314809-0d155014e29e?w=100' },
+  { id: 'japanese', name: 'Japanese', image: 'https://images.unsplash.com/photo-1579584425555-c3ce17fd4351?w=100' },
+];
+
+const serviceCategories = [
+  { id: 'banquet', name: 'Banquet Halls' },
+  { id: 'party', name: 'Party Halls' },
+  { id: 'bars', name: 'Bars' },
+  { id: 'cafes', name: 'Cafes' },
+  { id: 'buffet', name: 'Buffet' },
+  { id: 'family', name: 'Family Friendly' },
+  { id: 'rooftop', name: 'Rooftop' },
+  { id: 'luxury', name: 'Luxury Dining' },
+];
+
+const serviceFilters = [
+  { id: 'parking', name: 'Parking', icon: 'car' },
+  { id: 'wifi', name: 'WiFi', icon: 'wifi' },
+  { id: 'outdoor', name: 'Outdoor Seating', icon: 'trees' },
+  { id: 'delivery', name: 'Delivery', icon: 'truck' },
+  { id: 'reservation', name: 'Reservations', icon: 'key' },
+  { id: 'live-music', name: 'Live Music', icon: 'music' },
+];
+
+const diningCategories = [
+  { id: 'casual', name: 'Casual Dining', icon: 'utensils-crossed' },
+  { id: 'fine', name: 'Fine Dining', icon: 'crown' },
+  { id: 'quick', name: 'Quick Bites', icon: 'zap' },
+  { id: 'trending', name: 'Trending', icon: 'trending-up' },
+];
 
 export default function CustomerHomeScreen() {
   const router = useRouter();
@@ -89,23 +127,50 @@ export default function CustomerHomeScreen() {
   const debouncedSearch = useDebounce(searchQuery, 300);
   const { latitude, longitude, loading: locationLoading, getCurrentLocation, hasLocation } = useLocation();
   
-  const selectedCuisine = filters.cuisines.length > 0 
-    ? cuisineTypes.find(c => c.id === filters.cuisines[0])?.name 
-    : undefined;
-  const selectedCategory = filters.categories.length > 0
-    ? diningCategories.find(c => c.id === filters.categories[0])?.name
-    : undefined;
-  
-  const { data: restaurantsData, refetch: refetchRestaurants } = useRestaurants({
-    query: debouncedSearch || undefined,
-    cuisineType: selectedCuisine,
-    category: selectedCategory,
-    lat: nearMeRadius && latitude ? latitude : undefined,
-    lng: nearMeRadius && longitude ? longitude : undefined,
-    radius: nearMeRadius || undefined,
+  // REAL API QUERY - Fetch restaurants from backend
+  const { 
+    data: restaurantsResponse, 
+    isLoading: restaurantsLoading, 
+    error: restaurantsError,
+    refetch: refetchRestaurants 
+  } = useQuery({
+    queryKey: ['restaurants', debouncedSearch, filters, nearMeRadius, latitude, longitude],
+    queryFn: async () => {
+      console.log('🔄 Fetching restaurants from API...');
+      
+      // Build query params
+      const params: any = {};
+      if (debouncedSearch) params.query = debouncedSearch;
+      if (filters.cuisines.length > 0) params.cuisineType = filters.cuisines.join(',');
+      if (filters.categories.length > 0) params.category = filters.categories.join(',');
+      if (nearMeRadius && latitude && longitude) {
+        params.lat = latitude;
+        params.lng = longitude;
+        params.radius = nearMeRadius;
+      }
+      
+      const result = await api.getRestaurants(params);
+      console.log('✅ Restaurants fetched:', result.data?.length || 0);
+      return result;
+    },
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+    retry: 2,
   });
-  
-  const { data: dealsData, refetch: refetchDeals } = useDeals();
+
+  // REAL API QUERY - Fetch deals from backend
+  const { 
+    data: dealsResponse, 
+    refetch: refetchDeals 
+  } = useQuery({
+    queryKey: ['deals'],
+    queryFn: async () => {
+      console.log('🔄 Fetching deals from API...');
+      const result = await api.getDeals();
+      console.log('✅ Deals fetched:', result.data?.length || 0);
+      return result;
+    },
+    staleTime: 5 * 60 * 1000,
+  });
 
   useEffect(() => {
     Animated.timing(fadeAnim, {
@@ -158,8 +223,9 @@ export default function CustomerHomeScreen() {
     filters.cuisines.length + filters.services.length + filters.categories.length,
   [filters]);
 
-  const restaurants = restaurantsData || [];
-  const deals = dealsData || [];
+  // Extract data from API responses
+  const restaurants = restaurantsResponse?.data || [];
+  const deals = dealsResponse?.data || [];
   
   const hotDeals = deals.filter(d => d.isActive).slice(0, 5);
   const nearbyRestaurants = restaurants.slice(0, 6);
@@ -204,10 +270,35 @@ export default function CustomerHomeScreen() {
   };
 
   const navigateToRestaurant = (id: string) => {
-    router.push(`/restaurant/${id}` as any);
+    router.push(`/(customer)/restaurant/${id}` as any);
   };
 
   const styles = createStyles(colors, isDark);
+
+  // Loading State
+  if (restaurantsLoading && !restaurantsResponse) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top, justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={[styles.loadingText, { marginTop: 16 }]}>Loading restaurants...</Text>
+      </View>
+    );
+  }
+
+  // Error State
+  if (restaurantsError && !restaurantsResponse) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 20 }]}>
+        <Text style={styles.errorTitle}>Unable to load restaurants</Text>
+        <Text style={styles.errorText}>
+          {restaurantsError instanceof Error ? restaurantsError.message : 'Please check your internet connection'}
+        </Text>
+        <Pressable style={styles.retryButton} onPress={() => refetchRestaurants()}>
+          <Text style={styles.retryButtonText}>Retry</Text>
+        </Pressable>
+      </View>
+    );
+  }
 
   const renderFilterModal = () => (
     <Modal
@@ -342,7 +433,7 @@ export default function CustomerHomeScreen() {
                 onPress={() => router.push('/(customer)/rewards' as Href)}
               >
                 <Wallet size={16} color={colors.primary} />
-                <Text style={styles.walletText}>{user?.points || 0}</Text>
+                <Text style={styles.walletText}>{user?.loyaltyPoints || 0}</Text>
               </Pressable>
               <Pressable 
                 style={styles.notificationBtn}
@@ -457,6 +548,7 @@ export default function CustomerHomeScreen() {
           </LinearGradient>
         </View>
 
+        {/* Spotlight Section */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>In the spotlight</Text>
@@ -465,44 +557,50 @@ export default function CustomerHomeScreen() {
             </Pressable>
           </View>
 
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.spotlightScroll}
-            decelerationRate="fast"
-            snapToInterval={CARD_WIDTH + 16}
-          >
-            {spotlightRestaurants.map((restaurant, index) => (
-              <Pressable
-                key={restaurant.id}
-                style={styles.spotlightCard}
-                onPress={() => navigateToRestaurant(restaurant.id)}
-              >
-                <Image
-                  source={{ uri: restaurant.images[0] }}
-                  style={styles.spotlightImage}
-                  contentFit="cover"
-                />
-                <LinearGradient
-                  colors={['transparent', 'rgba(0,0,0,0.85)']}
-                  style={styles.spotlightGradient}
-                />
-                <View style={styles.spotlightBadge}>
-                  <Percent size={12} color="#fff" />
-                  <Text style={styles.spotlightBadgeText}>Flat 50% OFF</Text>
-                </View>
-                <View style={styles.spotlightInfo}>
-                  <Text style={styles.spotlightName}>{restaurant.name}</Text>
-                  <Text style={styles.spotlightDesc} numberOfLines={2}>
-                    Crafted for Connoisseurs
-                  </Text>
-                  <Pressable style={styles.prebookBtn}>
-                    <Text style={styles.prebookBtnText}>PREBOOK NOW</Text>
-                  </Pressable>
-                </View>
-              </Pressable>
-            ))}
-          </ScrollView>
+          {spotlightRestaurants.length > 0 ? (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.spotlightScroll}
+              decelerationRate="fast"
+              snapToInterval={CARD_WIDTH + 16}
+            >
+              {spotlightRestaurants.map((restaurant) => (
+                <Pressable
+                  key={restaurant.id}
+                  style={styles.spotlightCard}
+                  onPress={() => navigateToRestaurant(restaurant.id)}
+                >
+                  <Image
+                    source={{ uri: restaurant.images[0] || 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800' }}
+                    style={styles.spotlightImage}
+                    contentFit="cover"
+                  />
+                  <LinearGradient
+                    colors={['transparent', 'rgba(0,0,0,0.85)']}
+                    style={styles.spotlightGradient}
+                  />
+                  <View style={styles.spotlightBadge}>
+                    <Percent size={12} color="#fff" />
+                    <Text style={styles.spotlightBadgeText}>Special Offer</Text>
+                  </View>
+                  <View style={styles.spotlightInfo}>
+                    <Text style={styles.spotlightName}>{restaurant.name}</Text>
+                    <Text style={styles.spotlightDesc} numberOfLines={2}>
+                      {restaurant.description || 'Crafted for Connoisseurs'}
+                    </Text>
+                    <Pressable style={styles.prebookBtn}>
+                      <Text style={styles.prebookBtnText}>VIEW NOW</Text>
+                    </Pressable>
+                  </View>
+                </Pressable>
+              ))}
+            </ScrollView>
+          ) : (
+            <View style={styles.emptySection}>
+              <Text style={styles.emptyText}>No spotlight restaurants available</Text>
+            </View>
+          )}
         </View>
 
         <View style={styles.section}>
@@ -536,6 +634,7 @@ export default function CustomerHomeScreen() {
           </View>
         </View>
 
+        {/* Categories Grid */}
         <View style={styles.section}>
           <View style={styles.categoriesGrid}>
             {serviceCategories.map((category) => (
@@ -549,50 +648,54 @@ export default function CustomerHomeScreen() {
           </View>
         </View>
 
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Hot Deals 🔥</Text>
-            <Pressable onPress={() => router.push('/(customer)/deals' as Href)}>
-              <ChevronRight size={22} color={colors.textMuted} />
-            </Pressable>
-          </View>
-
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.dealsScroll}
-          >
-            {hotDeals.map((deal) => (
-              <Pressable
-                key={deal.id}
-                style={styles.dealCard}
-                onPress={() => navigateToRestaurant(deal.restaurantId)}
-              >
-                <Image
-                  source={{ uri: deal.restaurantImage }}
-                  style={styles.dealImage}
-                  contentFit="cover"
-                />
-                <LinearGradient
-                  colors={['transparent', 'rgba(0,0,0,0.8)']}
-                  style={styles.dealGradient}
-                />
-                <View style={styles.discountBadge}>
-                  <Text style={styles.discountText}>{deal.discountPercent}% OFF</Text>
-                </View>
-                <View style={styles.dealInfo}>
-                  <Text style={styles.dealRestaurant}>{deal.restaurantName}</Text>
-                  <Text style={styles.dealTitle} numberOfLines={1}>{deal.title}</Text>
-                  <View style={styles.dealMeta}>
-                    <Clock size={12} color="rgba(255,255,255,0.8)" />
-                    <Text style={styles.dealMetaText}>Until {deal.validTill}</Text>
-                  </View>
-                </View>
+        {/* Hot Deals Section */}
+        {hotDeals.length > 0 && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Hot Deals 🔥</Text>
+              <Pressable onPress={() => router.push('/(customer)/deals' as Href)}>
+                <ChevronRight size={22} color={colors.textMuted} />
               </Pressable>
-            ))}
-          </ScrollView>
-        </View>
+            </View>
 
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.dealsScroll}
+            >
+              {hotDeals.map((deal) => (
+                <Pressable
+                  key={deal.id}
+                  style={styles.dealCard}
+                  onPress={() => navigateToRestaurant(deal.restaurantId)}
+                >
+                  <Image
+                    source={{ uri: deal.restaurantImage || 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=400' }}
+                    style={styles.dealImage}
+                    contentFit="cover"
+                  />
+                  <LinearGradient
+                    colors={['transparent', 'rgba(0,0,0,0.8)']}
+                    style={styles.dealGradient}
+                  />
+                  <View style={styles.discountBadge}>
+                    <Text style={styles.discountText}>{deal.discountPercent}% OFF</Text>
+                  </View>
+                  <View style={styles.dealInfo}>
+                    <Text style={styles.dealRestaurant}>{deal.restaurantName}</Text>
+                    <Text style={styles.dealTitle} numberOfLines={1}>{deal.title}</Text>
+                    <View style={styles.dealMeta}>
+                      <Clock size={12} color="rgba(255,255,255,0.8)" />
+                      <Text style={styles.dealMetaText}>Until {deal.validTill}</Text>
+                    </View>
+                  </View>
+                </Pressable>
+              ))}
+            </ScrollView>
+          </View>
+        )}
+
+        {/* Cuisine Types */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Cuisine Types</Text>
@@ -621,6 +724,7 @@ export default function CustomerHomeScreen() {
           </ScrollView>
         </View>
 
+        {/* Nearby Restaurants */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <View style={styles.sectionTitleRow}>
@@ -629,62 +733,72 @@ export default function CustomerHomeScreen() {
             </View>
           </View>
 
-          {nearbyRestaurants.map((restaurant) => {
-            const isFavorite = user?.favorites.includes(restaurant.id);
-            return (
-              <Pressable
-                key={restaurant.id}
-                style={styles.restaurantCard}
-                onPress={() => navigateToRestaurant(restaurant.id)}
-              >
-                <Image
-                  source={{ uri: restaurant.images[0] }}
-                  style={styles.restaurantImage}
-                  contentFit="cover"
-                />
-                <View style={styles.restaurantInfo}>
-                  <View style={styles.restaurantHeader}>
-                    <View style={styles.restaurantNameRow}>
-                      <Text style={styles.restaurantName} numberOfLines={1}>{restaurant.name}</Text>
-                      <View style={styles.ratingBadge}>
-                        <Star size={12} color="#fff" fill="#fff" />
-                        <Text style={styles.ratingText}>{restaurant.rating}</Text>
+          {nearbyRestaurants.length > 0 ? (
+            nearbyRestaurants.map((restaurant) => {
+              const isFavorite = user?.favorites?.includes(restaurant.id) || false;
+              return (
+                <Pressable
+                  key={restaurant.id}
+                  style={styles.restaurantCard}
+                  onPress={() => navigateToRestaurant(restaurant.id)}
+                >
+                  <Image
+                    source={{ uri: restaurant.images[0] || 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=400' }}
+                    style={styles.restaurantImage}
+                    contentFit="cover"
+                  />
+                  <View style={styles.restaurantInfo}>
+                    <View style={styles.restaurantHeader}>
+                      <View style={styles.restaurantNameRow}>
+                        <Text style={styles.restaurantName} numberOfLines={1}>{restaurant.name}</Text>
+                        <View style={styles.ratingBadge}>
+                          <Star size={12} color="#fff" fill="#fff" />
+                          <Text style={styles.ratingText}>{restaurant.rating.toFixed(1)}</Text>
+                        </View>
                       </View>
+                      <Pressable 
+                        onPress={() => toggleFavorite(restaurant.id)}
+                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                      >
+                        <Heart
+                          size={22}
+                          color={isFavorite ? colors.error : colors.textMuted}
+                          fill={isFavorite ? colors.error : 'transparent'}
+                        />
+                      </Pressable>
                     </View>
-                    <Pressable 
-                      onPress={() => toggleFavorite(restaurant.id)}
-                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                    >
-                      <Heart
-                        size={22}
-                        color={isFavorite ? colors.error : colors.textMuted}
-                        fill={isFavorite ? colors.error : 'transparent'}
-                      />
-                    </Pressable>
-                  </View>
-                  <Text style={styles.restaurantCuisine}>{restaurant.cuisineType} • {restaurant.city}</Text>
-                  <View style={styles.restaurantMeta}>
-                    <View style={styles.metaItem}>
-                      <Clock size={14} color={colors.textMuted} />
-                      <Text style={styles.metaText}>{restaurant.waitingTime}</Text>
-                    </View>
-                    <View style={styles.metaDot} />
-                    <Text style={styles.openStatus}>
-                      <Text style={{ color: colors.success }}>Open</Text> till 11:59PM
+                    <Text style={styles.restaurantCuisine}>
+                      {restaurant.cuisineTypes.join(', ')} • {restaurant.address.split(',')[1] || restaurant.address}
                     </Text>
+                    <View style={styles.restaurantMeta}>
+                      <View style={styles.metaItem}>
+                        <Clock size={14} color={colors.textMuted} />
+                        <Text style={styles.metaText}>30-45 min</Text>
+                      </View>
+                      <View style={styles.metaDot} />
+                      <Text style={styles.openStatus}>
+                        <Text style={{ color: colors.success }}>Open</Text> till 11:59PM
+                      </Text>
+                    </View>
+                    <View style={styles.restaurantActions}>
+                      <Pressable style={styles.bookTableBtn}>
+                        <Text style={styles.bookTableText}>Book a table</Text>
+                      </Pressable>
+                      <Pressable style={styles.orderBtn}>
+                        <Text style={styles.orderBtnText}>Order</Text>
+                      </Pressable>
+                    </View>
                   </View>
-                  <View style={styles.restaurantActions}>
-                    <Pressable style={styles.bookTableBtn}>
-                      <Text style={styles.bookTableText}>Book a table</Text>
-                    </Pressable>
-                    <Pressable style={styles.orderBtn}>
-                      <Text style={styles.orderBtnText}>Order</Text>
-                    </Pressable>
-                  </View>
-                </View>
-              </Pressable>
-            );
-          })}
+                </Pressable>
+              );
+            })
+          ) : (
+            <View style={styles.emptySection}>
+              <MapPin size={48} color={colors.textMuted} />
+              <Text style={styles.emptyTitle}>No restaurants found</Text>
+              <Text style={styles.emptyText}>Try adjusting your filters or search query</Text>
+            </View>
+          )}
         </View>
       </ScrollView>
     </View>
@@ -1342,5 +1456,49 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     fontSize: 14,
     fontWeight: '600' as const,
     color: '#fff',
+  },
+  loadingText: {
+    fontSize: 16,
+    color: colors.textSecondary,
+  },
+  errorTitle: {
+    fontSize: 18,
+    fontWeight: '600' as const,
+    color: colors.text,
+    marginBottom: 8,
+  },
+  errorText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  retryButton: {
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    backgroundColor: colors.primary,
+    borderRadius: 12,
+  },
+  retryButtonText: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: '#fff',
+  },
+  emptySection: {
+    alignItems: 'center',
+    paddingVertical: 40,
+    paddingHorizontal: 20,
+  },
+  emptyTitle: {
+    fontSize: 16,
+    fontWeight: '600' as const,
+    color: colors.text,
+    marginTop: 12,
+  },
+  emptyText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    marginTop: 8,
+    textAlign: 'center',
   },
 });
