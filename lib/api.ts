@@ -21,7 +21,7 @@ const getAPIUrl = (): string => {
     return extra.apiUrl || 'http://localhost:8080/api/v1';
   } else {
     // Production mode
-    return extra.apiUrlProduction || 'https://rork-finedine-api.fly.dev/api/v1';
+    return extra.apiUrlProduction || 'https://primedine.fly.dev/api/v1';
   }
 };
 
