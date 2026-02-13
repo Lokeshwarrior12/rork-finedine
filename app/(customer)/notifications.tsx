@@ -6,10 +6,13 @@ import {
   ScrollView,
   Pressable,
   RefreshControl,
+  ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Bell,
   Tag,
@@ -21,6 +24,7 @@ import {
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { useTheme } from '@/contexts/ThemeContext';
+import { api } from '@/lib/api';
 
 interface Notification {
   id: string;
@@ -34,68 +38,79 @@ interface Notification {
   createdAt: string;
 }
 
-const mockNotifications: Notification[] = [
-  {
-    id: 'n1',
-    type: 'offer',
-    title: 'New Deal Available!',
-    message: 'The Golden Fork just launched a 30% off weekend brunch offer. Don\'t miss out!',
-    restaurantName: 'The Golden Fork',
-    restaurantImage: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=200',
-    restaurantId: '1',
-    read: false,
-    createdAt: '2 hours ago',
-  },
-  {
-    id: 'n2',
-    type: 'booking',
-    title: 'Booking Confirmed',
-    message: 'Your table for 4 at Sakura Lounge is confirmed for Jan 25 at 7:00 PM.',
-    restaurantName: 'Sakura Lounge',
-    restaurantImage: 'https://images.unsplash.com/photo-1579871494447-9811cf80d66c?w=200',
-    restaurantId: '3',
-    read: false,
-    createdAt: '5 hours ago',
-  },
-  {
-    id: 'n3',
-    type: 'reward',
-    title: 'Points Earned!',
-    message: 'You earned 20 points for claiming a coupon. Keep collecting!',
-    read: true,
-    createdAt: '1 day ago',
-  },
-  {
-    id: 'n4',
-    type: 'favorite',
-    title: 'New Offer from Favorite',
-    message: 'Spice Garden, one of your favorites, has a new 50% BOGO offer!',
-    restaurantName: 'Spice Garden',
-    restaurantImage: 'https://images.unsplash.com/photo-1585937421612-70a008356fbe?w=200',
-    restaurantId: '2',
-    read: true,
-    createdAt: '2 days ago',
-  },
-  {
-    id: 'n5',
-    type: 'general',
-    title: 'Coupon Expiring Soon',
-    message: 'Your coupon for The Rooftop Bar expires in 3 days. Use it before it\'s gone!',
-    restaurantName: 'The Rooftop Bar',
-    restaurantImage: 'https://images.unsplash.com/photo-1470337458703-46ad1756a187?w=200',
-    restaurantId: '4',
-    read: true,
-    createdAt: '3 days ago',
-  },
-];
-
 export default function NotificationsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { colors, isDark } = useTheme();
-  const [notifications, setNotifications] = useState<Notification[]>(mockNotifications);
+  const queryClient = useQueryClient();
   const [refreshing, setRefreshing] = useState(false);
 
+  // REAL API QUERY - Fetch notifications from backend
+  const { 
+    data: notificationsResponse, 
+    isLoading,
+    error,
+    refetch 
+  } = useQuery({
+    queryKey: ['notifications'],
+    queryFn: async () => {
+      console.log('🔄 Fetching notifications from API...');
+      const result = await api.getNotifications();
+      console.log('✅ Notifications fetched:', result.data?.length || 0);
+      return result;
+    },
+    staleTime: 60 * 1000, // Cache for 1 minute
+  });
+
+  // REAL API MUTATION - Mark notification as read
+  const markAsReadMutation = useMutation({
+    mutationFn: async (notificationId: string) => {
+      console.log('🔄 Marking notification as read:', notificationId);
+      return await api.markNotificationAsRead(notificationId);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries(['notifications']);
+    },
+    onError: (error) => {
+      console.error('❌ Failed to mark as read:', error);
+    },
+  });
+
+  // REAL API MUTATION - Mark all as read
+  const markAllReadMutation = useMutation({
+    mutationFn: async () => {
+      console.log('🔄 Marking all notifications as read...');
+      return await api.markAllNotificationsAsRead();
+    },
+    onSuccess: () => {
+      console.log('✅ All notifications marked as read');
+      queryClient.invalidateQueries(['notifications']);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    },
+    onError: (error) => {
+      console.error('❌ Failed to mark all as read:', error);
+      Alert.alert('Error', 'Failed to mark all as read');
+    },
+  });
+
+  // REAL API MUTATION - Delete notification
+  const deleteNotificationMutation = useMutation({
+    mutationFn: async (notificationId: string) => {
+      console.log('🔄 Deleting notification:', notificationId);
+      return await api.deleteNotification(notificationId);
+    },
+    onSuccess: () => {
+      console.log('✅ Notification deleted');
+      queryClient.invalidateQueries(['notifications']);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    },
+    onError: (error) => {
+      console.error('❌ Failed to delete notification:', error);
+      Alert.alert('Error', 'Failed to delete notification');
+    },
+  });
+
+  const notifications = notificationsResponse?.data || [];
   const unreadCount = notifications.filter(n => !n.read).length;
   const styles = createStyles(colors, isDark);
 
@@ -117,30 +132,68 @@ export default function NotificationsScreen() {
   const handleNotificationPress = async (notification: Notification) => {
     await Haptics.selectionAsync();
     
-    setNotifications(prev =>
-      prev.map(n => n.id === notification.id ? { ...n, read: true } : n)
-    );
+    // Mark as read if not already read
+    if (!notification.read) {
+      markAsReadMutation.mutate(notification.id);
+    }
 
+    // Navigate to restaurant if associated
     if (notification.restaurantId) {
-      router.push(`/restaurant/${notification.restaurantId}` as any);
+      router.push(`/(customer)/restaurant/${notification.restaurantId}` as any);
     }
   };
 
   const markAllAsRead = async () => {
-    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+    if (unreadCount === 0) return;
+    markAllReadMutation.mutate();
   };
 
   const deleteNotification = async (id: string) => {
-    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    setNotifications(prev => prev.filter(n => n.id !== id));
+    Alert.alert(
+      'Delete Notification',
+      'Are you sure you want to delete this notification?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => deleteNotificationMutation.mutate(id),
+        },
+      ]
+    );
   };
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    await refetch();
     setRefreshing(false);
   };
+
+  // Loading State
+  if (isLoading && !notificationsResponse) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top, justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={[styles.loadingText, { marginTop: 16 }]}>Loading notifications...</Text>
+      </View>
+    );
+  }
+
+  // Error State
+  if (error && !notificationsResponse) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 20 }]}>
+        <Bell size={48} color={colors.textMuted} />
+        <Text style={styles.errorTitle}>Unable to load notifications</Text>
+        <Text style={styles.errorText}>
+          {error instanceof Error ? error.message : 'Please check your connection'}
+        </Text>
+        <Pressable style={styles.retryButton} onPress={() => refetch()}>
+          <Text style={styles.retryButtonText}>Retry</Text>
+        </Pressable>
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -152,9 +205,19 @@ export default function NotificationsScreen() {
           )}
         </View>
         {unreadCount > 0 && (
-          <Pressable style={styles.markReadButton} onPress={markAllAsRead}>
-            <CheckCircle size={18} color={colors.primary} />
-            <Text style={styles.markReadText}>Mark all read</Text>
+          <Pressable 
+            style={styles.markReadButton} 
+            onPress={markAllAsRead}
+            disabled={markAllReadMutation.isPending}
+          >
+            {markAllReadMutation.isPending ? (
+              <ActivityIndicator size="small" color={colors.primary} />
+            ) : (
+              <>
+                <CheckCircle size={18} color={colors.primary} />
+                <Text style={styles.markReadText}>Mark all read</Text>
+              </>
+            )}
           </Pressable>
         )}
       </View>
@@ -218,8 +281,14 @@ export default function NotificationsScreen() {
                 <Pressable 
                   style={styles.deleteButton}
                   onPress={() => deleteNotification(notification.id)}
+                  disabled={deleteNotificationMutation.isPending}
                 >
-                  <Trash2 size={16} color={colors.textMuted} />
+                  {deleteNotificationMutation.isPending && 
+                   deleteNotificationMutation.variables === notification.id ? (
+                    <ActivityIndicator size="small" color={colors.textMuted} />
+                  ) : (
+                    <Trash2 size={16} color={colors.textMuted} />
+                  )}
                 </Pressable>
               </View>
             </Pressable>
@@ -270,6 +339,8 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     paddingHorizontal: 12,
     backgroundColor: colors.primaryLight,
     borderRadius: 20,
+    minWidth: 100,
+    justifyContent: 'center',
   },
   markReadText: {
     fontSize: 13,
@@ -383,5 +454,33 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     textAlign: 'center',
     maxWidth: 280,
     lineHeight: 20,
+  },
+  loadingText: {
+    fontSize: 16,
+    color: colors.textSecondary,
+  },
+  errorTitle: {
+    fontSize: 18,
+    fontWeight: '600' as const,
+    color: colors.text,
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  errorText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  retryButton: {
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    backgroundColor: colors.primary,
+    borderRadius: 12,
+  },
+  retryButtonText: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: '#fff',
   },
 });
