@@ -1,11 +1,27 @@
+// app/(restaurant)/_layout.tsx
+// Restaurant Owner Tab Layout - Production Version with Real Backend Integration
+
 import { Tabs } from 'expo-router';
 import { LayoutDashboard, Tag, BarChart3, Settings } from 'lucide-react-native';
 import React from 'react';
 import { Platform, View, StyleSheet } from 'react-native';
 import { useTheme } from '@/contexts/ThemeContext';
+import { useAuth } from '@/contexts/AuthContext';
+import { Redirect } from 'expo-router';
 
 export default function RestaurantLayout() {
   const { colors } = useTheme();
+  const { user } = useAuth();
+
+  // CRITICAL: Verify user is restaurant owner
+  // Redirect if not authenticated or not restaurant owner role
+  if (!user) {
+    return <Redirect href="/login" />;
+  }
+
+  if (user.role !== 'restaurant_owner') {
+    return <Redirect href="/(tabs)" />;
+  }
 
   return (
     <Tabs
@@ -84,48 +100,14 @@ export default function RestaurantLayout() {
           ),
         }}
       />
-      <Tabs.Screen
-        name="inventory"
-        options={{
-          href: null,
-        }}
-      />
-      <Tabs.Screen
-        name="scan"
-        options={{
-          href: null,
-        }}
-      />
-      <Tabs.Screen
-        name="food-waste"
-        options={{
-          href: null,
-        }}
-      />
-      <Tabs.Screen
-        name="schedule"
-        options={{
-          href: null,
-        }}
-      />
-      <Tabs.Screen
-        name="services"
-        options={{
-          href: null,
-        }}
-      />
-      <Tabs.Screen
-        name="book-call"
-        options={{
-          href: null,
-        }}
-      />
-      <Tabs.Screen
-        name="orders"
-        options={{
-          href: null,
-        }}
-      />
+      {/* Hidden screens (accessible via navigation but not in tab bar) */}
+      <Tabs.Screen name="inventory" options={{ href: null }} />
+      <Tabs.Screen name="scan" options={{ href: null }} />
+      <Tabs.Screen name="food-waste" options={{ href: null }} />
+      <Tabs.Screen name="schedule" options={{ href: null }} />
+      <Tabs.Screen name="services" options={{ href: null }} />
+      <Tabs.Screen name="book-call" options={{ href: null }} />
+      <Tabs.Screen name="orders" options={{ href: null }} />
     </Tabs>
   );
 }
