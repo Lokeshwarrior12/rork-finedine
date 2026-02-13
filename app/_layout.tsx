@@ -7,7 +7,7 @@ import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import Constants from 'expo-constants';
-
+import { ThemeProvider, useTheme } from '@/contexts/ThemeContext';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
@@ -262,16 +262,18 @@ export default function RootLayout() {
     initialize();
   }, []);
 
-  return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
-      <QueryClientProvider client={queryClient}>
+// FIXED:
+return (
+  <GestureHandlerRootView style={{ flex: 1 }}>
+    <QueryClientProvider client={queryClient}>
+      <ThemeProvider>           {/* ← ADD THIS LINE */}
         <AuthProvider>
           <RootLayoutInner />
         </AuthProvider>
-      </QueryClientProvider>
-    </GestureHandlerRootView>
-  );
-}
+      </ThemeProvider>           {/* ← ADD THIS LINE */}
+    </QueryClientProvider>
+  </GestureHandlerRootView>
+);
 
 /* ──────────────────────────────────────────────────────────
    Styles
