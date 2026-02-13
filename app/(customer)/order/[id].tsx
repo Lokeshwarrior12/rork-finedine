@@ -1,5 +1,5 @@
 // app/(customer)/order/[id].tsx
-// Order Tracking & Details Screen with Real-time Updates
+// Order Tracking & Details Screen with Real-time Supabase Updates
 
 import React, { useEffect } from 'react';
 import {
@@ -23,10 +23,27 @@ import {
   Home,
 } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { supabase } from '@/lib/supabase';
+import { supabase, realtime } from '@/lib/supabase';
 
 import { api, Order } from '@/lib/api';
-import Colors from '@/constants/colors';
+
+/* ──────────────────────────────────────────────────────────
+   Constants
+────────────────────────────────────────────────────────── */
+
+const Colors = {
+  primary: '#F97316',
+  success: '#4CAF50',
+  error: '#FF3B30',
+  warning: '#FF9800',
+  info: '#2196F3',
+  text: '#333',
+  textSecondary: '#666',
+  textMuted: '#999',
+  background: '#fff',
+  surface: '#f9f9f9',
+  border: '#f0f0f0',
+};
 
 const ORDER_STATUSES = [
   { key: 'pending', label: 'Order Placed', icon: CheckCircle },
@@ -36,13 +53,20 @@ const ORDER_STATUSES = [
   { key: 'delivered', label: 'Delivered', icon: Home },
 ];
 
+/* ──────────────────────────────────────────────────────────
+   Component
+────────────────────────────────────────────────────────── */
+
 export default function OrderTrackingScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
 
-  // Fetch order details
+  /* ────────────────────────────────────────────────────────
+     Data Fetching
+  ──────────────────────────────────────────────────────── */
+
   const {
     data: orderData,
     isLoading,
@@ -53,42 +77,52 @@ export default function OrderTrackingScreen() {
     queryFn: () => api.getOrder(id!),
     enabled: !!id,
     refetchInterval: 30000, // Refetch every 30 seconds as backup
+    staleTime: 10000, // Consider data fresh for 10 seconds
   });
 
   const order = orderData?.data;
 
-  // Real-time subscription for order updates
+  /* ────────────────────────────────────────────────────────
+     Real-time Subscription
+  ──────────────────────────────────────────────────────── */
+
   useEffect(() => {
     if (!id) return;
 
-    const channel = supabase
-      .channel(`order:${id}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'orders',
-          filter: `id=eq.${id}`,
-        },
-        (payload) => {
-          console.log('Order updated:', payload);
-          // Invalidate and refetch the order
-          queryClient.invalidateQueries({ queryKey: ['order', id] });
-        }
-      )
-      .subscribe();
+    console.log('📡 Subscribing to order updates:', id);
+
+    // Subscribe to order updates using Supabase Realtime
+    const unsubscribe = realtime.subscribeToRow(
+      'orders',
+      id,
+      (payload) => {
+        console.log('🔔 Order updated in real-time:', payload);
+        
+        // Invalidate and refetch the order
+        queryClient.invalidateQueries({ queryKey: ['order', id] });
+      }
+    );
 
     return () => {
-      supabase.removeChannel(channel);
+      console.log('🔌 Unsubscribing from order updates');
+      unsubscribe();
     };
   }, [id, queryClient]);
+
+  /* ────────────────────────────────────────────────────────
+     Helpers
+  ──────────────────────────────────────────────────────── */
 
   const getStatusIndex = (status: string) => {
     return ORDER_STATUSES.findIndex((s) => s.key === status);
   };
 
   const currentStatusIndex = order ? getStatusIndex(order.status) : -1;
+  const isCancelled = order?.status === 'cancelled';
+
+  /* ────────────────────────────────────────────────────────
+     Loading State
+  ──────────────────────────────────────────────────────── */
 
   if (isLoading) {
     return (
@@ -99,28 +133,43 @@ export default function OrderTrackingScreen() {
     );
   }
 
+  /* ────────────────────────────────────────────────────────
+     Error State
+  ──────────────────────────────────────────────────────── */
+
   if (error || !order) {
     return (
       <View style={styles.errorContainer}>
+        <Package size={64} color={Colors.error} />
         <Text style={styles.errorTitle}>Order Not Found</Text>
         <Text style={styles.errorMessage}>
-          {error instanceof Error ? error.message : 'Unable to load order details'}
+          {error instanceof Error 
+            ? error.message 
+            : 'Unable to load order details. Please try again.'}
         </Text>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+        <TouchableOpacity 
+          style={styles.backButton} 
+          onPress={() => router.back()}
+        >
           <Text style={styles.backButtonText}>Go Back</Text>
         </TouchableOpacity>
       </View>
     );
   }
 
-  const isCancelled = order.status === 'cancelled';
+  /* ────────────────────────────────────────────────────────
+     Render
+  ──────────────────────────────────────────────────────── */
 
   return (
     <View style={styles.container}>
       {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
-        <TouchableOpacity style={styles.backButtonIcon} onPress={() => router.back()}>
-          <ArrowLeft size={24} color="#333" />
+        <TouchableOpacity 
+          style={styles.backButtonIcon} 
+          onPress={() => router.back()}
+        >
+          <ArrowLeft size={24} color={Colors.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Order #{order.id.slice(0, 8)}</Text>
         <View style={{ width: 40 }} />
@@ -131,8 +180,13 @@ export default function OrderTrackingScreen() {
           styles.scrollContent,
           { paddingBottom: insets.bottom + 24 },
         ]}
+        showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl refreshing={false} onRefresh={() => refetch()} />
+          <RefreshControl 
+            refreshing={false} 
+            onRefresh={() => refetch()} 
+            tintColor={Colors.primary}
+          />
         }
       >
         {/* Order Status */}
@@ -160,16 +214,17 @@ export default function OrderTrackingScreen() {
 
                   return (
                     <View key={status.key} style={styles.progressStep}>
-                      <View style={styles.progressLine}>
-                        {index > 0 && (
-                          <View
-                            style={[
-                              styles.progressLineFill,
-                              isCompleted && styles.progressLineFillActive,
-                            ]}
-                          />
-                        )}
-                      </View>
+                      {/* Connection Line */}
+                      {index > 0 && (
+                        <View
+                          style={[
+                            styles.progressLine,
+                            isCompleted && styles.progressLineActive,
+                          ]}
+                        />
+                      )}
+                      
+                      {/* Status Icon */}
                       <View
                         style={[
                           styles.progressIcon,
@@ -181,6 +236,8 @@ export default function OrderTrackingScreen() {
                           color={isCompleted ? '#fff' : '#ccc'}
                         />
                       </View>
+                      
+                      {/* Status Label */}
                       <Text
                         style={[
                           styles.progressLabel,
@@ -202,7 +259,7 @@ export default function OrderTrackingScreen() {
           <Text style={styles.sectionTitle}>Delivery Information</Text>
           <View style={styles.infoCard}>
             <View style={styles.infoRow}>
-              <MapPin size={18} color="#666" />
+              <MapPin size={18} color={Colors.textSecondary} />
               <View style={styles.infoContent}>
                 <Text style={styles.infoLabel}>Delivery Address</Text>
                 <Text style={styles.infoValue}>{order.deliveryAddress}</Text>
@@ -210,18 +267,23 @@ export default function OrderTrackingScreen() {
             </View>
 
             <View style={styles.infoRow}>
-              <Clock size={18} color="#666" />
+              <Clock size={18} color={Colors.textSecondary} />
               <View style={styles.infoContent}>
                 <Text style={styles.infoLabel}>Order Time</Text>
                 <Text style={styles.infoValue}>
-                  {new Date(order.createdAt).toLocaleString()}
+                  {new Date(order.createdAt).toLocaleString('en-US', {
+                    month: 'short',
+                    day: 'numeric',
+                    hour: 'numeric',
+                    minute: '2-digit',
+                  })}
                 </Text>
               </View>
             </View>
 
             {order.notes && (
               <View style={styles.infoRow}>
-                <Package size={18} color="#666" />
+                <Package size={18} color={Colors.textSecondary} />
                 <View style={styles.infoContent}>
                   <Text style={styles.infoLabel}>Special Instructions</Text>
                   <Text style={styles.infoValue}>{order.notes}</Text>
@@ -237,7 +299,9 @@ export default function OrderTrackingScreen() {
           {order.items.map((item, index) => (
             <View key={index} style={styles.orderItem}>
               <View style={styles.orderItemQuantity}>
-                <Text style={styles.orderItemQuantityText}>{item.quantity}x</Text>
+                <Text style={styles.orderItemQuantityText}>
+                  {item.quantity}x
+                </Text>
               </View>
               <Text style={styles.orderItemName}>{item.name}</Text>
               <Text style={styles.orderItemPrice}>
@@ -303,38 +367,43 @@ export default function OrderTrackingScreen() {
   );
 }
 
+/* ──────────────────────────────────────────────────────────
+   Styles
+────────────────────────────────────────────────────────── */
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: Colors.background,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#fff',
+    backgroundColor: Colors.background,
   },
   loadingText: {
     marginTop: 12,
     fontSize: 16,
-    color: '#666',
+    color: Colors.textSecondary,
   },
   errorContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 24,
-    backgroundColor: '#fff',
+    backgroundColor: Colors.background,
   },
   errorTitle: {
     fontSize: 20,
     fontWeight: '600',
-    color: '#333',
+    color: Colors.text,
+    marginTop: 16,
     marginBottom: 8,
   },
   errorMessage: {
     fontSize: 14,
-    color: '#666',
+    color: Colors.textSecondary,
     textAlign: 'center',
     marginBottom: 24,
   },
@@ -356,7 +425,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: Colors.border,
+    backgroundColor: Colors.background,
   },
   backButtonIcon: {
     width: 40,
@@ -367,7 +437,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#333',
+    color: Colors.text,
   },
   scrollContent: {
     padding: 16,
@@ -384,18 +454,18 @@ const styles = StyleSheet.create({
   cancelledText: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#FF3B30',
+    color: Colors.error,
   },
   statusTitle: {
     fontSize: 24,
     fontWeight: '700',
-    color: '#333',
+    color: Colors.text,
     textAlign: 'center',
     marginBottom: 8,
   },
   statusSubtitle: {
     fontSize: 14,
-    color: '#666',
+    color: Colors.textSecondary,
     textAlign: 'center',
     marginBottom: 24,
   },
@@ -414,20 +484,16 @@ const styles = StyleSheet.create({
     left: '50%',
     right: '-50%',
     height: 2,
-    backgroundColor: '#f0f0f0',
+    backgroundColor: Colors.border,
   },
-  progressLineFill: {
-    height: '100%',
-    backgroundColor: Colors.primary,
-  },
-  progressLineFillActive: {
+  progressLineActive: {
     backgroundColor: Colors.primary,
   },
   progressIcon: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#f0f0f0',
+    backgroundColor: Colors.border,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 8,
@@ -438,23 +504,25 @@ const styles = StyleSheet.create({
   },
   progressLabel: {
     fontSize: 11,
-    color: '#999',
+    color: Colors.textMuted,
     textAlign: 'center',
   },
   progressLabelActive: {
-    color: '#333',
+    color: Colors.text,
     fontWeight: '600',
   },
   sectionTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#333',
+    color: Colors.text,
     marginBottom: 12,
   },
   infoCard: {
-    backgroundColor: '#f9f9f9',
+    backgroundColor: Colors.surface,
     borderRadius: 12,
     padding: 16,
+    borderWidth: 1,
+    borderColor: Colors.border,
   },
   infoRow: {
     flexDirection: 'row',
@@ -466,25 +534,25 @@ const styles = StyleSheet.create({
   },
   infoLabel: {
     fontSize: 12,
-    color: '#999',
+    color: Colors.textMuted,
     marginBottom: 4,
   },
   infoValue: {
     fontSize: 14,
-    color: '#333',
+    color: Colors.text,
   },
   orderItem: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: Colors.border,
   },
   orderItemQuantity: {
     width: 32,
     height: 32,
     borderRadius: 6,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: Colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
@@ -492,22 +560,24 @@ const styles = StyleSheet.create({
   orderItemQuantityText: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#333',
+    color: Colors.text,
   },
   orderItemName: {
     flex: 1,
     fontSize: 14,
-    color: '#333',
+    color: Colors.text,
   },
   orderItemPrice: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#333',
+    color: Colors.text,
   },
   billCard: {
-    backgroundColor: '#f9f9f9',
+    backgroundColor: Colors.surface,
     borderRadius: 12,
     padding: 16,
+    borderWidth: 1,
+    borderColor: Colors.border,
   },
   billRow: {
     flexDirection: 'row',
@@ -516,11 +586,11 @@ const styles = StyleSheet.create({
   },
   billLabel: {
     fontSize: 14,
-    color: '#666',
+    color: Colors.textSecondary,
   },
   billValue: {
     fontSize: 14,
-    color: '#333',
+    color: Colors.text,
     fontWeight: '500',
   },
   billDivider: {
@@ -531,7 +601,7 @@ const styles = StyleSheet.create({
   billTotalLabel: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#333',
+    color: Colors.text,
   },
   billTotalValue: {
     fontSize: 16,
@@ -544,12 +614,14 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginTop: 12,
     padding: 12,
-    backgroundColor: '#f9f9f9',
+    backgroundColor: Colors.surface,
     borderRadius: 8,
+    borderWidth: 1,
+    borderColor: Colors.border,
   },
   paymentStatusLabel: {
     fontSize: 14,
-    color: '#666',
+    color: Colors.textSecondary,
   },
   paymentStatusBadge: {
     paddingHorizontal: 12,
@@ -563,10 +635,10 @@ const styles = StyleSheet.create({
   paymentStatusText: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#FF3B30',
+    color: Colors.error,
   },
   paymentStatusTextPaid: {
-    color: '#4CAF50',
+    color: Colors.success,
   },
   helpSection: {
     alignItems: 'center',
@@ -574,7 +646,7 @@ const styles = StyleSheet.create({
   },
   helpText: {
     fontSize: 14,
-    color: '#666',
+    color: Colors.textSecondary,
     marginBottom: 12,
   },
   helpButton: {
