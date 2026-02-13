@@ -1,455 +1,873 @@
+// app/bookings.tsx
+// Table Booking Screen with Real Backend Integration
+
 import React, { useState } from 'react';
 import {
   View,
   Text,
-  StyleSheet,
-  ScrollView,
   Pressable,
+  TextInput,
+  StyleSheet,
+  ActivityIndicator,
   Alert,
+  ScrollView,
 } from 'react-native';
-import { Image } from 'expo-image';
-import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useTheme } from '@/contexts/ThemeContext';
+import { useAuth } from '@/contexts/AuthContext';
+import { api } from '@/lib/api';
 import {
-  Calendar,
-  Clock,
+  CalendarDays,
   Users,
-  X,
+  ArrowLeft,
+  Clock,
+  MapPin,
   CheckCircle,
-  AlertCircle,
 } from 'lucide-react-native';
-import * as Haptics from 'expo-haptics';
-import Colors from '@/constants/colors';
-
-type BookingStatus = 'upcoming' | 'completed' | 'cancelled';
-
-interface Booking {
-  id: string;
-  restaurantId: string;
-  restaurantName: string;
-  restaurantImage: string;
-  date: string;
-  time: string;
-  guests: number;
-  tableType: string;
-  status: BookingStatus;
-  specialRequests?: string;
-  confirmationCode: string;
-}
-
-const mockBookings: Booking[] = [
-  {
-    id: 'b1',
-    restaurantId: '1',
-    restaurantName: 'The Golden Fork',
-    restaurantImage: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=400',
-    date: 'Jan 28, 2026',
-    time: '7:00 PM',
-    guests: 4,
-    tableType: 'Window Seat',
-    status: 'upcoming',
-    specialRequests: 'Anniversary celebration - any decorations appreciated!',
-    confirmationCode: 'FD-GF1234',
-  },
-  {
-    id: 'b2',
-    restaurantId: '3',
-    restaurantName: 'Sakura Lounge',
-    restaurantImage: 'https://images.unsplash.com/photo-1579871494447-9811cf80d66c?w=400',
-    date: 'Feb 14, 2026',
-    time: '8:00 PM',
-    guests: 2,
-    tableType: 'Private Booth',
-    status: 'upcoming',
-    confirmationCode: 'FD-SL5678',
-  },
-  {
-    id: 'b3',
-    restaurantId: '2',
-    restaurantName: 'Spice Garden',
-    restaurantImage: 'https://images.unsplash.com/photo-1585937421612-70a008356fbe?w=400',
-    date: 'Jan 15, 2026',
-    time: '12:30 PM',
-    guests: 6,
-    tableType: 'Large Table',
-    status: 'completed',
-    confirmationCode: 'FD-SG9012',
-  },
-  {
-    id: 'b4',
-    restaurantId: '4',
-    restaurantName: 'The Rooftop Bar',
-    restaurantImage: 'https://images.unsplash.com/photo-1470337458703-46ad1756a187?w=400',
-    date: 'Jan 10, 2026',
-    time: '6:00 PM',
-    guests: 3,
-    tableType: 'Outdoor',
-    status: 'cancelled',
-    confirmationCode: 'FD-RB3456',
-  },
-];
 
 export default function BookingsScreen() {
-  const router = useRouter();
   const insets = useSafeAreaInsets();
-  const [activeTab, setActiveTab] = useState<BookingStatus>('upcoming');
-  const [bookings, setBookings] = useState<Booking[]>(mockBookings);
+  const router = useRouter();
+  const { colors } = useTheme();
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const { restaurantId, restaurantName } = useLocalSearchParams<{
+    restaurantId?: string;
+    restaurantName?: string;
+  }>();
 
-  const filteredBookings = bookings.filter(b => b.status === activeTab);
+  // Form state
+  const [date, setDate] = useState('');
+  const [time, setTime] = useState('19:00');
+  const [guests, setGuests] = useState('2');
+  const [notes, setNotes] = useState('');
 
-  const tabs: { key: BookingStatus; label: string; count: number }[] = [
-    { key: 'upcoming', label: 'Upcoming', count: bookings.filter(b => b.status === 'upcoming').length },
-    { key: 'completed', label: 'Completed', count: bookings.filter(b => b.status === 'completed').length },
-    { key: 'cancelled', label: 'Cancelled', count: bookings.filter(b => b.status === 'cancelled').length },
+  /* -----------------------------------------------------
+     CREATE BOOKING MUTATION
+  ----------------------------------------------------- */
+  const createBookingMutation = useMutation({
+    mutationFn: async (bookingData: {
+      restaurantId: string;
+      date: string;
+      time: string;
+      guests: number;
+      notes?: string;
+    }) => {
+      console.log('📅 Creating booking:', bookingData);
+
+      // Call real booking endpoint
+      const response = await api.request<any>('/bookings', {
+        method: 'POST',
+        body: JSON.stringify(bookingData),
+      });
+
+      return response.data;
+    },
+    onSuccess: (data) => {
+      console.log('✅ Booking created:', data);
+
+      // Invalidate bookings cache
+      queryClient.invalidateQueries({ queryKey: ['bookings'] });
+
+      // Show success message
+      Alert.alert(
+        'Booking Confirmed! 🎉',
+        `Your table for ${guests} ${parseInt(guests) === 1 ? 'person' : 'people'} on ${date} at ${time} has been confirmed.`,
+        [
+          {
+            text: 'OK',
+            onPress: () => router.back(),
+          },
+        ]
+      );
+    },
+    onError: (error: any) => {
+      console.error('❌ Booking failed:', error);
+
+      Alert.alert(
+        'Booking Failed',
+        error.message || 'Unable to create booking. Please try again.',
+        [{ text: 'OK' }]
+      );
+    },
+  });
+
+  /* -----------------------------------------------------
+     FORM VALIDATION
+  ----------------------------------------------------- */
+  const validateForm = (): boolean => {
+    if (!date) {
+      Alert.alert('Date Required', 'Please enter a booking date');
+      return false;
+    }
+
+    // Validate date format (YYYY-MM-DD)
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (!dateRegex.test(date)) {
+      Alert.alert(
+        'Invalid Date',
+        'Please use format YYYY-MM-DD (e.g., 2026-02-15)'
+      );
+      return false;
+    }
+
+    // Check if date is in the future
+    const bookingDate = new Date(date);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    if (bookingDate < today) {
+      Alert.alert('Invalid Date', 'Booking date must be in the future');
+      return false;
+    }
+
+    if (!guests || parseInt(guests) < 1) {
+      Alert.alert('Guests Required', 'Please enter number of guests (minimum 1)');
+      return false;
+    }
+
+    if (parseInt(guests) > 20) {
+      Alert.alert(
+        'Large Party',
+        'For parties larger than 20, please call the restaurant directly'
+      );
+      return false;
+    }
+
+    return true;
+  };
+
+  /* -----------------------------------------------------
+     FORM SUBMISSION
+  ----------------------------------------------------- */
+  const handleSubmit = async () => {
+    // Check authentication
+    if (!user) {
+      Alert.alert(
+        'Login Required',
+        'Please sign in to make a booking',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Sign In',
+            onPress: () => router.push('/login'),
+          },
+        ]
+      );
+      return;
+    }
+
+    // Validate form
+    if (!validateForm()) return;
+
+    // Create booking
+    createBookingMutation.mutate({
+      restaurantId: restaurantId || 'general',
+      date,
+      time,
+      guests: parseInt(guests, 10),
+      notes: notes.trim(),
+    });
+  };
+
+  /* -----------------------------------------------------
+     QUICK TIME SELECTION
+  ----------------------------------------------------- */
+  const timeSlots = [
+    '17:00',
+    '17:30',
+    '18:00',
+    '18:30',
+    '19:00',
+    '19:30',
+    '20:00',
+    '20:30',
+    '21:00',
   ];
 
-  const handleCancelBooking = (booking: Booking) => {
-    Alert.alert(
-      'Cancel Booking',
-      `Are you sure you want to cancel your booking at ${booking.restaurantName}?`,
-      [
-        { text: 'Keep Booking', style: 'cancel' },
-        {
-          text: 'Cancel Booking',
-          style: 'destructive',
-          onPress: async () => {
-            await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-            setBookings(prev =>
-              prev.map(b => b.id === booking.id ? { ...b, status: 'cancelled' as BookingStatus } : b)
-            );
-          },
-        },
-      ]
-    );
-  };
-
-  const navigateToRestaurant = (id: string) => {
-    router.push(`/restaurant/${id}` as any);
-  };
-
-  const getStatusIcon = (status: BookingStatus) => {
-    switch (status) {
-      case 'upcoming':
-        return <Clock size={14} color={Colors.primary} />;
-      case 'completed':
-        return <CheckCircle size={14} color={Colors.success} />;
-      case 'cancelled':
-        return <X size={14} color={Colors.error} />;
-    }
-  };
-
-  const getStatusColor = (status: BookingStatus) => {
-    switch (status) {
-      case 'upcoming':
-        return { bg: `${Colors.primary}15`, text: Colors.primary };
-      case 'completed':
-        return { bg: `${Colors.success}15`, text: Colors.success };
-      case 'cancelled':
-        return { bg: `${Colors.error}15`, text: Colors.error };
-    }
-  };
+  /* -----------------------------------------------------
+     QUICK GUEST SELECTION
+  ----------------------------------------------------- */
+  const guestOptions = ['1', '2', '3', '4', '5', '6'];
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
-      <View style={styles.header}>
-        <Text style={styles.title}>My Bookings</Text>
-        <Text style={styles.subtitle}>Manage your reservations</Text>
-      </View>
-
-      <View style={styles.tabsContainer}>
-        {tabs.map((tab) => (
-          <Pressable
-            key={tab.key}
-            style={[styles.tab, activeTab === tab.key && styles.tabActive]}
-            onPress={() => setActiveTab(tab.key)}
-          >
-            <Text style={[styles.tabText, activeTab === tab.key && styles.tabTextActive]}>
-              {tab.label}
+    <View
+      style={[
+        styles.container,
+        { backgroundColor: colors.background, paddingTop: insets.top },
+      ]}
+    >
+      {/* Header */}
+      <View style={[styles.header, { borderBottomColor: colors.border }]}>
+        <Pressable onPress={() => router.back()} style={styles.backButton}>
+          <ArrowLeft size={24} color={colors.text} />
+        </Pressable>
+        <View style={styles.headerTextContainer}>
+          <Text style={[styles.title, { color: colors.text }]}>
+            Book a Table
+          </Text>
+          {restaurantName && (
+            <Text style={[styles.restaurantName, { color: colors.textMuted }]}>
+              {restaurantName}
             </Text>
-            <View style={[styles.tabBadge, activeTab === tab.key && styles.tabBadgeActive]}>
-              <Text style={[styles.tabBadgeText, activeTab === tab.key && styles.tabBadgeTextActive]}>
-                {tab.count}
-              </Text>
-            </View>
-          </Pressable>
-        ))}
+          )}
+        </View>
+        <View style={{ width: 40 }} />
       </View>
 
       <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 20 }]}
+        style={styles.scrollView}
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
       >
-        {filteredBookings.map((booking) => {
-          const statusColors = getStatusColor(booking.status);
-          return (
-            <Pressable
-              key={booking.id}
-              style={styles.bookingCard}
-              onPress={() => navigateToRestaurant(booking.restaurantId)}
-            >
-              <Image
-                source={{ uri: booking.restaurantImage }}
-                style={styles.bookingImage}
-                contentFit="cover"
-              />
-              <View style={styles.bookingContent}>
-                <View style={styles.bookingHeader}>
-                  <Text style={styles.restaurantName}>{booking.restaurantName}</Text>
-                  <View style={[styles.statusBadge, { backgroundColor: statusColors.bg }]}>
-                    {getStatusIcon(booking.status)}
-                    <Text style={[styles.statusText, { color: statusColors.text }]}>
-                      {booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
-                    </Text>
-                  </View>
-                </View>
-
-                <View style={styles.bookingDetails}>
-                  <View style={styles.detailRow}>
-                    <Calendar size={16} color={Colors.textSecondary} />
-                    <Text style={styles.detailText}>{booking.date}</Text>
-                  </View>
-                  <View style={styles.detailRow}>
-                    <Clock size={16} color={Colors.textSecondary} />
-                    <Text style={styles.detailText}>{booking.time}</Text>
-                  </View>
-                  <View style={styles.detailRow}>
-                    <Users size={16} color={Colors.textSecondary} />
-                    <Text style={styles.detailText}>{booking.guests} guests</Text>
-                  </View>
-                </View>
-
-                <View style={styles.bookingFooter}>
-                  <View style={styles.confirmationCode}>
-                    <Text style={styles.confirmationLabel}>Confirmation:</Text>
-                    <Text style={styles.confirmationValue}>{booking.confirmationCode}</Text>
-                  </View>
-                  
-                  {booking.status === 'upcoming' && (
-                    <Pressable
-                      style={styles.cancelButton}
-                      onPress={() => handleCancelBooking(booking)}
-                    >
-                      <Text style={styles.cancelButtonText}>Cancel</Text>
-                    </Pressable>
-                  )}
-                </View>
-
-                {booking.specialRequests && booking.status === 'upcoming' && (
-                  <View style={styles.specialRequests}>
-                    <AlertCircle size={14} color={Colors.textSecondary} />
-                    <Text style={styles.specialRequestsText} numberOfLines={2}>
-                      {booking.specialRequests}
-                    </Text>
-                  </View>
-                )}
-              </View>
-            </Pressable>
-          );
-        })}
-
-        {filteredBookings.length === 0 && (
-          <View style={styles.emptyState}>
-            <Calendar size={48} color={Colors.textLight} />
-            <Text style={styles.emptyTitle}>No {activeTab} bookings</Text>
-            <Text style={styles.emptyText}>
-              {activeTab === 'upcoming'
-                ? 'Book a table at your favorite restaurant'
-                : `Your ${activeTab} bookings will appear here`}
-            </Text>
+        {/* Date Input */}
+        <View style={styles.section}>
+          <Text style={[styles.label, { color: colors.text }]}>Date</Text>
+          <View
+            style={[
+              styles.inputContainer,
+              { backgroundColor: colors.surface, borderColor: colors.border },
+            ]}
+          >
+            <CalendarDays size={20} color={colors.textMuted} />
+            <TextInput
+              style={[styles.input, { color: colors.text }]}
+              placeholder="YYYY-MM-DD (e.g., 2026-02-15)"
+              placeholderTextColor={colors.placeholder}
+              value={date}
+              onChangeText={setDate}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
           </View>
-        )}
+          <Text style={[styles.hint, { color: colors.textMuted }]}>
+            Format: YYYY-MM-DD
+          </Text>
+        </View>
+
+        {/* Time Selection */}
+        <View style={styles.section}>
+          <Text style={[styles.label, { color: colors.text }]}>Time</Text>
+          <View
+            style={[
+              styles.inputContainer,
+              { backgroundColor: colors.surface, borderColor: colors.border },
+            ]}
+          >
+            <Clock size={20} color={colors.textMuted} />
+            <TextInput
+              style={[styles.input, { color: colors.text }]}
+              placeholder="HH:MM (e.g., 19:00)"
+              placeholderTextColor={colors.placeholder}
+              value={time}
+              onChangeText={setTime}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+          </View>
+
+          {/* Quick Time Selection */}
+          <View style={styles.quickOptions}>
+            {timeSlots.map((slot) => (
+              <Pressable
+                key={slot}
+                style={[
+                  styles.quickOption,
+                  {
+                    backgroundColor:
+                      time === slot ? colors.primary : colors.surface,
+                    borderColor: colors.border,
+                  },
+                ]}
+                onPress={() => setTime(slot)}
+              >
+                <Text
+                  style={[
+                    styles.quickOptionText,
+                    { color: time === slot ? '#fff' : colors.text },
+                  ]}
+                >
+                  {slot}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        </View>
+
+        {/* Guests Selection */}
+        <View style={styles.section}>
+          <Text style={[styles.label, { color: colors.text }]}>
+            Number of Guests
+          </Text>
+          <View
+            style={[
+              styles.inputContainer,
+              { backgroundColor: colors.surface, borderColor: colors.border },
+            ]}
+          >
+            <Users size={20} color={colors.textMuted} />
+            <TextInput
+              style={[styles.input, { color: colors.text }]}
+              placeholder="Number of Guests"
+              placeholderTextColor={colors.placeholder}
+              value={guests}
+              onChangeText={setGuests}
+              keyboardType="numeric"
+            />
+          </View>
+
+          {/* Quick Guest Selection */}
+          <View style={styles.quickOptions}>
+            {guestOptions.map((count) => (
+              <Pressable
+                key={count}
+                style={[
+                  styles.quickOption,
+                  {
+                    backgroundColor:
+                      guests === count ? colors.primary : colors.surface,
+                    borderColor: colors.border,
+                  },
+                ]}
+                onPress={() => setGuests(count)}
+              >
+                <Text
+                  style={[
+                    styles.quickOptionText,
+                    { color: guests === count ? '#fff' : colors.text },
+                  ]}
+                >
+                  {count}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        </View>
+
+        {/* Special Requests */}
+        <View style={styles.section}>
+          <Text style={[styles.label, { color: colors.text }]}>
+            Special Requests (Optional)
+          </Text>
+          <View
+            style={[
+              styles.textAreaContainer,
+              { backgroundColor: colors.surface, borderColor: colors.border },
+            ]}
+          >
+            <MapPin size={20} color={colors.textMuted} />
+            <TextInput
+              style={[styles.textArea, { color: colors.text }]}
+              placeholder="e.g., Window seat, high chair needed, dietary restrictions..."
+              placeholderTextColor={colors.placeholder}
+              value={notes}
+              onChangeText={setNotes}
+              multiline
+              numberOfLines={4}
+              textAlignVertical="top"
+            />
+          </View>
+        </View>
+
+        {/* Submit Button */}
+        <Pressable
+          style={[
+            styles.button,
+            {
+              backgroundColor: colors.primary,
+              opacity: createBookingMutation.isPending ? 0.7 : 1,
+            },
+          ]}
+          onPress={handleSubmit}
+          disabled={createBookingMutation.isPending}
+        >
+          {createBookingMutation.isPending ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <>
+              <CheckCircle size={20} color="#fff" />
+              <Text style={styles.buttonText}>Confirm Booking</Text>
+            </>
+          )}
+        </Pressable>
       </ScrollView>
     </View>
   );
 }
 
+/* -----------------------------------------------------
+   STYLES
+----------------------------------------------------- */
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
   },
+
   header: {
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 8,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: '700' as const,
-    color: Colors.text,
-  },
-  subtitle: {
-    fontSize: 14,
-    color: Colors.textSecondary,
-    marginTop: 4,
-  },
-  tabsContainer: {
     flexDirection: 'row',
-    paddingHorizontal: 20,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
     paddingVertical: 12,
-    gap: 8,
+    borderBottomWidth: 1,
   },
-  tab: {
-    flex: 1,
-    flexDirection: 'row',
+
+  backButton: {
+    width: 40,
+    height: 40,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 12,
-    backgroundColor: Colors.surface,
-    borderRadius: 12,
-    gap: 8,
-    borderWidth: 1,
-    borderColor: Colors.border,
   },
-  tabActive: {
-    backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
-  },
-  tabText: {
-    fontSize: 14,
-    fontWeight: '600' as const,
-    color: Colors.text,
-  },
-  tabTextActive: {
-    color: Colors.surface,
-  },
-  tabBadge: {
-    backgroundColor: Colors.surfaceAlt,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 10,
-  },
-  tabBadgeActive: {
-    backgroundColor: 'rgba(255,255,255,0.2)',
-  },
-  tabBadgeText: {
-    fontSize: 12,
-    fontWeight: '600' as const,
-    color: Colors.textSecondary,
-  },
-  tabBadgeTextActive: {
-    color: Colors.surface,
-  },
-  scrollContent: {
-    paddingHorizontal: 20,
-    paddingTop: 8,
-  },
-  bookingCard: {
-    backgroundColor: Colors.surface,
-    borderRadius: 16,
-    overflow: 'hidden',
-    marginBottom: 16,
-    shadowColor: Colors.cardShadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 1,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  bookingImage: {
-    width: '100%',
-    height: 120,
-  },
-  bookingContent: {
-    padding: 16,
-  },
-  bookingHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+
+  headerTextContainer: {
+    flex: 1,
     alignItems: 'center',
-    marginBottom: 12,
   },
+
+  title: {
+    fontSize: 20,
+    fontWeight: '700',
+  },
+
   restaurantName: {
-    fontSize: 18,
-    fontWeight: '600' as const,
-    color: Colors.text,
+    fontSize: 14,
+    marginTop: 2,
+  },
+
+  scrollView: {
     flex: 1,
   },
-  statusBadge: {
+
+  content: {
+    padding: 20,
+    gap: 24,
+  },
+
+  section: {
+    gap: 12,
+  },
+
+  label: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+
+  inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    borderWidth: 1,
     borderRadius: 12,
-    gap: 4,
+    paddingHorizontal: 16,
+    height: 56,
+    gap: 12,
   },
-  statusText: {
+
+  input: {
+    flex: 1,
+    fontSize: 16,
+  },
+
+  hint: {
     fontSize: 12,
-    fontWeight: '600' as const,
+    marginTop: 4,
   },
-  bookingDetails: {
+
+  quickOptions: {
     flexDirection: 'row',
-    gap: 16,
-    marginBottom: 12,
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 8,
   },
-  detailRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  detailText: {
-    fontSize: 14,
-    color: Colors.textSecondary,
-  },
-  bookingFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  confirmationCode: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  confirmationLabel: {
-    fontSize: 13,
-    color: Colors.textSecondary,
-  },
-  confirmationValue: {
-    fontSize: 13,
-    fontWeight: '700' as const,
-    color: Colors.text,
-    letterSpacing: 0.5,
-  },
-  cancelButton: {
-    paddingVertical: 6,
-    paddingHorizontal: 14,
-    backgroundColor: `${Colors.error}10`,
+
+  quickOption: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
     borderRadius: 8,
+    borderWidth: 1,
+    minWidth: 70,
+    alignItems: 'center',
   },
-  cancelButtonText: {
-    fontSize: 13,
-    fontWeight: '600' as const,
-    color: Colors.error,
+
+  quickOptionText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
-  specialRequests: {
+
+  textAreaContainer: {
+    flexDirection: 'row',
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 12,
+    minHeight: 100,
+  },
+
+  textArea: {
+    flex: 1,
+    fontSize: 16,
+  },
+
+  button: {
+    flexDirection: 'row',
+    height: 56,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 8,
+    gap: 8,
+  },
+
+  buttonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+});
+
+/* -----------------------------------------------------
+   BOOKING FLOW:
+   
+   1. User navigates from restaurant detail screen
+   2. Form pre-fills restaurant ID and name (if provided)
+   3. User selects date, time, and number of guests
+   4. User optionally adds special requests
+   5. User taps "Confirm Booking"
+   6. Frontend validates form data
+   7. Call: api.createBooking(bookingData)
+   8. Backend creates booking in database
+   9. Success: Show confirmation alert
+   10. Navigate back to previous screen
+   
+   BACKEND CONNECTION:
+   api.createBooking(bookingData)
+     ↓
+   POST /api/v1/bookings
+   Headers: { Authorization: Bearer <JWT_TOKEN> }
+   Body: { restaurantId, date, time, guests, notes }
+     ↓
+   Backend: Extract userID from JWT token
+     ↓
+   Database: INSERT INTO bookings (...) VALUES (...)
+     ↓
+   Response: { data: { id, restaurantId, userId, date, time, guests, status: "confirmed" } }
+----------------------------------------------------- */} color="#fff" />
+              <Text style={styles.buttonText}>Confirm Booking</Text>
+            </>
+          )}
+        </Pressable>
+      </ScrollView>
+    </View>
+  );
+}
+
+/* -----------------------------------------------------
+   STYLES
+----------------------------------------------------- */
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+  },
+
+  backButton: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  headerTextContainer: {
+    flex: 1,
+    alignItems: 'center',
+  },
+
+  title: {
+    fontSize: 20,
+    fontWeight: '700',
+  },
+
+  restaurantName: {
+    fontSize: 14,
+    marginTop: 2,
+  },
+
+  scrollView: {
+    flex: 1,
+  },
+
+  content: {
+    padding: 20,
+    gap: 24,
+  },
+
+  section: {
+    gap: 12,
+  },
+
+  label: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    height: 56,
+    gap: 12,
+  },
+
+  input: {
+    flex: 1,
+    fontSize: 16,
+  },
+
+  hint: {
+    fontSize: 12,
+    marginTop: 4,
+  },
+
+  quickOptions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 8,
+  },
+
+  quickOption: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+
+  quickOptionText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+
+  textAreaContainer: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 8,
-    marginTop: 12,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: Colors.borderLight,
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 12,
+    minHeight: 100,
   },
-  specialRequestsText: {
+
+  textArea: {
     flex: 1,
-    fontSize: 13,
-    color: Colors.textSecondary,
-    fontStyle: 'italic',
+    fontSize: 16,
+    minHeight: 80,
   },
-  emptyState: {
+
+  button: {
+    flexDirection: 'row',
+    height: 56,
+    borderRadius: 12,
     alignItems: 'center',
-    paddingVertical: 60,
-  },
-  emptyTitle: {
-    fontSize: 18,
-    fontWeight: '600' as const,
-    color: Colors.text,
-    marginTop: 16,
-  },
-  emptyText: {
-    fontSize: 14,
-    color: Colors.textSecondary,
+    justifyContent: 'center',
     marginTop: 8,
-    textAlign: 'center',
+    gap: 8,
+  },
+
+  buttonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+});
+
+/* -----------------------------------------------------
+   BOOKING FLOW:
+   
+   1. User navigates from restaurant detail screen
+   2. Form pre-fills restaurant info if available
+   3. User selects date, time, number of guests
+   4. User adds special requests (optional)
+   5. User taps "Confirm Booking"
+   6. Frontend validates form
+   7. Checks authentication (redirect to login if needed)
+   8. Call: api.createBooking(bookingData)
+   
+   BACKEND CONNECTION:
+   api.createBooking(bookingData)
+     ↓
+   POST /api/v1/bookings
+   Headers: { Authorization: Bearer <JWT_TOKEN> }
+   Body: {
+     restaurantId: string,
+     date: string (YYYY-MM-DD),
+     time: string (HH:MM),
+     guests: number,
+     notes?: string
+   }
+     ↓
+   Backend: Extract userID from JWT token
+     ↓
+   Database: INSERT INTO bookings (...) VALUES (...) RETURNING *
+     ↓
+   Response: { data: Booking }
+     ↓
+   Frontend: Show success alert → Navigate back
+   
+   NOTE: This is a placeholder implementation. In production,
+   you would implement the full booking API endpoint in the backend.
+----------------------------------------------------- */} color="#fff" />
+              <Text style={styles.buttonText}>Confirm Booking</Text>
+            </>
+          )}
+        </Pressable>
+      </ScrollView>
+    </View>
+  );
+}
+
+/* -----------------------------------------------------
+   STYLES
+----------------------------------------------------- */
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+  },
+
+  backButton: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  headerTextContainer: {
+    flex: 1,
+    alignItems: 'center',
+  },
+
+  title: {
+    fontSize: 20,
+    fontWeight: '700',
+  },
+
+  restaurantName: {
+    fontSize: 14,
+    marginTop: 2,
+  },
+
+  scrollView: {
+    flex: 1,
+  },
+
+  content: {
+    padding: 20,
+    gap: 24,
+  },
+
+  section: {
+    gap: 8,
+  },
+
+  label: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    height: 56,
+    gap: 12,
+  },
+
+  input: {
+    flex: 1,
+    fontSize: 16,
+  },
+
+  hint: {
+    fontSize: 12,
+    marginTop: 4,
+  },
+
+  quickOptions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 8,
+  },
+
+  quickOption: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+
+  quickOptionText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+
+  textAreaContainer: {
+    flexDirection: 'row',
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 16,
+    gap: 12,
+    alignItems: 'flex-start',
+  },
+
+  textArea: {
+    flex: 1,
+    fontSize: 16,
+    minHeight: 80,
+  },
+
+  button: {
+    flexDirection: 'row',
+    height: 56,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 8,
+    gap: 8,
+  },
+
+  buttonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
