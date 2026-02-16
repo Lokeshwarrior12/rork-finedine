@@ -8,20 +8,23 @@ LABEL fly_launch_runtime="Go"
 # Install build dependencies
 RUN apk add --no-cache git ca-certificates tzdata
 
-WORKDIR /app
+WORKDIR /build
 
-# Copy go mod files
-COPY backend/go.mod backend/go.sum ./
+# Copy go mod files - NOTE: FROM PROJECT ROOT, NOT NESTED
+COPY go.mod go.sum ./
 
 # Download dependencies
 RUN go mod download
 RUN go mod verify
 
-# Copy source code
-COPY backend/ ./
+# Copy all source code
+COPY . .
 
 # Build the application
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o main cmd/main.go
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+    -ldflags="-w -s" \
+    -o /build/main \
+    ./cmd/main.go
 
 # Runtime stage
 FROM alpine:latest
@@ -32,7 +35,7 @@ RUN apk --no-cache add ca-certificates tzdata
 WORKDIR /app
 
 # Copy binary from builder
-COPY --from=builder /app/main .
+COPY --from=builder /build/main .
 
 # Expose port
 EXPOSE 8080
@@ -41,4 +44,4 @@ EXPOSE 8080
 ENV GIN_MODE=release
 
 # Run the application
-CMD ["./main"]
+CMD ["/app/main"]
