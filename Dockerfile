@@ -35,6 +35,6 @@ FROM base
 WORKDIR /app/backend
 COPY --from=build /app/backend /app/backend
 
-EXPOSE 3000
+EXPOSE 8080
 
 CMD ["bun", "run", "start"]
