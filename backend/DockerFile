@@ -1,0 +1,37 @@
+# ---- builder ----
+FROM golang:1.22-alpine AS builder
+
+# Install git and certificates needed for go get
+RUN apk add --no-cache git ca-certificates tzdata
+
+WORKDIR /app
+
+# Copy go.mod and go.sum if exists (go.sum optional)
+COPY backend/go.mod ./backend/
+WORKDIR /app/backend
+
+# Ensure all dependencies are downloaded and go.sum is generated
+RUN go mod tidy
+
+# Copy the rest of the backend source
+COPY backend/ .
+
+# Build the Go binary
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o main .
+
+# ---- runtime image ----
+FROM alpine:latest
+
+# Install timezone and certificates
+RUN apk --no-cache add ca-certificates tzdata
+
+WORKDIR /app
+
+# Copy the built binary from the builder stage
+COPY --from=builder /app/backend/main .
+
+# Expose port for Fly.io
+EXPOSE 8080
+
+# Run the binary
+CMD ["./main"]
