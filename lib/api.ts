@@ -10,19 +10,7 @@ const extra = Constants.expoConfig?.extra ?? {};
 
 // Determine API URL based on environment
 const getAPIUrl = (): string => {
-  if (__DEV__) {
-    // Development mode
-    if (Platform.OS === 'ios') {
-      return extra.apiUrl || 'http://localhost:8080/api/v1';
-    } else if (Platform.OS === 'android') {
-      // Android emulator uses 10.0.2.2 to access host machine's localhost
-      return extra.apiUrl?.replace('localhost', '10.0.2.2') || 'http://10.0.2.2:8080/api/v1';
-    }
-    return extra.apiUrl || 'http://localhost:8080/api/v1';
-  } else {
-    // Production mode
-    return extra.apiUrlProduction || 'https://primedine.fly.dev/api/v1';
-  }
+  return extra.apiUrl || 'https://primedine.fly.dev/api/v1';
 };
 
 const API_BASE_URL = getAPIUrl();

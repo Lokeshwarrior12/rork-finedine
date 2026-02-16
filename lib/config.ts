@@ -35,7 +35,7 @@ export const config: Config = {
   },
 
   api: {
-    baseUrl: API_URL ? `${API_URL}/api/v1` : 'http://localhost:8080/api/v1',
+    baseUrl: API_URL ? `${API_URL}/api/v1` : 'https://primedine.fly.dev/api/v1',
   },
 
   maps: {
