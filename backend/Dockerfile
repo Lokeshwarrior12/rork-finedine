@@ -1,40 +1,32 @@
-# syntax=docker/dockerfile:1
-
-############################
-# Build Stage
-############################
+# -------------------------
+# Build stage
+# -------------------------
 FROM golang:1.21-alpine AS builder
 
 RUN apk add --no-cache git gcc musl-dev
 
 WORKDIR /app
 
-# 👇 Copy Go module files from backend folder
-COPY backend/go.mod backend/go.sum ./
+COPY go.mod go.sum ./
 RUN go mod download
 
-# 👇 Copy backend source
-COPY backend .
+COPY . .
 
-# Build binary
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
-    go build -ldflags="-s -w" -o server main.go
+RUN CGO_ENABLED=0 GOOS=linux go build -o main .
 
-
-############################
-# Runtime Stage
-############################
+# -------------------------
+# Runtime stage
+# -------------------------
 FROM alpine:latest
 
-RUN apk --no-cache add ca-certificates tzdata
+RUN apk --no-cache add ca-certificates
 
-WORKDIR /app
+WORKDIR /root/
 
-COPY --from=builder /app/server .
-
-ENV PORT=8080
-ENV GIN_MODE=release
+COPY --from=builder /app/main .
 
 EXPOSE 8080
 
-CMD ["./server"]
+ENV PORT=8080
+
+CMD ["./main"]
