@@ -1,40 +1,14 @@
-# syntax = docker/dockerfile:1
-
-ARG BUN_VERSION=1.1.24
-FROM oven/bun:${BUN_VERSION}-slim AS base
-
-LABEL fly_launch_runtime="Bun"
+FROM golang:1.22-alpine AS builder
 
 WORKDIR /app
-ENV NODE_ENV="production"
-
-
-# -------------------------
-# Build stage
-# -------------------------
-FROM base AS build
-
-RUN apt-get update -qq && \
-    apt-get install --no-install-recommends -y \
-    build-essential pkg-config python-is-python3
-
-# 👇 install backend dependencies (THIS IS THE KEY FIX)
+COPY backend/go.mod backend/go.sum ./backend/
 WORKDIR /app/backend
-COPY backend/package.json backend/bun.lockb* ./
-RUN bun install --ci
+RUN go mod download
+COPY backend/ .
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o main .
 
-# copy backend source
-COPY backend ./
-
-
-# -------------------------
-# Final runtime stage
-# -------------------------
-FROM base
-
-WORKDIR /app/backend
-COPY --from=build /app/backend /app/backend
-
+FROM alpine:latest
+WORKDIR /app
+COPY --from=builder /app/backend/main .
 EXPOSE 8080
-
-CMD ["bun", "run", "start"]
+CMD ["./main"]
