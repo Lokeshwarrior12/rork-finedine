@@ -1,37 +1,26 @@
-# -------------------------
-# Build stage
-# -------------------------
-FROM golang:1.21-alpine AS builder
-
-RUN apk add --no-cache git gcc musl-dev
+# ---------- BUILD STAGE ----------
+FROM golang:1.22-alpine AS builder
 
 WORKDIR /app
 
-# Copy backend go files
+# copy go files
 COPY backend/go.mod backend/go.sum ./backend/
 WORKDIR /app/backend
-
 RUN go mod download
 
-# Copy backend source
-COPY backend .
+# copy source
+COPY backend/ .
 
-# Build Go binary
-RUN CGO_ENABLED=0 GOOS=linux go build -o main .
+# build binary
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o main .
 
-# -------------------------
-# Runtime stage
-# -------------------------
+# ---------- RUNTIME STAGE ----------
 FROM alpine:latest
-
-RUN apk --no-cache add ca-certificates
 
 WORKDIR /app
 
-# Copy compiled binary
-COPY --from=builder /app/backend/main ./main
+COPY --from=builder /app/backend/main .
 
 EXPOSE 8080
-ENV PORT=8080
 
 CMD ["./main"]
