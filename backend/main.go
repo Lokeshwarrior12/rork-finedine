@@ -45,7 +45,7 @@ func main() {
 	router.Use(gin.Recovery()) // Recover from panics
 	router.Use(middleware.RequestLogger()) // Log all requests
 	router.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"http://localhost:8081", "http://localhost:19000", "exp://192.168.*:8081", "*"},
+		AllowOrigins:     []string{"http://localhost:8081", "http://localhost:19000", "http://localhost:19006", "exp://192.168.*:8081", "*"},
 		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization", "X-API-Key"},
 		ExposeHeaders:    []string{"Content-Length"},
@@ -83,7 +83,7 @@ func main() {
 	// Protected routes (require authentication)
 	protected := v1.Group("")
 	protected.Use(middleware.AuthMiddleware())
-	protected.Use(middleware.RateLimiter(200)) // Higher limit for authenticated users
+	protected.Use(middleware.RateLimiter(200))
 	{
 		// User profile
 		protected.GET("/profile", handlers.GetProfile)
@@ -116,7 +116,7 @@ func main() {
 	owner := v1.Group("/owner")
 	owner.Use(middleware.AuthMiddleware())
 	owner.Use(middleware.RestaurantOwnerOnly())
-	owner.Use(middleware.APIKeyRateLimiter(500)) // Higher limit for restaurant owners
+	owner.Use(middleware.APIKeyRateLimiter(500))
 	{
 		// Restaurant management
 		owner.POST("/restaurants", handlers.CreateRestaurant)
@@ -134,11 +134,33 @@ func main() {
 		owner.PUT("/deals/:id", handlers.UpdateDeal)
 		owner.DELETE("/deals/:id", handlers.DeleteDeal)
 		
-		// Inventory management
+		// Inventory management - NEW
 		owner.GET("/restaurants/:id/inventory", handlers.GetInventory)
 		owner.POST("/restaurants/:id/inventory", handlers.AddInventoryItem)
 		owner.PUT("/inventory/:id", handlers.UpdateInventoryItem)
 		owner.DELETE("/inventory/:id", handlers.DeleteInventoryItem)
+		
+		// Employee management - NEW
+		owner.GET("/restaurants/:id/employees", handlers.GetRestaurantEmployees)
+		owner.POST("/restaurants/:id/employees", handlers.CreateEmployee)
+		owner.PUT("/employees/:id", handlers.UpdateEmployee)
+		owner.DELETE("/employees/:id", handlers.DeleteEmployee)
+		
+		// Shift management - NEW
+		owner.GET("/restaurants/:id/shifts", handlers.GetRestaurantShifts)
+		owner.POST("/restaurants/:id/shifts", handlers.CreateShift)
+		owner.DELETE("/shifts/:id", handlers.DeleteShift)
+		
+		// Offers management - NEW
+		owner.GET("/restaurants/:id/offers", handlers.GetRestaurantOffers)
+		owner.POST("/restaurants/:id/offers", handlers.CreateOffer)
+		owner.PUT("/offers/:id", handlers.UpdateOffer)
+		owner.DELETE("/offers/:id", handlers.DeleteOffer)
+		
+		// Transactions - NEW
+		owner.POST("/coupons/validate", handlers.ValidateCoupon)
+		owner.POST("/restaurants/:id/transactions", handlers.CreateTransaction)
+		owner.GET("/restaurants/:id/transactions", handlers.GetRestaurantTransactions)
 		
 		// Bookings management
 		owner.GET("/restaurants/:id/bookings", handlers.GetRestaurantBookings)
