@@ -6,6 +6,7 @@ import (
 
 	"github.com/Lokeshwarrior12/rork-finedine/backend/internal/cache"
 	"github.com/Lokeshwarrior12/rork-finedine/backend/internal/database"
+	"github.com/Lokeshwarrior12/rork-finedine/backend/internal/firebase"
 	"github.com/Lokeshwarrior12/rork-finedine/backend/internal/middleware"
 	"github.com/Lokeshwarrior12/rork-finedine/backend/internal/realtime"
 	"github.com/Lokeshwarrior12/rork-finedine/backend/handlers"
