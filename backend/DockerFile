@@ -1,28 +1,19 @@
 ARG GO_VERSION=1.22
 FROM golang:${GO_VERSION}-bookworm AS builder
 
-WORKDIR /usr/src/app/backend
+WORKDIR /app
 
-# Copy backend module files
-COPY backend/go.mod backend/go.sum ./
+# Copy backend module files first (better layer caching)
+COPY backend/go.mod backend/go.sum ./backend/
 
-# Download deps (ignore if go.sum incomplete)
-RUN go mod download || true
+WORKDIR /app/backend
 
-# Copy backend source
-COPY backend/ .
-
-# Fix module path to match your imports
-RUN go mod edit -module github.com/Lokeshwarrior12/rork-finedine/backend
-
-# Fix package conflict: move firebase.go into its own package
-RUN mkdir -p internal/firebase && \
-    cp firebase.go internal/firebase/firebase.go && \
-    sed -i 's/^package backend/package firebase/' internal/firebase/firebase.go && \
-    rm firebase.go || true
-
-# Recreate go.sum with correct dependencies
+# Download + fix dependencies
+RUN go mod download
 RUN go mod tidy
+
+# Now copy the rest of backend source
+COPY backend .
 
 # Build binary
 RUN go build -v -o /run-app .
@@ -37,4 +28,5 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY --from=builder /run-app /usr/local/bin/run-app
 
 EXPOSE 8080
+
 CMD ["run-app"]
