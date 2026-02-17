@@ -1,37 +1,36 @@
-# ---- builder ----
-FROM golang:1.22-alpine AS builder
+ARG GO_VERSION=1.22
+FROM golang:${GO_VERSION}-bookworm AS builder
 
-# Install git and certificates needed for go get
-RUN apk add --no-cache git ca-certificates tzdata
+WORKDIR /usr/src/app
 
-WORKDIR /app
+COPY go.mod go.sum ./
+RUN go mod download
+RUN go mod tidy || true
+RUN go mod verify || true
 
-# Copy go.mod and go.sum if exists (go.sum optional)
-COPY backend/go.mod ./backend/
-WORKDIR /app/backend
+COPY . .
 
-# Ensure all dependencies are downloaded and go.sum is generated
+# Fix package conflict: firebase.go is 'package backend', main.go is 'package main'
+# Move firebase.go into its own sub-package
+RUN mkdir -p internal/firebase && \
+    cp firebase.go internal/firebase/firebase.go && \
+    sed -i 's/^package backend/package firebase/' internal/firebase/firebase.go && \
+    rm firebase.go
+
+# Re-tidy after structural change
 RUN go mod tidy
 
-# Copy the rest of the backend source
-COPY backend/ .
+RUN go build -v -o /run-app .
 
-# Build the Go binary
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o main .
 
-# ---- runtime image ----
-FROM alpine:latest
+FROM debian:bookworm-slim
 
-# Install timezone and certificates
-RUN apk --no-cache add ca-certificates tzdata
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /app
+COPY --from=builder /run-app /usr/local/bin/run-app
 
-# Copy the built binary from the builder stage
-COPY --from=builder /app/backend/main .
-
-# Expose port for Fly.io
 EXPOSE 8080
 
-# Run the binary
-CMD ["./main"]
+CMD ["run-app"]
