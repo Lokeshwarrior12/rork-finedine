@@ -1,21 +1,18 @@
-ARG GO_VERSION=1.22
+ARG GO_VERSION=1.24
 FROM golang:${GO_VERSION}-bookworm AS builder
 
 WORKDIR /app
 
-# Copy backend module files first (better layer caching)
-COPY backend/go.mod backend/go.sum ./backend/
+COPY go.mod go.sum ./
+COPY . .
 
-WORKDIR /app/backend
+# Rewrite module name AND all import paths in source files to match
+RUN go mod edit -module github.com/Lokeshwarrior12/rork-finedine/backend && \
+    find . -name "*.go" -exec sed -i \
+      's|"rork-finedine/backend/|"github.com/Lokeshwarrior12/rork-finedine/backend/|g' {} +
 
-# Download + fix dependencies
-RUN go mod download
 RUN go mod tidy
 
-# Now copy the rest of backend source
-COPY backend .
-
-# Build binary
 RUN go build -v -o /run-app .
 
 
