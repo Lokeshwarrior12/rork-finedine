@@ -1,4 +1,5 @@
-module rork-finedine/backend
+module github.com/Lokeshwarrior12/rork-finedine/backend
+
 
 go 1.22
 
