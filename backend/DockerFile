@@ -1,30 +1,35 @@
 # ---------- Builder ----------
-FROM golang:1.22-bookworm AS builder
+ARG GO_VERSION=1.24.0
+FROM golang:${GO_VERSION}-bookworm AS builder
 
+# Set working directory
 WORKDIR /app
 
-# Copy mod files first (better caching)
-COPY go.mod go.sum ./
-RUN go mod download
+# Copy go modules first (better caching)
+COPY backend/go.mod backend/go.sum ./backend/
 
-# Copy the rest of the source
-COPY . .
+# Download dependencies
+WORKDIR /app/backend
+RUN go mod download && go mod verify
 
-# Build ONLY the real entrypoint
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
-    go build -o /run-app ./backend/cmd
+# Copy backend source
+COPY backend/ .
 
+# Build the server (your entrypoint is in cmd/)
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /run-app ./cmd
 
 # ---------- Runtime ----------
 FROM debian:bookworm-slim
 
 WORKDIR /app
 
-# Needed for HTTPS
+# Install certificates (needed for HTTPS, Firebase, Supabase, etc.)
 RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
 
+# Copy binary
 COPY --from=builder /run-app /run-app
 
+# Fly uses PORT env
 EXPOSE 8080
 
 CMD ["/run-app"]
