@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/Lokeshwarrior12/rork-finedine/backend/internal/database"
-	"github.com/Lokeshwarrior12/rork-finedine/backend/internal/realtime"
+	"finedine/backend/internal/database"
+	"finedine/backend/internal/realtime"
 	"github.com/gin-gonic/gin"
 )
 

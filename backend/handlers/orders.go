@@ -5,9 +5,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/Lokeshwarrior12/rork-finedine/backend/internal/cache"
-	"github.com/Lokeshwarrior12/rork-finedine/backend/internal/database"
-	"github.com/Lokeshwarrior12/rork-finedine/backend/internal/realtime"
+	"finedine/backend/internal/cache"
+	"finedine/backend/internal/database"
+	"finedine/backend/internal/realtime"
 	"github.com/gin-gonic/gin"
 )
 

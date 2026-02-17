@@ -3,8 +3,8 @@ package handlers
 import (
 	"net/http"
 
-	"github.com/Lokeshwarrior12/rork-finedine/backend/internal/cache"
-	"github.com/Lokeshwarrior12/rork-finedine/backend/internal/database"
+	"finedine/backend/internal/cache"
+	"finedine/backend/internal/database"
 	"github.com/gin-gonic/gin"
 )
 

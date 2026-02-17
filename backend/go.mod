@@ -1,4 +1,4 @@
-module github.com/Lokeshwarrior12/rork-finedine/backend
+module finedine/backend
 
 go 1.24.0
 

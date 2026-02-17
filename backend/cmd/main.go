@@ -15,11 +15,11 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 
-	"github.com/Lokeshwarrior12/rork-finedine/backend/internal/config"
-	"github.com/Lokeshwarrior12/rork-finedine/backend/internal/database"
-	"github.com/Lokeshwarrior12/rork-finedine/backend/internal/cache"
-	"github.com/Lokeshwarrior12/rork-finedine/backend/internal/handlers"
-	"github.com/Lokeshwarrior12/rork-finedine/backend/internal/middleware"
+	"finedine/backend/internal/config"
+	"finedine/backend/internal/database"
+	"finedine/backend/internal/cache"
+	"finedine/backend/internal/handlers"
+	"finedine/backend/internal/middleware"
 )
 
 func main() {

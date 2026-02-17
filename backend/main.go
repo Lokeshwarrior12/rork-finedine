@@ -4,12 +4,12 @@ import (
 	"log"
 	"os"
 
-	"github.com/Lokeshwarrior12/rork-finedine/backend/internal/cache"
-	"github.com/Lokeshwarrior12/rork-finedine/backend/internal/database"
-	"github.com/Lokeshwarrior12/rork-finedine/backend/internal/firebase"
-	"github.com/Lokeshwarrior12/rork-finedine/backend/internal/middleware"
-	"github.com/Lokeshwarrior12/rork-finedine/backend/internal/realtime"
-	"github.com/Lokeshwarrior12/rork-finedine/backend/handlers"
+	"finedine/backend/internal/cache"
+	"finedine/backend/internal/database"
+	"finedine/backend/internal/firebase"
+	"finedine/backend/internal/middleware"
+	"finedine/backend/internal/realtime"
+	"finedine/backend/handlers"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"

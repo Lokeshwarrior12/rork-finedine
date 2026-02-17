@@ -5,7 +5,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/Lokeshwarrior12/rork-finedine/backend/internal/database"
+	"finedine/backend/internal/database"
 	"github.com/gin-gonic/gin"
 	"github.com/stripe/stripe-go/v76"
 	"github.com/stripe/stripe-go/v76/checkout/session"

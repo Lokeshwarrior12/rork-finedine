@@ -6,10 +6,10 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/Lokeshwarrior12/rork-finedine/backend/internal/cache"
-	"github.com/Lokeshwarrior12/rork-finedine/backend/internal/config"
-	"github.com/Lokeshwarrior12/rork-finedine/backend/internal/database"
-	"github.com/Lokeshwarrior12/rork-finedine/backend/internal/middleware"
+	"finedine/backend/internal/cache"
+	"finedine/backend/internal/config"
+	"finedine/backend/internal/database"
+	"finedine/backend/internal/middleware"
 )
 
 type Handler struct {
