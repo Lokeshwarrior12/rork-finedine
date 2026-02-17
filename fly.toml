@@ -4,7 +4,8 @@ app = "primedine"
 primary_region = "sjc"
 
 [build]
-  # Uses Dockerfile
+  [build.args]
+    GO_VERSION = '1.24'
 
 [env]
   PORT = "8080"
