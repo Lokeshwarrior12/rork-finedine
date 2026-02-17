@@ -1,29 +1,30 @@
-ARG GO_VERSION=1.24
-FROM golang:${GO_VERSION}-bookworm AS builder
+# ---------- Builder ----------
+FROM golang:1.22-bookworm AS builder
 
 WORKDIR /app
 
+# Copy mod files first (better caching)
 COPY go.mod go.sum ./
+RUN go mod download
+
+# Copy the rest of the source
 COPY . .
 
-# Rewrite module name AND all import paths in source files to match
-RUN go mod edit -module github.com/Lokeshwarrior12/rork-finedine/backend && \
-    find . -name "*.go" -exec sed -i \
-      's|"rork-finedine/backend/|"github.com/Lokeshwarrior12/rork-finedine/backend/|g' {} +
-
-RUN go mod tidy
-
-RUN go build -v -o /run-app .
+# Build ONLY the real entrypoint
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+    go build -o /run-app ./backend/cmd
 
 
+# ---------- Runtime ----------
 FROM debian:bookworm-slim
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
 
-COPY --from=builder /run-app /usr/local/bin/run-app
+# Needed for HTTPS
+RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /run-app /run-app
 
 EXPOSE 8080
 
-CMD ["run-app"]
+CMD ["/run-app"]
