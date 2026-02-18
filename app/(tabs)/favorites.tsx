@@ -112,7 +112,7 @@ export default function FavoritesScreen() {
         </Text>
         <TouchableOpacity
           style={styles.loginButton}
-          onPress={() => router.push('/login')}
+          onPress={() => router.push('/login' as any)}
         >
           <Text style={styles.loginButtonText}>Login</Text>
         </TouchableOpacity>

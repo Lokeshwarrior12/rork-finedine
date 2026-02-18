@@ -146,7 +146,7 @@ export default function CheckoutScreen() {
         [
           {
             text: 'View Order',
-            onPress: () => router.replace(`/(customer)/order/${response.data.id}`),
+            onPress: () => router.replace(`/(customer)/order/${response.data.id}` as any),
           },
         ]
       );

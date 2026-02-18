@@ -16,7 +16,7 @@ export default function RestaurantLayout() {
   // CRITICAL: Verify user is restaurant owner
   // Redirect if not authenticated or not restaurant owner role
   if (!user) {
-    return <Redirect href="/login" />;
+    return <Redirect href={"/login" as any} />;
   }
 
   if (user.role !== 'restaurant_owner') {

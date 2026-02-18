@@ -138,7 +138,7 @@ export default function OrdersScreen() {
         <Text style={styles.emptyMessage}>Login to view your orders</Text>
         <TouchableOpacity
           style={styles.loginButton}
-          onPress={() => router.push('/login')}
+          onPress={() => router.push('/login' as any)}
         >
           <Text style={styles.loginButtonText}>Login</Text>
         </TouchableOpacity>

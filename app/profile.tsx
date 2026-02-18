@@ -107,7 +107,7 @@ export default function ProfileScreen() {
         onPress: async () => {
           try {
             await signOut();
-            router.replace('/login');
+            router.replace('/login' as any);
           } catch (error) {
             Alert.alert('Error', 'Failed to sign out');
           }
@@ -136,7 +136,7 @@ export default function ProfileScreen() {
           </Text>
           <Pressable
             style={styles.loginButton}
-            onPress={() => router.push('/login')}
+            onPress={() => router.push('/login' as any)}
           >
             <Text style={styles.loginButtonText}>Sign In</Text>
           </Pressable>
