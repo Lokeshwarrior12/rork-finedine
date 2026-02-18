@@ -1,40 +1,35 @@
-ARG GO_VERSION=1.22
-FROM golang:${GO_VERSION}-bookworm AS builder
+ARG GO_VERSION=1
+FROM golang:${GO_VERSION}-bookworm as builder
 
-WORKDIR /usr/src/app/backend
+WORKDIR /usr/src/app
 
-# Copy backend module files
+# Copy go.mod and go.sum from backend subdirectory
 COPY backend/go.mod backend/go.sum ./
+RUN go mod download && go mod verify
 
-# Download deps (ignore if go.sum incomplete)
-RUN go mod download || true
+# Copy all Go source files from backend subdirectory
+COPY backend/ ./
 
-# Copy backend source
-COPY backend/ .
-
-# Fix module path to match your imports
-RUN go mod edit -module github.com/Lokeshwarrior12/rork-finedine/backend
-
-# Fix package conflict: move firebase.go into its own package
-RUN mkdir -p internal/firebase && \
-    cp firebase.go internal/firebase/firebase.go && \
-    sed -i 's/^package backend/package firebase/' internal/firebase/firebase.go && \
-    rm firebase.go || true
-
-# Recreate go.sum with correct dependencies
-RUN go mod tidy
-
-# Build binary
+# Build the application
 RUN go build -v -o /run-app .
 
+# Runtime stage
+FROM debian:bookworm
 
-FROM debian:bookworm-slim
+# Install CA certificates for HTTPS requests
+RUN apt-get update && \
+    apt-get install -y ca-certificates tzdata && \
+    rm -rf /var/lib/apt/lists/*
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+# Copy the compiled binary
+COPY --from=builder /run-app /usr/local/bin/
 
-COPY --from=builder /run-app /usr/local/bin/run-app
-
+# Expose port 8080
 EXPOSE 8080
+
+# Set environment variables
+ENV PORT=8080
+ENV GIN_MODE=release
+
+# Run the application
 CMD ["run-app"]
