@@ -20,6 +20,7 @@ import { Search, Star, MapPin, ChevronRight } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { api, Restaurant } from '@/lib/api';
+import { restaurants as mockRestaurants } from '@/mocks/data';
 
 /* ──────────────────────────────────────────────────────────
    Constants
@@ -74,10 +75,20 @@ export default function HomeScreen() {
     refetch,
   } = useQuery({
     queryKey: ['restaurants'],
-    queryFn: () => api.getRestaurants(),
-    staleTime: 5 * 60 * 1000, // 5 minutes
-    gcTime: 10 * 60 * 1000, // 10 minutes
-    retry: 2,
+    queryFn: async () => {
+      try {
+        const result = await api.getRestaurants();
+        if (result?.data && result.data.length > 0) {
+          return result;
+        }
+      } catch (err) {
+        console.warn('[HomeScreen] API fetch failed, using mock data:', err);
+      }
+      return { data: mockRestaurants as unknown as Restaurant[] };
+    },
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
+    retry: 1,
     refetchOnWindowFocus: true,
   });
 

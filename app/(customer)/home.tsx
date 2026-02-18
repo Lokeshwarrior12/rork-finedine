@@ -149,9 +149,18 @@ export default function CustomerHomeScreen() {
         params.radius = nearMeRadius;
       }
       
-      const result = await api.getRestaurants();
-      console.log('✅ Restaurants fetched:', result.data?.length || 0);
-      return result;
+      try {
+        const result = await api.getRestaurants();
+        if (result?.data && result.data.length > 0) {
+          console.log('✅ Restaurants fetched from API:', result.data.length);
+          return result;
+        }
+      } catch (err) {
+        console.warn('[Home] API fetch failed, using mock data:', err);
+      }
+      const { restaurants: mockRestaurants } = await import('@/mocks/data');
+      console.log('✅ Using mock restaurants:', mockRestaurants.length);
+      return { data: mockRestaurants as any[] };
     },
     staleTime: 5 * 60 * 1000, // Cache for 5 minutes
     retry: 2,

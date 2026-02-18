@@ -169,7 +169,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           .single();
 
         if (insertError) {
-          console.error('❌ Failed to create user profile:', insertError);
+          console.error('❌ Failed to create user profile:', JSON.stringify(insertError));
         }
       }
 

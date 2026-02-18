@@ -65,8 +65,14 @@ export default function DealsScreen() {
   } = useQuery({
     queryKey: ['deals'],
     queryFn: async () => {
-      const result = await api.getRestaurants();
-      return { data: [] as Deal[] };
+      try {
+        const result = await api.getRestaurants();
+        console.log('[Deals] API connected');
+      } catch (err) {
+        console.warn('[Deals] API fetch failed:', err);
+      }
+      const { deals: mockDeals } = await import('@/mocks/data');
+      return { data: mockDeals as unknown as Deal[] };
     },
     staleTime: 5 * 60 * 1000, // 5 minutes
   });

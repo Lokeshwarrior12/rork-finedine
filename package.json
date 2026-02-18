@@ -2,11 +2,11 @@
   "name": "expo-app",
   "main": "expo-router/entry",
   "version": "1.0.0",
-    "scripts": {
-      "start-mobile": "expo start",
-      "start-web": "bunx rork start -p 3hdmt22ihte9v7gfmtgrh --web --tunnel",
-      "start-web-dev": "DEBUG=expo* bunx rork start -p 3hdmt22ihte9v7gfmtgrh --web --tunnel",
-      "lint": "expo lint"
+  "scripts": {
+    "start-mobile": "expo start",
+    "start-web": "bunx rork start -p 3hdmt22ihte9v7gfmtgrh --web --tunnel",
+    "start-web-dev": "DEBUG=expo* bunx rork start -p 3hdmt22ihte9v7gfmtgrh --web --tunnel",
+    "lint": "expo lint"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
