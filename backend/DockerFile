@@ -1,31 +1,21 @@
-# ---------- Builder ----------
-ARG GO_VERSION=1.24.0
-FROM golang:${GO_VERSION}-bookworm AS builder
+ARG GO_VERSION=1
+FROM golang:${GO_VERSION}-bookworm as builder
 
-WORKDIR /app
+WORKDIR /usr/src/app
 
-# Copy go modules from backend
-COPY backend/go.mod backend/go.sum ./backend/
-
-WORKDIR /app/backend
+COPY go.mod go.sum ./
 RUN go mod download && go mod verify
 
-# Copy backend source
-COPY backend/ .
+COPY . .
 
-# Build your server (entrypoint in cmd/)
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /run-app ./cmd
+RUN go build -v -o /run-app .
 
-# ---------- Runtime ----------
-FROM debian:bookworm-slim
+FROM debian:bookworm
 
-WORKDIR /app
-
-# Install CA certs for HTTPS calls
 RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
 
-COPY --from=builder /run-app /run-app
+COPY --from=builder /run-app /usr/local/bin/
 
 EXPOSE 8080
 
-CMD ["/run-app"]
+CMD ["run-app"]
