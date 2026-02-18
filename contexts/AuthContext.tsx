@@ -112,6 +112,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const [signInPending, setSignInPending] = useState(false);
   const [signupPending, setSignupPending] = useState(false);
+  const fetchingProfileRef = React.useRef(false);
+  const lastFetchedUserIdRef = React.useRef<string | null>(null);
 
   /* ──────────────────────────────────────────────────────────
      Load Stored Profile
@@ -135,18 +137,49 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   ────────────────────────────────────────────────────────── */
 
   const fetchProfile = async (authUser: SupabaseUser) => {
+    if (fetchingProfileRef.current && lastFetchedUserIdRef.current === authUser.id) {
+      console.log('⏳ Profile fetch already in progress for:', authUser.id);
+      return;
+    }
+
+    fetchingProfileRef.current = true;
+    lastFetchedUserIdRef.current = authUser.id;
+
     try {
       setError(null);
       console.log('📥 Fetching profile for user:', authUser.id);
 
-      // Try to get profile from database
-      const { data, error: dbError } = await db
-        .users()
-        .select('*')
-        .eq('id', authUser.id)
-        .maybeSingle();
+      let data: any = null;
+      let dbError: any = null;
 
-      // If user doesn't exist in database, create profile
+      try {
+        const result = await db
+          .users()
+          .select('*')
+          .eq('id', authUser.id)
+          .maybeSingle();
+        data = result.data;
+        dbError = result.error;
+      } catch (fetchErr: any) {
+        if (fetchErr?.name === 'AbortError' || fetchErr?.message?.includes('AbortError') || fetchErr?.message?.includes('signal is aborted')) {
+          console.warn('⚠️ Profile fetch aborted, retrying once...');
+          await new Promise(resolve => setTimeout(resolve, 500));
+          try {
+            const retryResult = await db
+              .users()
+              .select('*')
+              .eq('id', authUser.id)
+              .maybeSingle();
+            data = retryResult.data;
+            dbError = retryResult.error;
+          } catch (retryErr) {
+            console.warn('⚠️ Retry also failed, continuing without DB data');
+          }
+        } else {
+          throw fetchErr;
+        }
+      }
+
       if (!data && !dbError) {
         console.log('📝 Creating new user profile in database');
         
@@ -162,14 +195,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           photo: authUser.user_metadata?.avatar_url || null,
         };
 
-        const { error: insertError } = await db
-          .users()
-          .insert(newProfile as any)
-          .select()
-          .single();
+        try {
+          const { error: insertError } = await db
+            .users()
+            .insert(newProfile as any)
+            .select()
+            .single();
 
-        if (insertError) {
-          console.error('❌ Failed to create user profile:', JSON.stringify(insertError));
+          if (insertError) {
+            const errStr = JSON.stringify(insertError);
+            if (!errStr.includes('AbortError') && !errStr.includes('signal is aborted')) {
+              console.error('❌ Failed to create user profile:', errStr);
+            } else {
+              console.warn('⚠️ Profile insert aborted - will retry on next auth event');
+            }
+          }
+        } catch (insertErr: any) {
+          if (insertErr?.name === 'AbortError' || insertErr?.message?.includes('AbortError') || insertErr?.message?.includes('signal is aborted')) {
+            console.warn('⚠️ Profile insert aborted - will retry on next auth event');
+          } else {
+            console.error('❌ Failed to create user profile:', insertErr);
+          }
         }
       }
 
@@ -206,8 +252,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       console.log('✅ Profile loaded:', profile.email, `(${profile.role})`);
     } catch (err: any) {
-      console.error('[Auth] Profile fetch failed:', err);
-      setError(err.message ?? 'Failed to load profile');
+      if (err?.name === 'AbortError' || err?.message?.includes('AbortError') || err?.message?.includes('signal is aborted')) {
+        console.warn('⚠️ Profile fetch was aborted - will retry on next auth event');
+      } else {
+        console.error('[Auth] Profile fetch failed:', err);
+        setError(err.message ?? 'Failed to load profile');
+      }
+    } finally {
+      fetchingProfileRef.current = false;
     }
   };
 
@@ -257,7 +309,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (session?.user) {
         api.setAuthToken(session.access_token);
-        await fetchProfile(session.user);
+        if (_event !== 'INITIAL_SESSION') {
+          await fetchProfile(session.user);
+        }
       } else {
         setUser(null);
         api.setAuthToken(null);
