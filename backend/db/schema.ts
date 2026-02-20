@@ -1,5 +1,16 @@
-import { User, Restaurant, Deal, Coupon, Service, BookingSlot, TableBooking, ServiceBooking } from "@/types";
+// backend/db/schema.ts
+import {
+  User,
+  Restaurant,
+  Deal,
+  Coupon,
+  Service,
+  BookingSlot,
+  TableBooking,
+  ServiceBooking,
+} from '@/types';
 
+// ─── Legacy in-memory database shape (kept for reference / tests) ───────────
 export interface Database {
   users: Map<string, User>;
   restaurants: Map<string, Restaurant>;
@@ -9,12 +20,16 @@ export interface Database {
   bookingSlots: Map<string, BookingSlot>;
   tableBookings: Map<string, TableBooking>;
   serviceBookings: Map<string, ServiceBooking>;
-  verificationCodes: Map<string, { code: string; email: string; expiresAt: Date }>;
+  verificationCodes: Map<
+    string,
+    { code: string; email: string; expiresAt: Date }
+  >;
   notifications: Map<string, Notification[]>;
   callBookings: Map<string, CallBooking>;
   payments: Map<string, Payment>;
 }
 
+// ─── Notification ────────────────────────────────────────────────────────────
 export interface Notification {
   id: string;
   userId: string;
@@ -27,6 +42,7 @@ export interface Notification {
   createdAt: string;
 }
 
+// ─── CallBooking ─────────────────────────────────────────────────────────────
 export interface CallBooking {
   id: string;
   restaurantName: string;
@@ -39,6 +55,7 @@ export interface CallBooking {
   createdAt: string;
 }
 
+// ─── Payment ─────────────────────────────────────────────────────────────────
 export interface Payment {
   id: string;
   userId: string;
@@ -51,6 +68,7 @@ export interface Payment {
   createdAt: string;
 }
 
+// ─── PartnerApplication ──────────────────────────────────────────────────────
 export interface PartnerApplication {
   id: string;
   restaurantName: string;
