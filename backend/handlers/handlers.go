@@ -1,367 +1,508 @@
-// backend/internal/handlers/handlers.go
 package handlers
+
+// This file contains handlers that do not belong to a more specific file:
+// - Employees, Shifts, Offers, Coupons, Transactions, Auth stubs
+//
+// Handler architecture: package-level functions (NOT struct methods).
+// Do NOT reintroduce the struct-based Handler pattern from
+// backend/internal/handlers/handlers.go — that file is DELETED / obsolete.
+//
+// Function ownership map (one definition, one file):
+//   health.go         → HealthCheck
+//   restaurants.go    → GetRestaurants, GetRestaurantByID, GetNearbyRestaurants,
+//                       GetRestaurantMenu, SearchRestaurants, CreateRestaurant,
+//                       UpdateRestaurant, AddMenuItem, UpdateMenuItem, DeleteMenuItem
+//   orders.go         → CreateOrder, GetUserOrders, GetOrderByID, CancelOrder,
+//                       GetRestaurantOrders, UpdateOrderStatus
+//   bookings.go       → CreateBooking, GetUserBookings, GetBookingByID,
+//                       CancelBooking, GetRestaurantBookings, UpdateBookingStatus
+//   profile.go        → GetProfile, UpdateProfile
+//   favorites.go      → AddFavorite, RemoveFavorite, GetFavorites
+//   notifications.go  → GetNotifications, MarkNotificationRead,
+//                       MarkAllNotificationsRead
+//   deals.go          → GetActiveDeals, GetFeaturedDeals, CreateDeal,
+//                       UpdateDeal, DeleteDeal
+//   inventory.go      → GetInventory, AddInventoryItem, UpdateInventoryItem,
+//                       DeleteInventoryItem
+//   analytics.go      → GetRestaurantAnalytics
+//   admin.go          → GetAllUsers, GetPendingRestaurants, VerifyRestaurant
+//   subscription.go   → CreateSubscriptionCheckout, GetSubscriptionStatus,
+//                       StripeWebhook
+//   handlers.go (this file) → everything else listed below
 
 import (
 	"net/http"
-	"time"
+
+	"finedine/backend/internal/database"
 
 	"github.com/gin-gonic/gin"
-	"finedine/backend/internal/cache"
-	"finedine/backend/internal/config"
-	"finedine/backend/internal/database"
-	"finedine/backend/internal/middleware"
 )
 
-type Handler struct {
-	db     *database.Client
-	cache  *cache.RedisClient
-	config *config.Config
-}
+// ─────────────────────────────────────────────────────────────────────────────
+// Employee handlers
+// ─────────────────────────────────────────────────────────────────────────────
 
-func New(db *database.Client, cache *cache.RedisClient, cfg *config.Config) *Handler {
-	return &Handler{
-		db:     db,
-		cache:  cache,
-		config: cfg,
-	}
-}
+// GetRestaurantEmployees - owner lists all employees for a restaurant
+func GetRestaurantEmployees(c *gin.Context) {
+	restaurantID := c.Param("id")
+	userID := c.GetString("userId")
 
-// HealthCheck - GET /health
-func (h *Handler) HealthCheck(c *gin.Context) {
-	dbErr := h.db.Health()
-	cacheErr := h.cache.Health()
-
-	status := "healthy"
-	code := http.StatusOK
-
-	if dbErr != nil || cacheErr != nil {
-		status = "unhealthy"
-		code = http.StatusServiceUnavailable
-	}
-
-	c.JSON(code, gin.H{
-		"status":    status,
-		"timestamp": time.Now().Unix(),
-		"database":  dbErr == nil,
-		"cache":     cacheErr == nil,
-	})
-}
-
-// GetRestaurants - GET /api/v1/restaurants
-func (h *Handler) GetRestaurants(c *gin.Context) {
-	cacheKey := "restaurants:all"
-	
-	// Try cache first
-	var restaurants []map[string]interface{}
-	err := h.cache.Get(cacheKey, &restaurants)
-	
-	if err == nil {
-		c.JSON(http.StatusOK, gin.H{
-			"data":   restaurants,
-			"cached": true,
-		})
-		return
-	}
-
-	// Query from database
-	query := `
-		SELECT 
-			r.id, r.name, r.address, r.phone, r.email, r.cuisine_types,
-			r.price_range, r.rating, r.total_reviews, r.images,
-			r.opening_hours, r.is_active, r.is_approved
-		FROM restaurants r
-		WHERE r.is_active = true AND r.is_approved = true
-		ORDER BY r.rating DESC, r.total_reviews DESC
-		LIMIT 100
-	`
-
-	rows, err := h.db.DB.Query(query)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch restaurants"})
-		return
-	}
-	defer rows.Close()
-
-	restaurants = []map[string]interface{}{}
-	for rows.Next() {
-		var r struct {
-			ID           string
-			Name         string
-			Address      string
-			Phone        string
-			Email        string
-			CuisineTypes []string
-			PriceRange   int
-			Rating       float64
-			TotalReviews int
-			Images       []string
-			OpeningHours map[string]interface{}
-			IsActive     bool
-			IsApproved   bool
-		}
-
-		if err := rows.Scan(
-			&r.ID, &r.Name, &r.Address, &r.Phone, &r.Email, &r.CuisineTypes,
-			&r.PriceRange, &r.Rating, &r.TotalReviews, &r.Images,
-			&r.OpeningHours, &r.IsActive, &r.IsApproved,
-		); err != nil {
-			continue
-		}
-
-		restaurants = append(restaurants, map[string]interface{}{
-			"id":            r.ID,
-			"name":          r.Name,
-			"address":       r.Address,
-			"phone":         r.Phone,
-			"email":         r.Email,
-			"cuisineTypes":  r.CuisineTypes,
-			"priceRange":    r.PriceRange,
-			"rating":        r.Rating,
-			"totalReviews":  r.TotalReviews,
-			"images":        r.Images,
-			"openingHours":  r.OpeningHours,
-		})
-	}
-
-	// Cache for 5 minutes
-	h.cache.Set(cacheKey, restaurants, 5*time.Minute)
-
-	c.JSON(http.StatusOK, gin.H{
-		"data":   restaurants,
-		"cached": false,
-	})
-}
-
-// GetRestaurant - GET /api/v1/restaurants/:id
-func (h *Handler) GetRestaurant(c *gin.Context) {
-	id := c.Param("id")
-	cacheKey := "restaurant:" + id
-
-	// Try cache
-	var restaurant map[string]interface{}
-	err := h.cache.Get(cacheKey, &restaurant)
-	if err == nil {
-		c.JSON(http.StatusOK, gin.H{"data": restaurant, "cached": true})
-		return
-	}
-
-	// Query database
-	query := `
-		SELECT 
-			id, name, address, phone, email, cuisine_types, description,
-			price_range, rating, total_reviews, images, opening_hours,
-			latitude, longitude, is_active
-		FROM restaurants
-		WHERE id = $1 AND is_active = true AND is_approved = true
-	`
-
-	var r struct {
-		ID           string
-		Name         string
-		Address      string
-		Phone        string
-		Email        string
-		CuisineTypes []string
-		Description  string
-		PriceRange   int
-		Rating       float64
-		TotalReviews int
-		Images       []string
-		OpeningHours map[string]interface{}
-		Latitude     float64
-		Longitude    float64
-		IsActive     bool
-	}
-
-	err = h.db.DB.QueryRow(query, id).Scan(
-		&r.ID, &r.Name, &r.Address, &r.Phone, &r.Email, &r.CuisineTypes,
-		&r.Description, &r.PriceRange, &r.Rating, &r.TotalReviews, &r.Images,
-		&r.OpeningHours, &r.Latitude, &r.Longitude, &r.IsActive,
-	)
+	// Verify ownership
+	_, _, err := database.Query("restaurants").
+		Select("id").
+		Eq("id", restaurantID).
+		Eq("owner_id", userID).
+		Single().
+		Execute()
 
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Restaurant not found"})
+		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
 		return
 	}
 
-	restaurant = map[string]interface{}{
-		"id":           r.ID,
-		"name":         r.Name,
-		"address":      r.Address,
-		"phone":        r.Phone,
-		"email":        r.Email,
-		"cuisineTypes": r.CuisineTypes,
-		"description":  r.Description,
-		"priceRange":   r.PriceRange,
-		"rating":       r.Rating,
-		"totalReviews": r.TotalReviews,
-		"images":       r.Images,
-		"openingHours": r.OpeningHours,
-		"location": map[string]float64{
-			"latitude":  r.Latitude,
-			"longitude": r.Longitude,
-		},
+	result, _, err := database.Query("employees").
+		Select("id, name, role, phone, email, hourly_rate, is_active, created_at").
+		Eq("restaurant_id", restaurantID).
+		Order("name", nil).
+		Execute()
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch employees"})
+		return
 	}
 
-	// Cache for 10 minutes
-	h.cache.Set(cacheKey, restaurant, 10*time.Minute)
-
-	c.JSON(http.StatusOK, gin.H{"data": restaurant, "cached": false})
+	c.JSON(http.StatusOK, gin.H{"data": result})
 }
 
-// CreateOrder - POST /api/v1/orders
-func (h *Handler) CreateOrder(c *gin.Context) {
-	userID, err := middleware.GetUserID(c)
-	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+// CreateEmployee - owner adds an employee to a restaurant
+func CreateEmployee(c *gin.Context) {
+	restaurantID := c.Param("id")
+	userID := c.GetString("userId")
+
+	var input struct {
+		Name       string  `json:"name" binding:"required"`
+		Role       string  `json:"role" binding:"required"`
+		Phone      string  `json:"phone"`
+		Email      string  `json:"email"`
+		HourlyRate float64 `json:"hourly_rate"`
+	}
+
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input: " + err.Error()})
 		return
 	}
 
-	var req struct {
-		RestaurantID string                   `json:"restaurantId" binding:"required"`
-		Items        []map[string]interface{} `json:"items" binding:"required"`
-		DeliveryAddress string                `json:"deliveryAddress" binding:"required"`
-		Notes        string                   `json:"notes"`
-	}
+	// Verify ownership
+	_, _, err := database.Query("restaurants").
+		Select("id").
+		Eq("id", restaurantID).
+		Eq("owner_id", userID).
+		Single().
+		Execute()
 
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+	if err != nil {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
 		return
 	}
 
-	// Calculate totals (simplified - in production, verify prices from DB)
-	subtotal := 0.0
-	for _, item := range req.Items {
-		if price, ok := item["price"].(float64); ok {
-			if qty, ok := item["quantity"].(float64); ok {
-				subtotal += price * qty
-			}
-		}
-	}
-
-	tax := subtotal * 0.1 // 10% tax
-	deliveryFee := 5.0
-	total := subtotal + tax + deliveryFee
-
-	// Insert order
-	query := `
-		INSERT INTO orders (
-			user_id, restaurant_id, items, delivery_address,
-			notes, subtotal, tax, delivery_fee, total, status
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'pending')
-		RETURNING id, created_at
-	`
-
-	var orderID string
-	var createdAt time.Time
-
-	err = h.db.DB.QueryRow(
-		query, userID, req.RestaurantID, req.Items, req.DeliveryAddress,
-		req.Notes, subtotal, tax, deliveryFee, total,
-	).Scan(&orderID, &createdAt)
+	result, _, err := database.Query("employees").
+		Insert(map[string]interface{}{
+			"restaurant_id": restaurantID,
+			"name":          input.Name,
+			"role":          input.Role,
+			"phone":         input.Phone,
+			"email":         input.Email,
+			"hourly_rate":   input.HourlyRate,
+			"is_active":     true,
+		}, false, "", "*", "").
+		Execute()
 
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create order"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create employee"})
 		return
 	}
 
 	c.JSON(http.StatusCreated, gin.H{
-		"data": map[string]interface{}{
-			"id":              orderID,
-			"userId":          userID,
-			"restaurantId":    req.RestaurantID,
-			"items":           req.Items,
-			"deliveryAddress": req.DeliveryAddress,
-			"notes":           req.Notes,
-			"subtotal":        subtotal,
-			"tax":             tax,
-			"deliveryFee":     deliveryFee,
-			"total":           total,
-			"status":          "pending",
-			"createdAt":       createdAt,
-		},
+		"data":    result,
+		"message": "Employee created successfully",
 	})
 }
 
-// GetOrder - GET /api/v1/orders/:id
-func (h *Handler) GetOrder(c *gin.Context) {
-	userID, err := middleware.GetUserID(c)
-	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+// UpdateEmployee - owner updates an employee record
+func UpdateEmployee(c *gin.Context) {
+	employeeID := c.Param("id")
+
+	var updates map[string]interface{}
+	if err := c.ShouldBindJSON(&updates); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
 		return
 	}
 
-	orderID := c.Param("id")
+	delete(updates, "id")
+	delete(updates, "restaurant_id")
 
-	query := `
-		SELECT 
-			o.id, o.user_id, o.restaurant_id, o.items, o.delivery_address,
-			o.notes, o.subtotal, o.tax, o.delivery_fee, o.total, o.status,
-			o.created_at, o.updated_at,
-			r.name as restaurant_name
-		FROM orders o
-		JOIN restaurants r ON r.id = o.restaurant_id
-		WHERE o.id = $1 AND o.user_id = $2
-	`
-
-	var order struct {
-		ID              string
-		UserID          string
-		RestaurantID    string
-		Items           []map[string]interface{}
-		DeliveryAddress string
-		Notes           string
-		Subtotal        float64
-		Tax             float64
-		DeliveryFee     float64
-		Total           float64
-		Status          string
-		CreatedAt       time.Time
-		UpdatedAt       time.Time
-		RestaurantName  string
-	}
-
-	err = h.db.DB.QueryRow(query, orderID, userID).Scan(
-		&order.ID, &order.UserID, &order.RestaurantID, &order.Items,
-		&order.DeliveryAddress, &order.Notes, &order.Subtotal, &order.Tax,
-		&order.DeliveryFee, &order.Total, &order.Status, &order.CreatedAt,
-		&order.UpdatedAt, &order.RestaurantName,
-	)
+	result, _, err := database.Query("employees").
+		Update(updates, "", "*").
+		Eq("id", employeeID).
+		Execute()
 
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Order not found"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update employee"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": order})
+	c.JSON(http.StatusOK, gin.H{
+		"data":    result,
+		"message": "Employee updated successfully",
+	})
 }
 
-// Placeholder handlers (implement similarly)
-func (h *Handler) GetRestaurantMenu(c *gin.Context)      { c.JSON(http.StatusNotImplemented, gin.H{"message": "Not implemented yet"}) }
-func (h *Handler) GetUserProfile(c *gin.Context)         { c.JSON(http.StatusNotImplemented, gin.H{"message": "Not implemented yet"}) }
-func (h *Handler) UpdateUserProfile(c *gin.Context)      { c.JSON(http.StatusNotImplemented, gin.H{"message": "Not implemented yet"}) }
-func (h *Handler) GetUserOrders(c *gin.Context)          { c.JSON(http.StatusNotImplemented, gin.H{"message": "Not implemented yet"}) }
-func (h *Handler) CreateBooking(c *gin.Context)          { c.JSON(http.StatusNotImplemented, gin.H{"message": "Not implemented yet"}) }
-func (h *Handler) GetBooking(c *gin.Context)             { c.JSON(http.StatusNotImplemented, gin.H{"message": "Not implemented yet"}) }
-func (h *Handler) GetUserBookings(c *gin.Context)        { c.JSON(http.StatusNotImplemented, gin.H{"message": "Not implemented yet"}) }
-func (h *Handler) AddFavorite(c *gin.Context)            { c.JSON(http.StatusNotImplemented, gin.H{"message": "Not implemented yet"}) }
-func (h *Handler) GetFavorites(c *gin.Context)           { c.JSON(http.StatusNotImplemented, gin.H{"message": "Not implemented yet"}) }
-func (h *Handler) RemoveFavorite(c *gin.Context)         { c.JSON(http.StatusNotImplemented, gin.H{"message": "Not implemented yet"}) }
-func (h *Handler) GetNotifications(c *gin.Context)       { c.JSON(http.StatusNotImplemented, gin.H{"message": "Not implemented yet"}) }
-func (h *Handler) MarkNotificationRead(c *gin.Context)   { c.JSON(http.StatusNotImplemented, gin.H{"message": "Not implemented yet"}) }
-func (h *Handler) CreateRestaurant(c *gin.Context)       { c.JSON(http.StatusNotImplemented, gin.H{"message": "Not implemented yet"}) }
-func (h *Handler) UpdateRestaurant(c *gin.Context)       { c.JSON(http.StatusNotImplemented, gin.H{"message": "Not implemented yet"}) }
-func (h *Handler) DeleteRestaurant(c *gin.Context)       { c.JSON(http.StatusNotImplemented, gin.H{"message": "Not implemented yet"}) }
-func (h *Handler) AddMenuItem(c *gin.Context)            { c.JSON(http.StatusNotImplemented, gin.H{"message": "Not implemented yet"}) }
-func (h *Handler) UpdateMenuItem(c *gin.Context)         { c.JSON(http.StatusNotImplemented, gin.H{"message": "Not implemented yet"}) }
-func (h *Handler) DeleteMenuItem(c *gin.Context)         { c.JSON(http.StatusNotImplemented, gin.H{"message": "Not implemented yet"}) }
-func (h *Handler) GetRestaurantOrders(c *gin.Context)    { c.JSON(http.StatusNotImplemented, gin.H{"message": "Not implemented yet"}) }
-func (h *Handler) UpdateOrderStatus(c *gin.Context)      { c.JSON(http.StatusNotImplemented, gin.H{"message": "Not implemented yet"}) }
-func (h *Handler) GetInventory(c *gin.Context)           { c.JSON(http.StatusNotImplemented, gin.H{"message": "Not implemented yet"}) }
-func (h *Handler) UpdateInventory(c *gin.Context)        { c.JSON(http.StatusNotImplemented, gin.H{"message": "Not implemented yet"}) }
-func (h *Handler) GetRestaurantAnalytics(c *gin.Context) { c.JSON(http.StatusNotImplemented, gin.H{"message": "Not implemented yet"}) }
-func (h *Handler) GetAllUsers(c *gin.Context)            { c.JSON(http.StatusNotImplemented, gin.H{"message": "Not implemented yet"}) }
-func (h *Handler) UpdateUserRole(c *gin.Context)         { c.JSON(http.StatusNotImplemented, gin.H{"message": "Not implemented yet"}) }
-func (h *Handler) GetPendingRestaurants(c *gin.Context)  { c.JSON(http.StatusNotImplemented, gin.H{"message": "Not implemented yet"}) }
-func (h *Handler) ApproveRestaurant(c *gin.Context)      { c.JSON(http.StatusNotImplemented, gin.H{"message": "Not implemented yet"}) }
-func (h *Handler) HandleStripeWebhook(c *gin.Context)    { c.JSON(http.StatusNotImplemented, gin.H{"message": "Not implemented yet"}) }
+// DeleteEmployee - owner removes an employee
+func DeleteEmployee(c *gin.Context) {
+	employeeID := c.Param("id")
+
+	_, _, err := database.Query("employees").
+		Delete("", "").
+		Eq("id", employeeID).
+		Execute()
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete employee"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Employee deleted successfully"})
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Shift handlers
+// ─────────────────────────────────────────────────────────────────────────────
+
+// GetRestaurantShifts - owner lists all shifts for a restaurant
+func GetRestaurantShifts(c *gin.Context) {
+	restaurantID := c.Param("id")
+	userID := c.GetString("userId")
+
+	// Verify ownership
+	_, _, err := database.Query("restaurants").
+		Select("id").
+		Eq("id", restaurantID).
+		Eq("owner_id", userID).
+		Single().
+		Execute()
+
+	if err != nil {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
+		return
+	}
+
+	result, _, err := database.Query("shifts").
+		Select("*, employee:employees(id, name, role)").
+		Eq("restaurant_id", restaurantID).
+		Order("shift_date", &database.OrderOpts{Ascending: false}).
+		Execute()
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch shifts"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": result})
+}
+
+// CreateShift - owner creates a shift entry
+func CreateShift(c *gin.Context) {
+	restaurantID := c.Param("id")
+	userID := c.GetString("userId")
+
+	var input struct {
+		EmployeeID string `json:"employee_id" binding:"required"`
+		ShiftDate  string `json:"shift_date" binding:"required"`
+		StartTime  string `json:"start_time" binding:"required"`
+		EndTime    string `json:"end_time" binding:"required"`
+		Notes      string `json:"notes"`
+	}
+
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input: " + err.Error()})
+		return
+	}
+
+	// Verify ownership
+	_, _, err := database.Query("restaurants").
+		Select("id").
+		Eq("id", restaurantID).
+		Eq("owner_id", userID).
+		Single().
+		Execute()
+
+	if err != nil {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
+		return
+	}
+
+	result, _, err := database.Query("shifts").
+		Insert(map[string]interface{}{
+			"restaurant_id": restaurantID,
+			"employee_id":   input.EmployeeID,
+			"shift_date":    input.ShiftDate,
+			"start_time":    input.StartTime,
+			"end_time":      input.EndTime,
+			"notes":         input.Notes,
+		}, false, "", "*, employee:employees(id, name, role)", "").
+		Execute()
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create shift"})
+		return
+	}
+
+	c.JSON(http.StatusCreated, gin.H{
+		"data":    result,
+		"message": "Shift created successfully",
+	})
+}
+
+// DeleteShift - owner removes a shift
+func DeleteShift(c *gin.Context) {
+	shiftID := c.Param("id")
+
+	_, _, err := database.Query("shifts").
+		Delete("", "").
+		Eq("id", shiftID).
+		Execute()
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete shift"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Shift deleted successfully"})
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Offer handlers
+// ─────────────────────────────────────────────────────────────────────────────
+
+// GetRestaurantOffers - owner lists all offers for a restaurant
+func GetRestaurantOffers(c *gin.Context) {
+	restaurantID := c.Param("id")
+	userID := c.GetString("userId")
+
+	_, _, err := database.Query("restaurants").
+		Select("id").
+		Eq("id", restaurantID).
+		Eq("owner_id", userID).
+		Single().
+		Execute()
+
+	if err != nil {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
+		return
+	}
+
+	result, _, err := database.Query("offers").
+		Select("*").
+		Eq("restaurant_id", restaurantID).
+		Order("created_at", &database.OrderOpts{Ascending: false}).
+		Execute()
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch offers"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": result})
+}
+
+// CreateOffer - owner creates an offer and notifies favorited users
+func CreateOffer(c *gin.Context) {
+	restaurantID := c.Param("id")
+	userID := c.GetString("userId")
+
+	var input map[string]interface{}
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
+		return
+	}
+
+	_, _, err := database.Query("restaurants").
+		Select("id").
+		Eq("id", restaurantID).
+		Eq("owner_id", userID).
+		Single().
+		Execute()
+
+	if err != nil {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
+		return
+	}
+
+	input["restaurant_id"] = restaurantID
+
+	result, _, err := database.Query("offers").
+		Insert(input, false, "", "*", "").
+		Execute()
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create offer"})
+		return
+	}
+
+	c.JSON(http.StatusCreated, gin.H{
+		"data":    result,
+		"message": "Offer created successfully",
+	})
+}
+
+// UpdateOffer - owner updates an existing offer
+func UpdateOffer(c *gin.Context) {
+	offerID := c.Param("id")
+
+	var updates map[string]interface{}
+	if err := c.ShouldBindJSON(&updates); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
+		return
+	}
+
+	delete(updates, "id")
+	delete(updates, "restaurant_id")
+
+	result, _, err := database.Query("offers").
+		Update(updates, "", "*").
+		Eq("id", offerID).
+		Execute()
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update offer"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": result})
+}
+
+// DeleteOffer - owner deletes an offer
+func DeleteOffer(c *gin.Context) {
+	offerID := c.Param("id")
+
+	_, _, err := database.Query("offers").
+		Delete("", "").
+		Eq("id", offerID).
+		Execute()
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete offer"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Offer deleted successfully"})
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Coupon & Transaction handlers
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ValidateCoupon - owner or system validates a coupon code at checkout
+func ValidateCoupon(c *gin.Context) {
+	var input struct {
+		Code         string  `json:"code" binding:"required"`
+		RestaurantID string  `json:"restaurant_id" binding:"required"`
+		OrderTotal   float64 `json:"order_total" binding:"required,gt=0"`
+	}
+
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input: " + err.Error()})
+		return
+	}
+
+	result, _, err := database.Query("coupons").
+		Select("*").
+		Eq("code", input.Code).
+		Eq("restaurant_id", input.RestaurantID).
+		Eq("is_active", "true").
+		Single().
+		Execute()
+
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Coupon not found or expired"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"data":    result,
+		"message": "Coupon is valid",
+	})
+}
+
+// CreateTransaction - record a financial transaction for a restaurant
+func CreateTransaction(c *gin.Context) {
+	restaurantID := c.Param("id")
+	userID := c.GetString("userId")
+
+	// Verify ownership
+	_, _, err := database.Query("restaurants").
+		Select("id").
+		Eq("id", restaurantID).
+		Eq("owner_id", userID).
+		Single().
+		Execute()
+
+	if err != nil {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
+		return
+	}
+
+	var input map[string]interface{}
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
+		return
+	}
+
+	input["restaurant_id"] = restaurantID
+
+	result, _, err := database.Query("transactions").
+		Insert(input, false, "", "*", "").
+		Execute()
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create transaction"})
+		return
+	}
+
+	c.JSON(http.StatusCreated, gin.H{
+		"data":    result,
+		"message": "Transaction recorded",
+	})
+}
+
+// GetRestaurantTransactions - owner views all financial transactions
+func GetRestaurantTransactions(c *gin.Context) {
+	restaurantID := c.Param("id")
+	userID := c.GetString("userId")
+
+	// Verify ownership
+	_, _, err := database.Query("restaurants").
+		Select("id").
+		Eq("id", restaurantID).
+		Eq("owner_id", userID).
+		Single().
+		Execute()
+
+	if err != nil {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
+		return
+	}
+
+	result, _, err := database.Query("transactions").
+		Select("*").
+		Eq("restaurant_id", restaurantID).
+		Order("created_at", &database.OrderOpts{Ascending: false}).
+		Execute()
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch transactions"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": result})
+}
