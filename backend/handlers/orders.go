@@ -3,47 +3,45 @@ package handlers
 import (
 	"encoding/json"
 	"net/http"
-	"time"
 
 	"finedine/backend/internal/cache"
 	"finedine/backend/internal/database"
 	"finedine/backend/internal/realtime"
+
 	"github.com/gin-gonic/gin"
 )
 
-// Create order with real-time notification
+// CreateOrder - authenticated user places an order
 func CreateOrder(c *gin.Context) {
 	userID := c.GetString("userId")
 
 	var input struct {
-		RestaurantID string                   `json:"restaurant_id" binding:"required"`
-		OrderType    string                   `json:"order_type" binding:"required"`
-		Items        []map[string]interface{} `json:"items" binding:"required"`
-		Subtotal     float64                  `json:"subtotal" binding:"required"`
-		Total        float64                  `json:"total" binding:"required"`
-		CouponCode   string                   `json:"coupon_code"`
-		Notes        string                   `json:"customer_notes"`
+		RestaurantID  string                   `json:"restaurant_id" binding:"required"`
+		OrderType     string                   `json:"order_type" binding:"required,oneof=dine_in takeaway delivery"`
+		Items         []map[string]interface{} `json:"items" binding:"required,min=1"`
+		Subtotal      float64                  `json:"subtotal" binding:"required,gt=0"`
+		Total         float64                  `json:"total" binding:"required,gt=0"`
+		CouponCode    string                   `json:"coupon_code"`
+		CustomerNotes string                   `json:"customer_notes"`
 	}
 
-	if err := c.BindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input: " + err.Error()})
 		return
 	}
 
-	// Prepare order data
 	orderData := map[string]interface{}{
-		"customer_id":   userID,
-		"restaurant_id": input.RestaurantID,
-		"order_type":    input.OrderType,
-		"items":         input.Items,
-		"subtotal":      input.Subtotal,
-		"total":         input.Total,
-		"status":        "pending",
-		"coupon_code":   input.CouponCode,
-		"customer_notes": input.Notes,
+		"customer_id":    userID,
+		"restaurant_id":  input.RestaurantID,
+		"order_type":     input.OrderType,
+		"items":          input.Items,
+		"subtotal":       input.Subtotal,
+		"total":          input.Total,
+		"status":         "pending",
+		"coupon_code":    input.CouponCode,
+		"customer_notes": input.CustomerNotes,
 	}
 
-	// Create order in database
 	result, _, err := database.Query("orders").
 		Insert(orderData, false, "", "*, restaurant:restaurants(name, logo_url)", "").
 		Execute()
@@ -53,24 +51,21 @@ func CreateOrder(c *gin.Context) {
 		return
 	}
 
-	// Parse result to get order ID
 	var orders []map[string]interface{}
-	json.Unmarshal(result, &orders)
-	if len(orders) == 0 {
+	if err := json.Unmarshal(result, &orders); err != nil || len(orders) == 0 {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Order creation failed"})
 		return
 	}
 
 	order := orders[0]
-	orderID := order["id"].(string)
 
-	// Send real-time notification to restaurant owner
+	// Real-time notification to restaurant owner
 	realtime.WSHub.SendToUser(input.RestaurantID, map[string]interface{}{
 		"type":    "new_order",
 		"payload": order,
 	})
 
-	// Publish to Redis for other services
+	// Publish to Redis for downstream services
 	cache.Publish("orders:new", order)
 
 	c.JSON(http.StatusCreated, gin.H{
@@ -79,7 +74,7 @@ func CreateOrder(c *gin.Context) {
 	})
 }
 
-// Get user orders
+// GetUserOrders - list the authenticated user's order history
 func GetUserOrders(c *gin.Context) {
 	userID := c.GetString("userId")
 
@@ -97,7 +92,7 @@ func GetUserOrders(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": result})
 }
 
-// Get order by ID
+// GetOrderByID - single order detail (must belong to the requesting user)
 func GetOrderByID(c *gin.Context) {
 	orderID := c.Param("id")
 	userID := c.GetString("userId")
@@ -117,27 +112,23 @@ func GetOrderByID(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": result})
 }
 
-// Cancel order
+// CancelOrder - customer cancels a non-completed order
 func CancelOrder(c *gin.Context) {
 	orderID := c.Param("id")
 	userID := c.GetString("userId")
 
-	// Update order status
 	result, _, err := database.Query("orders").
-		Update(map[string]interface{}{
-			"status": "cancelled",
-		}, "", "").
+		Update(map[string]interface{}{"status": "cancelled"}, "", "").
 		Eq("id", orderID).
 		Eq("customer_id", userID).
 		Neq("status", "completed").
 		Execute()
 
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Cannot cancel order"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Cannot cancel this order"})
 		return
 	}
 
-	// Send real-time update
 	realtime.SendOrderUpdate(orderID, userID, "cancelled")
 
 	c.JSON(http.StatusOK, gin.H{
@@ -146,18 +137,14 @@ func CancelOrder(c *gin.Context) {
 	})
 }
 
-// Owner: Get restaurant orders
+// GetRestaurantOrders - owner views orders for their restaurant
 func GetRestaurantOrders(c *gin.Context) {
 	restaurantID := c.Param("id")
 	userID := c.GetString("userId")
 	status := c.Query("status")
 
-	query := database.Query("orders").
-		Select("*, customer:users(id, full_name, phone)").
-		Eq("restaurant_id", restaurantID)
-
-	// Verify ownership
-	ownerCheck, _, err := database.Query("restaurants").
+	// Verify ownership first
+	_, _, err := database.Query("restaurants").
 		Select("id").
 		Eq("id", restaurantID).
 		Eq("owner_id", userID).
@@ -168,6 +155,10 @@ func GetRestaurantOrders(c *gin.Context) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
 		return
 	}
+
+	query := database.Query("orders").
+		Select("*, customer:users(id, full_name, phone)").
+		Eq("restaurant_id", restaurantID)
 
 	if status != "" {
 		query = query.Eq("status", status)
@@ -185,18 +176,18 @@ func GetRestaurantOrders(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": result})
 }
 
-// Owner: Update order status with real-time push
+// UpdateOrderStatus - owner updates status and pushes real-time to customer
 func UpdateOrderStatus(c *gin.Context) {
 	orderID := c.Param("orderId")
 	restaurantID := c.Param("id")
 	userID := c.GetString("userId")
 
 	var input struct {
-		Status string `json:"status" binding:"required"`
+		Status string `json:"status" binding:"required,oneof=pending confirmed preparing ready completed cancelled"`
 	}
 
-	if err := c.BindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid status value"})
 		return
 	}
 
@@ -213,11 +204,8 @@ func UpdateOrderStatus(c *gin.Context) {
 		return
 	}
 
-	// Update order
 	result, _, err := database.Query("orders").
-		Update(map[string]interface{}{
-			"status": input.Status,
-		}, "", "*, customer:users(id)").
+		Update(map[string]interface{}{"status": input.Status}, "", "*, customer:users(id)").
 		Eq("id", orderID).
 		Eq("restaurant_id", restaurantID).
 		Execute()
@@ -227,22 +215,18 @@ func UpdateOrderStatus(c *gin.Context) {
 		return
 	}
 
-	// Parse result to get customer ID
+	// Push real-time update to customer
 	var orders []map[string]interface{}
-	json.Unmarshal(result, &orders)
-	if len(orders) > 0 {
+	if err := json.Unmarshal(result, &orders); err == nil && len(orders) > 0 {
 		order := orders[0]
 		if customer, ok := order["customer"].(map[string]interface{}); ok {
-			customerID := customer["id"].(string)
-
-			// Send real-time notification to customer
-			realtime.SendOrderUpdate(orderID, customerID, input.Status)
-
-			// Publish to Redis
-			cache.Publish("orders:status_update", map[string]interface{}{
-				"order_id": orderID,
-				"status":   input.Status,
-			})
+			if customerID, ok := customer["id"].(string); ok {
+				realtime.SendOrderUpdate(orderID, customerID, input.Status)
+				cache.Publish("orders:status_update", map[string]interface{}{
+					"order_id": orderID,
+					"status":   input.Status,
+				})
+			}
 		}
 	}
 
