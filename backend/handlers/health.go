@@ -1,32 +1,37 @@
 package handlers
 
 import (
+	"net/http"
+	"time"
+
 	"finedine/backend/internal/cache"
 	"finedine/backend/internal/database"
+
 	"github.com/gin-gonic/gin"
 )
 
+// HealthCheck - GET /health
 func HealthCheck(c *gin.Context) {
-	// Check Supabase connection
-	supabaseStatus := "connected"
-	if database.Client == nil {
-		supabaseStatus = "disconnected"
+	supabaseOK := database.Client != nil
+	redisOK := false
+
+	if cache.RedisClient != nil {
+		redisOK = cache.RedisClient.Ping(c.Request.Context()).Err() == nil
 	}
 
-	// Check Redis connection
-	redisStatus := "connected"
-	if cache.RedisClient == nil {
-		redisStatus = "disconnected"
-	} else if err := cache.RedisClient.Ping(c).Err(); err != nil {
-		redisStatus = "error"
+	status := "ok"
+	code := http.StatusOK
+	if !supabaseOK || !redisOK {
+		status = "degraded"
+		code = http.StatusServiceUnavailable
 	}
 
-	c.JSON(200, gin.H{
-		"status":    "ok",
-		"timestamp": "now",
+	c.JSON(code, gin.H{
+		"status":    status,
+		"timestamp": time.Now().UTC().Format(time.RFC3339),
 		"services": gin.H{
-			"supabase": supabaseStatus,
-			"redis":    redisStatus,
+			"supabase": supabaseOK,
+			"redis":    redisOK,
 		},
 	})
 }
