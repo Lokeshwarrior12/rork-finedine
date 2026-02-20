@@ -1,43 +1,53 @@
 package handlers
 
 import (
+	"encoding/json"
+	"io"
 	"net/http"
 	"os"
 	"time"
 
 	"finedine/backend/internal/database"
+
 	"github.com/gin-gonic/gin"
 	"github.com/stripe/stripe-go/v76"
 	"github.com/stripe/stripe-go/v76/checkout/session"
+	"github.com/stripe/stripe-go/v76/webhook"
 )
 
-// Initialize Stripe
 func init() {
 	stripe.Key = os.Getenv("STRIPE_SECRET_KEY")
 }
 
-// Create subscription checkout session
+// CreateSubscriptionCheckout - generate a Stripe Checkout session for subscription
 func CreateSubscriptionCheckout(c *gin.Context) {
 	userID := c.GetString("userId")
 	email := c.GetString("email")
 
 	var input struct {
 		RestaurantID string `json:"restaurant_id" binding:"required"`
-		PriceID      string `json:"price_id"` // Optional: for different subscription tiers
+		PriceID      string `json:"price_id"`
 	}
 
-	if err := c.BindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "restaurant_id is required"})
 		return
 	}
 
-	// Default annual subscription price ($500/year)
 	priceID := input.PriceID
 	if priceID == "" {
-		priceID = "price_annual_subscription" // You'll create this in Stripe Dashboard
+		priceID = os.Getenv("STRIPE_ANNUAL_PRICE_ID")
+	}
+	if priceID == "" {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Stripe price ID not configured"})
+		return
 	}
 
-	// Create Stripe Checkout Session
+	frontendURL := os.Getenv("FRONTEND_URL")
+	if frontendURL == "" {
+		frontendURL = "http://localhost:3000"
+	}
+
 	params := &stripe.CheckoutSessionParams{
 		Mode: stripe.String(string(stripe.CheckoutSessionModeSubscription)),
 		LineItems: []*stripe.CheckoutSessionLineItemParams{
@@ -46,8 +56,8 @@ func CreateSubscriptionCheckout(c *gin.Context) {
 				Quantity: stripe.Int64(1),
 			},
 		},
-		SuccessURL: stripe.String(os.Getenv("FRONTEND_URL") + "/subscription/success?session_id={CHECKOUT_SESSION_ID}"),
-		CancelURL:  stripe.String(os.Getenv("FRONTEND_URL") + "/subscription/cancel"),
+		SuccessURL:    stripe.String(frontendURL + "/subscription/success?session_id={CHECKOUT_SESSION_ID}"),
+		CancelURL:     stripe.String(frontendURL + "/subscription/cancel"),
 		CustomerEmail: stripe.String(email),
 		Metadata: map[string]string{
 			"user_id":       userID,
@@ -67,12 +77,11 @@ func CreateSubscriptionCheckout(c *gin.Context) {
 	})
 }
 
-// Get subscription status
+// GetSubscriptionStatus - return subscription state for all restaurants owned by user
 func GetSubscriptionStatus(c *gin.Context) {
 	userID := c.GetString("userId")
 
-	// Get all restaurants owned by user
-	restaurants, _, err := database.Query("restaurants").
+	result, _, err := database.Query("restaurants").
 		Select("id, name, subscription_status, subscription_expires_at").
 		Eq("owner_id", userID).
 		Execute()
@@ -82,62 +91,102 @@ func GetSubscriptionStatus(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": restaurants})
+	c.JSON(http.StatusOK, gin.H{"data": result})
 }
 
-// Stripe webhook handler (for subscription updates)
+// StripeWebhook - handle Stripe event callbacks
 func StripeWebhook(c *gin.Context) {
-	const MaxBodyBytes = int64(65536)
-	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, MaxBodyBytes)
-	
+	const maxBodyBytes = int64(65536)
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxBodyBytes)
+
 	payload, err := io.ReadAll(c.Request.Body)
 	if err != nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Error reading request body"})
 		return
 	}
 
-	event := stripe.Event{}
+	// Verify webhook signature when secret is configured
+	webhookSecret := os.Getenv("STRIPE_WEBHOOK_SECRET")
+	var event stripe.Event
 
-	if err := json.Unmarshal(payload, &event); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Webhook error"})
-		return
-	}
-
-	// Handle different event types
-	switch event.Type {
-	case "checkout.session.completed":
-		// Handle successful subscription
-		var session stripe.CheckoutSession
-		err := json.Unmarshal(event.Data.Raw, &session)
+	if webhookSecret != "" {
+		sigHeader := c.GetHeader("Stripe-Signature")
+		event, err = webhook.ConstructEvent(payload, sigHeader, webhookSecret)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Error parsing webhook"})
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Webhook signature verification failed"})
 			return
 		}
+	} else {
+		if err := json.Unmarshal(payload, &event); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid webhook payload"})
+			return
+		}
+	}
 
-		restaurantID := session.Metadata["restaurant_id"]
-		
-		// Update restaurant subscription
-		expiresAt := time.Now().AddDate(1, 0, 0) // 1 year from now
+	switch event.Type {
 
+	case "checkout.session.completed":
+		var sess stripe.CheckoutSession
+		if err := json.Unmarshal(event.Data.Raw, &sess); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Error parsing checkout session"})
+			return
+		}
+		restaurantID := sess.Metadata["restaurant_id"]
+		if restaurantID == "" {
+			break
+		}
+		expiresAt := time.Now().AddDate(1, 0, 0)
 		database.Query("restaurants").
 			Update(map[string]interface{}{
-				"subscription_status":    "active",
+				"subscription_status":     "active",
 				"subscription_expires_at": expiresAt.Format(time.RFC3339),
+				"stripe_customer_id":      sess.Customer,
+				"stripe_subscription_id":  sess.Subscription,
 			}, "", "").
 			Eq("id", restaurantID).
 			Execute()
 
 	case "customer.subscription.deleted":
-		// Handle subscription cancellation
-		var subscription stripe.Subscription
-		json.Unmarshal(event.Data.Raw, &subscription)
+		var sub stripe.Subscription
+		if err := json.Unmarshal(event.Data.Raw, &sub); err != nil {
+			break
+		}
+		// Find by stripe_subscription_id and deactivate
+		database.Query("restaurants").
+			Update(map[string]interface{}{
+				"subscription_status": "expired",
+			}, "", "").
+			Eq("stripe_subscription_id", string(sub.ID)).
+			Execute()
 
-		// Find restaurant and deactivate
-		// You'd need to store subscription ID with restaurant
+	case "customer.subscription.updated":
+		var sub stripe.Subscription
+		if err := json.Unmarshal(event.Data.Raw, &sub); err != nil {
+			break
+		}
+		status := "active"
+		if sub.Status != stripe.SubscriptionStatusActive {
+			status = string(sub.Status)
+		}
+		database.Query("restaurants").
+			Update(map[string]interface{}{
+				"subscription_status": status,
+			}, "", "").
+			Eq("stripe_subscription_id", string(sub.ID)).
+			Execute()
 
 	case "invoice.payment_failed":
-		// Handle failed payment
-		// Send notification to restaurant owner
+		var inv stripe.Invoice
+		if err := json.Unmarshal(event.Data.Raw, &inv); err != nil {
+			break
+		}
+		// Mark subscription as past_due so owner sees it in the dashboard
+		database.Query("restaurants").
+			Update(map[string]interface{}{
+				"subscription_status": "past_due",
+			}, "", "").
+			Eq("stripe_customer_id", string(inv.Customer.ID)).
+			Execute()
 	}
 
 	c.JSON(http.StatusOK, gin.H{"received": true})
