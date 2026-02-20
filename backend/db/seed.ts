@@ -1,18 +1,22 @@
+// backend/db/seed.ts
 import { db } from './index';
 import { hashPassword } from '../auth/jwt';
 import { User, Restaurant } from '@/types';
 
-export async function seedSampleUsers() {
+export async function seedSampleUsers(): Promise<{
+  success: boolean;
+  message: string;
+}> {
   console.log('Starting database seed...');
 
   try {
+    // ── Customer ──────────────────────────────────────────────────────────────
     const existingCustomer = await db.users.getByEmail('b14175705@gmail.com');
     if (!existingCustomer) {
       const customerPasswordHash = await hashPassword('Daddy@2502');
-      const customerId = 'user_sample_customer';
-      
+
       const customerUser: User & { passwordHash: string } = {
-        id: customerId,
+        id: 'user_sample_customer',
         name: 'Sample Customer',
         email: 'b14175705@gmail.com',
         phone: '+1234567890',
@@ -25,13 +29,16 @@ export async function seedSampleUsers() {
       };
 
       await db.users.create(customerUser);
-      console.log('Sample customer created: b14175705@gmail.com');
+      console.log('✅ Sample customer created: b14175705@gmail.com');
     } else {
-      console.log('Sample customer already exists: b14175705@gmail.com');
+      console.log('ℹ️  Sample customer already exists: b14175705@gmail.com');
     }
 
-    const existingRestaurantOwner = await db.users.getByEmail('lokeshwarrior12@gmail.com');
-    if (!existingRestaurantOwner) {
+    // ── Restaurant Owner ──────────────────────────────────────────────────────
+    const existingOwner = await db.users.getByEmail(
+      'lokeshwarrior12@gmail.com',
+    );
+    if (!existingOwner) {
       const ownerPasswordHash = await hashPassword('Daddy@2502');
       const ownerId = 'user_sample_restaurant_owner';
       const restaurantId = 'rest_sample_restaurant';
@@ -45,19 +52,23 @@ export async function seedSampleUsers() {
         role: 'restaurant_owner',
         points: 0,
         favorites: [],
-        restaurantId: restaurantId,
+        restaurantId,
         passwordHash: ownerPasswordHash,
       };
 
       await db.users.create(ownerUser);
-      console.log('Sample restaurant owner created: lokeshwarrior12@gmail.com');
+      console.log(
+        '✅ Sample restaurant owner created: lokeshwarrior12@gmail.com',
+      );
 
+      // ── Restaurant ──────────────────────────────────────────────────────────
       const existingRestaurant = await db.restaurants.getById(restaurantId);
       if (!existingRestaurant) {
         const sampleRestaurant: Restaurant = {
           id: restaurantId,
           name: 'Spice Garden',
-          description: 'Authentic Indian cuisine with a modern twist. Experience the rich flavors of India in every bite.',
+          description:
+            'Authentic Indian cuisine with a modern twist. Experience the rich flavors of India in every bite.',
           cuisineType: 'Indian',
           address: '456 Restaurant Avenue',
           city: 'New York',
@@ -75,22 +86,25 @@ export async function seedSampleUsers() {
           waitingTime: '15-25 min',
           categories: ['Indian', 'Fine Dining', 'Family Friendly'],
           acceptsTableBooking: true,
-          bookingTerms: 'Reservations must be made at least 2 hours in advance. Cancellations within 1 hour may incur a fee.',
-          ownerId: ownerId,
+          bookingTerms:
+            'Reservations must be made at least 2 hours in advance. Cancellations within 1 hour may incur a fee.',
+          ownerId,
         };
 
         await db.restaurants.create(sampleRestaurant);
-        console.log('Sample restaurant created: Spice Garden');
+        console.log('✅ Sample restaurant created: Spice Garden');
 
+        // ── Menu Items ────────────────────────────────────────────────────────
         const menuItems = [
           {
             id: 'menu_1',
-            restaurantId: restaurantId,
+            restaurantId,
             name: 'Butter Chicken',
             description: 'Tender chicken in rich tomato-butter sauce',
             price: 16.99,
             category: 'Main Course',
-            image: 'https://images.unsplash.com/photo-1603894584373-5ac82b2ae398?w=400',
+            image:
+              'https://images.unsplash.com/photo-1603894584373-5ac82b2ae398?w=400',
             isAvailable: true,
             isVegetarian: false,
             isVegan: false,
@@ -100,12 +114,13 @@ export async function seedSampleUsers() {
           },
           {
             id: 'menu_2',
-            restaurantId: restaurantId,
+            restaurantId,
             name: 'Paneer Tikka Masala',
             description: 'Grilled cottage cheese in spiced gravy',
             price: 14.99,
             category: 'Main Course',
-            image: 'https://images.unsplash.com/photo-1631452180519-c014fe946bc7?w=400',
+            image:
+              'https://images.unsplash.com/photo-1631452180519-c014fe946bc7?w=400',
             isAvailable: true,
             isVegetarian: true,
             isVegan: false,
@@ -115,12 +130,13 @@ export async function seedSampleUsers() {
           },
           {
             id: 'menu_3',
-            restaurantId: restaurantId,
+            restaurantId,
             name: 'Biryani',
             description: 'Fragrant basmati rice with spices and meat',
             price: 18.99,
             category: 'Rice',
-            image: 'https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8?w=400',
+            image:
+              'https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8?w=400',
             isAvailable: true,
             isVegetarian: false,
             isVegan: false,
@@ -130,12 +146,13 @@ export async function seedSampleUsers() {
           },
           {
             id: 'menu_4',
-            restaurantId: restaurantId,
+            restaurantId,
             name: 'Samosa',
             description: 'Crispy pastry filled with spiced potatoes',
             price: 6.99,
             category: 'Appetizers',
-            image: 'https://images.unsplash.com/photo-1601050690597-df0568f70950?w=400',
+            image:
+              'https://images.unsplash.com/photo-1601050690597-df0568f70950?w=400',
             isAvailable: true,
             isVegetarian: true,
             isVegan: true,
@@ -145,12 +162,13 @@ export async function seedSampleUsers() {
           },
           {
             id: 'menu_5',
-            restaurantId: restaurantId,
+            restaurantId,
             name: 'Naan Bread',
             description: 'Traditional Indian flatbread',
             price: 3.99,
             category: 'Breads',
-            image: 'https://images.unsplash.com/photo-1565557623262-b51c2513a641?w=400',
+            image:
+              'https://images.unsplash.com/photo-1565557623262-b51c2513a641?w=400',
             isAvailable: true,
             isVegetarian: true,
             isVegan: false,
@@ -160,12 +178,13 @@ export async function seedSampleUsers() {
           },
           {
             id: 'menu_6',
-            restaurantId: restaurantId,
+            restaurantId,
             name: 'Mango Lassi',
             description: 'Sweet yogurt drink with mango',
             price: 4.99,
             category: 'Beverages',
-            image: 'https://images.unsplash.com/photo-1527661591475-527312dd65f5?w=400',
+            image:
+              'https://images.unsplash.com/photo-1527661591475-527312dd65f5?w=400',
             isAvailable: true,
             isVegetarian: true,
             isVegan: false,
@@ -176,41 +195,45 @@ export async function seedSampleUsers() {
         ];
 
         for (const item of menuItems) {
-          await db.menuItems.create(item);
+          await db.menuItems.create(item as Record<string, unknown>);
         }
-        console.log('Sample menu items created');
+        console.log('✅ Sample menu items created');
 
-        const deal = {
+        // ── Seed Deal ─────────────────────────────────────────────────────────
+        await db.deals.create({
           id: 'deal_sample_1',
-          restaurantId: restaurantId,
+          restaurantId,
           restaurantName: 'Spice Garden',
-          restaurantImage: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=400',
+          restaurantImage:
+            'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=400',
           title: '20% Off on All Main Courses',
-          description: 'Enjoy 20% discount on all main course items. Valid for dine-in and takeaway.',
+          description:
+            'Enjoy 20% discount on all main course items. Valid for dine-in and takeaway.',
           discountPercent: 20,
-          offerType: 'both' as const,
+          offerType: 'both',
           maxCoupons: 100,
           claimedCoupons: 25,
           minOrder: 30,
-          validTill: '2026-03-31',
+          validTill: '2026-12-31',
           daysAvailable: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
           startTime: '11:00',
           endTime: '22:00',
           isActive: true,
-          termsConditions: 'Cannot be combined with other offers. Minimum order $30.',
-        };
-
-        await db.deals.create(deal);
-        console.log('Sample deal created');
+          termsConditions:
+            'Cannot be combined with other offers. Minimum order $30.',
+        });
+        console.log('✅ Sample deal created');
       }
     } else {
-      console.log('Sample restaurant owner already exists: lokeshwarrior12@gmail.com');
+      console.log(
+        'ℹ️  Sample restaurant owner already exists: lokeshwarrior12@gmail.com',
+      );
     }
 
-    console.log('Database seed completed successfully!');
+    console.log('🎉 Database seed completed successfully!');
     return { success: true, message: 'Sample users seeded successfully' };
   } catch (error) {
-    console.error('Seed error:', error);
+    console.error('❌ Seed error:', error);
     throw error;
   }
 }
