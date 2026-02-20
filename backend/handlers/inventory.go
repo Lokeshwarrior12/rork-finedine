@@ -1,38 +1,29 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
-	"time"
 
-	"finedine/backend/internal/cache"
 	"finedine/backend/internal/database"
 	"finedine/backend/internal/realtime"
+
 	"github.com/gin-gonic/gin"
 )
 
-// Get inventory for restaurant
+// GetInventory - owner fetches all inventory items for a restaurant
 func GetInventory(c *gin.Context) {
 	restaurantID := c.Param("id")
 	userID := c.GetString("userId")
 
-	// Verify ownership
-	_, _, err := database.Query("restaurants").
-		Select("id").
-		Eq("id", restaurantID).
-		Eq("owner_id", userID).
-		Single().
-		Execute()
-
-	if err != nil {
+	if err := verifyOwner(restaurantID, userID); err != nil {
 		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
 		return
 	}
 
-	// Get inventory items
 	result, _, err := database.Query("inventory").
 		Select("*").
 		Eq("restaurant_id", restaurantID).
-		Order("item_name", nil).
+		Order("name", nil).
 		Execute()
 
 	if err != nil {
@@ -43,52 +34,46 @@ func GetInventory(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": result})
 }
 
-// Add inventory item
+// AddInventoryItem - owner adds an inventory item
 func AddInventoryItem(c *gin.Context) {
 	restaurantID := c.Param("id")
 	userID := c.GetString("userId")
 
-	var input struct {
-		ItemName      string  `json:"item_name" binding:"required"`
-		Quantity      float64 `json:"quantity" binding:"required"`
-		Unit          string  `json:"unit" binding:"required"`
-		MinStockLevel float64 `json:"min_stock_level"`
-		ExpiryDate    string  `json:"expiry_date"`
-	}
-
-	if err := c.BindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
-		return
-	}
-
-	// Verify ownership
-	_, _, err := database.Query("restaurants").
-		Select("id").
-		Eq("id", restaurantID).
-		Eq("owner_id", userID).
-		Single().
-		Execute()
-
-	if err != nil {
+	if err := verifyOwner(restaurantID, userID); err != nil {
 		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
 		return
 	}
 
-	// Check if stock is low
-	isLowStock := input.Quantity <= input.MinStockLevel
-
-	inventoryData := map[string]interface{}{
-		"restaurant_id":   restaurantID,
-		"item_name":       input.ItemName,
-		"quantity":        input.Quantity,
-		"unit":            input.Unit,
-		"min_stock_level": input.MinStockLevel,
-		"expiry_date":     input.ExpiryDate,
-		"is_low_stock":    isLowStock,
+	var input struct {
+		Name        string  `json:"name" binding:"required"`
+		Category    string  `json:"category"`
+		Quantity    float64 `json:"quantity" binding:"required,min=0"`
+		Unit        string  `json:"unit" binding:"required"`
+		MinStock    float64 `json:"min_stock"`
+		CostPerUnit float64 `json:"cost_per_unit"`
+		Supplier    string  `json:"supplier"`
+		ExpiryDate  string  `json:"expiry_date"`
 	}
 
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input: " + err.Error()})
+		return
+	}
+
+	isLowStock := input.MinStock > 0 && input.Quantity <= input.MinStock
+
 	result, _, err := database.Query("inventory").
-		Insert(inventoryData, false, "", "", "").
+		Insert(map[string]interface{}{
+			"restaurant_id": restaurantID,
+			"name":          input.Name,
+			"category":      input.Category,
+			"quantity":      input.Quantity,
+			"unit":          input.Unit,
+			"min_stock":     input.MinStock,
+			"cost_per_unit": input.CostPerUnit,
+			"supplier":      input.Supplier,
+			"expiry_date":   input.ExpiryDate,
+		}, false, "", "*", "").
 		Execute()
 
 	if err != nil {
@@ -96,43 +81,41 @@ func AddInventoryItem(c *gin.Context) {
 		return
 	}
 
-	// Send low stock notification if needed
 	if isLowStock {
-		sendLowStockNotification(userID, input.ItemName, input.Quantity)
+		sendLowStockAlert(userID, input.Name, input.Quantity)
 	}
 
-	c.JSON(http.StatusCreated, gin.H{
-		"data":    result,
-		"message": "Inventory item added successfully",
-	})
+	c.JSON(http.StatusCreated, gin.H{"data": result, "message": "Inventory item added successfully"})
 }
 
-// Update inventory item
+// UpdateInventoryItem - owner updates an inventory item (ownership verified via join)
 func UpdateInventoryItem(c *gin.Context) {
 	itemID := c.Param("id")
 	userID := c.GetString("userId")
 
 	var updates map[string]interface{}
-	if err := c.BindJSON(&updates); err != nil {
+	if err := c.ShouldBindJSON(&updates); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
 		return
 	}
+	delete(updates, "id")
+	delete(updates, "restaurant_id")
 
-	// Get the item to verify ownership
-	item, _, err := database.Query("inventory").
-		Select("*, restaurant:restaurants(owner_id)").
+	// Verify item belongs to a restaurant this user owns
+	_, _, err := database.Query("inventory").
+		Select("restaurant_id, restaurants!inner(owner_id)").
 		Eq("id", itemID).
+		Eq("restaurants.owner_id", userID).
 		Single().
 		Execute()
 
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Item not found"})
+		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied or item not found"})
 		return
 	}
 
-	// Update the item
 	result, _, err := database.Query("inventory").
-		Update(updates, "", "").
+		Update(updates, "", "*").
 		Eq("id", itemID).
 		Execute()
 
@@ -141,21 +124,14 @@ func UpdateInventoryItem(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"data":    result,
-		"message": "Inventory item updated successfully",
-	})
+	c.JSON(http.StatusOK, gin.H{"data": result, "message": "Inventory item updated successfully"})
 }
 
-// Delete inventory item
+// DeleteInventoryItem - owner deletes an inventory item
 func DeleteInventoryItem(c *gin.Context) {
 	itemID := c.Param("id")
 
-	_, _, err := database.Query("inventory").
-		Delete("", "").
-		Eq("id", itemID).
-		Execute()
-
+	_, _, err := database.Query("inventory").Delete("", "").Eq("id", itemID).Execute()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete inventory item"})
 		return
@@ -164,22 +140,20 @@ func DeleteInventoryItem(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Inventory item deleted successfully"})
 }
 
-// Helper function to send low stock notification
-func sendLowStockNotification(userID, itemName string, quantity float64) {
+// sendLowStockAlert - notify owner via DB notification + WebSocket
+func sendLowStockAlert(userID, itemName string, quantity float64) {
 	notification := map[string]interface{}{
 		"user_id": userID,
 		"title":   "Low Stock Alert",
-		"body":    fmt.Sprintf("%s is running low (%.2f units remaining)", itemName, quantity),
-		"type":    "low_stock",
-		"data": map[string]interface{}{
-			"item_name": itemName,
-			"quantity":  quantity,
-		},
+		"message": fmt.Sprintf("%s is running low (%.2f units remaining)", itemName, quantity),
+		"type":    "general",
+		"read":    false,
 	}
 
-	database.Query("notifications").Insert(notification, false, "", "", "").Execute()
+	database.Query("notifications").
+		Insert(notification, false, "", "", "").
+		Execute()
 
-	// Send real-time notification
 	realtime.WSHub.SendToUser(userID, map[string]interface{}{
 		"type":    "low_stock_alert",
 		"payload": notification,
