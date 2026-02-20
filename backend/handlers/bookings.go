@@ -6,10 +6,11 @@ import (
 
 	"finedine/backend/internal/database"
 	"finedine/backend/internal/realtime"
+
 	"github.com/gin-gonic/gin"
 )
 
-// Create booking
+// CreateBooking - authenticated user creates a table booking
 func CreateBooking(c *gin.Context) {
 	userID := c.GetString("userId")
 
@@ -17,15 +18,15 @@ func CreateBooking(c *gin.Context) {
 		RestaurantID    string `json:"restaurant_id" binding:"required"`
 		BookingDate     string `json:"booking_date" binding:"required"`
 		BookingTime     string `json:"booking_time" binding:"required"`
-		PartySize       int    `json:"party_size" binding:"required"`
+		PartySize       int    `json:"party_size" binding:"required,min=1"`
 		CustomerName    string `json:"customer_name" binding:"required"`
 		CustomerPhone   string `json:"customer_phone" binding:"required"`
 		CustomerEmail   string `json:"customer_email"`
 		SpecialRequests string `json:"special_requests"`
 	}
 
-	if err := c.BindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input: " + err.Error()})
 		return
 	}
 
@@ -51,21 +52,21 @@ func CreateBooking(c *gin.Context) {
 		return
 	}
 
-	// Parse result
+	// Parse result and send real-time events
 	var bookings []map[string]interface{}
-	json.Unmarshal(result, &bookings)
-	if len(bookings) > 0 {
+	if err := json.Unmarshal(result, &bookings); err == nil && len(bookings) > 0 {
 		booking := bookings[0]
-		bookingID := booking["id"].(string)
 
-		// Send real-time notification to restaurant owner
+		// Notify restaurant owner
 		realtime.WSHub.SendToUser(input.RestaurantID, map[string]interface{}{
 			"type":    "new_booking",
 			"payload": booking,
 		})
 
 		// Send confirmation to customer
-		realtime.SendBookingConfirmation(bookingID, userID)
+		if bookingID, ok := booking["id"].(string); ok {
+			realtime.SendBookingConfirmation(bookingID, userID)
+		}
 	}
 
 	c.JSON(http.StatusCreated, gin.H{
@@ -74,7 +75,7 @@ func CreateBooking(c *gin.Context) {
 	})
 }
 
-// Get user bookings
+// GetUserBookings - list all bookings for the authenticated user
 func GetUserBookings(c *gin.Context) {
 	userID := c.GetString("userId")
 
@@ -92,7 +93,7 @@ func GetUserBookings(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": result})
 }
 
-// Get booking by ID
+// GetBookingByID - get a single booking (owned by the requesting user)
 func GetBookingByID(c *gin.Context) {
 	bookingID := c.Param("id")
 	userID := c.GetString("userId")
@@ -112,15 +113,13 @@ func GetBookingByID(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": result})
 }
 
-// Cancel booking
+// CancelBooking - customer cancels their own booking
 func CancelBooking(c *gin.Context) {
 	bookingID := c.Param("id")
 	userID := c.GetString("userId")
 
 	result, _, err := database.Query("bookings").
-		Update(map[string]interface{}{
-			"status": "cancelled",
-		}, "", "").
+		Update(map[string]interface{}{"status": "cancelled"}, "", "").
 		Eq("id", bookingID).
 		Eq("customer_id", userID).
 		Execute()
@@ -136,11 +135,12 @@ func CancelBooking(c *gin.Context) {
 	})
 }
 
-// Owner: Get restaurant bookings
+// GetRestaurantBookings - owner views bookings for their restaurant
 func GetRestaurantBookings(c *gin.Context) {
 	restaurantID := c.Param("id")
 	userID := c.GetString("userId")
 	date := c.Query("date")
+	status := c.Query("status")
 
 	// Verify ownership
 	_, _, err := database.Query("restaurants").
@@ -162,9 +162,12 @@ func GetRestaurantBookings(c *gin.Context) {
 	if date != "" {
 		query = query.Eq("booking_date", date)
 	}
+	if status != "" {
+		query = query.Eq("status", status)
+	}
 
 	result, _, err := query.
-		Order("booking_time", nil).
+		Order("booking_date", &database.OrderOpts{Ascending: false}).
 		Execute()
 
 	if err != nil {
@@ -175,23 +178,21 @@ func GetRestaurantBookings(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": result})
 }
 
-// Owner: Update booking status
+// UpdateBookingStatus - owner updates a booking status
 func UpdateBookingStatus(c *gin.Context) {
 	bookingID := c.Param("id")
 
 	var input struct {
-		Status string `json:"status" binding:"required"`
+		Status string `json:"status" binding:"required,oneof=pending confirmed cancelled completed no_show"`
 	}
 
-	if err := c.BindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid status value"})
 		return
 	}
 
 	result, _, err := database.Query("bookings").
-		Update(map[string]interface{}{
-			"status": input.Status,
-		}, "", "*, customer:users(id)").
+		Update(map[string]interface{}{"status": input.Status}, "", "*, customer:users(id)").
 		Eq("id", bookingID).
 		Execute()
 
@@ -200,20 +201,20 @@ func UpdateBookingStatus(c *gin.Context) {
 		return
 	}
 
-	// Send real-time update to customer
+	// Push real-time update to customer
 	var bookings []map[string]interface{}
-	json.Unmarshal(result, &bookings)
-	if len(bookings) > 0 {
+	if err := json.Unmarshal(result, &bookings); err == nil && len(bookings) > 0 {
 		booking := bookings[0]
 		if customer, ok := booking["customer"].(map[string]interface{}); ok {
-			customerID := customer["id"].(string)
-			realtime.WSHub.SendToUser(customerID, map[string]interface{}{
-				"type": "booking_update",
-				"payload": map[string]interface{}{
-					"booking_id": bookingID,
-					"status":     input.Status,
-				},
-			})
+			if customerID, ok := customer["id"].(string); ok {
+				realtime.WSHub.SendToUser(customerID, map[string]interface{}{
+					"type": "booking_update",
+					"payload": map[string]interface{}{
+						"booking_id": bookingID,
+						"status":     input.Status,
+					},
+				})
+			}
 		}
 	}
 
