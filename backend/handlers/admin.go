@@ -2,23 +2,33 @@ package handlers
 
 import (
 	"net/http"
+	"strconv"
 
 	"finedine/backend/internal/database"
+
 	"github.com/gin-gonic/gin"
 )
 
-// Get all users (admin only)
+// GetAllUsers - admin only
 func GetAllUsers(c *gin.Context) {
-	page := c.DefaultQuery("page", "1")
-	limit := c.DefaultQuery("limit", "50")
+	pageStr := c.DefaultQuery("page", "1")
+	limitStr := c.DefaultQuery("limit", "50")
 
-	// Convert to integers and calculate offset
-	// Simplified - add proper pagination
+	page, err := strconv.Atoi(pageStr)
+	if err != nil || page < 1 {
+		page = 1
+	}
+	limit, err := strconv.Atoi(limitStr)
+	if err != nil || limit < 1 || limit > 100 {
+		limit = 50
+	}
+	offset := (page - 1) * limit
 
 	result, _, err := database.Query("users").
 		Select("id, email, full_name, role, created_at").
 		Order("created_at", &database.OrderOpts{Ascending: false}).
-		Limit(50).
+		Limit(limit).
+		Offset(offset).
 		Execute()
 
 	if err != nil {
@@ -26,10 +36,16 @@ func GetAllUsers(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": result})
+	c.JSON(http.StatusOK, gin.H{
+		"data": result,
+		"pagination": gin.H{
+			"page":  page,
+			"limit": limit,
+		},
+	})
 }
 
-// Get pending restaurants (awaiting verification)
+// GetPendingRestaurants - restaurants awaiting verification
 func GetPendingRestaurants(c *gin.Context) {
 	result, _, err := database.Query("restaurants").
 		Select("*, owner:users(id, full_name, email)").
@@ -45,16 +61,16 @@ func GetPendingRestaurants(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": result})
 }
 
-// Verify restaurant
+// VerifyRestaurant - approve or reject a restaurant
 func VerifyRestaurant(c *gin.Context) {
 	restaurantID := c.Param("id")
 
 	var input struct {
-		Verified bool   `json:"verified" binding:"required"`
+		Verified bool   `json:"verified"`
 		Notes    string `json:"notes"`
 	}
 
-	if err := c.BindJSON(&input); err != nil {
+	if err := c.ShouldBindJSON(&input); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
 		return
 	}
@@ -70,9 +86,6 @@ func VerifyRestaurant(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to verify restaurant"})
 		return
 	}
-
-	// Send notification to restaurant owner
-	// Parse result and send email/push notification
 
 	c.JSON(http.StatusOK, gin.H{
 		"data":    result,
