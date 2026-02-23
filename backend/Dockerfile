@@ -11,7 +11,7 @@ RUN go mod download && go mod verify
 COPY . .
 
 # Build from the correct entry point
-RUN go build -v -o /run-app ./backend/cmd/
+RUN go build -v -o /run-app ./cmd/
 
 FROM debian:bookworm-slim
 
