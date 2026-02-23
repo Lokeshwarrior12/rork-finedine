@@ -24,6 +24,12 @@ func InitSupabase() {
 	if err != nil {
 		log.Fatalf("❌ Failed to initialize Supabase: %v", err)
 	}
+	if t, ok := http.DefaultTransport.(*http.Transport); ok {
+    t.MaxIdleConns = 1000
+    t.MaxIdleConnsPerHost = 100
+    t.MaxConnsPerHost = 1000
+}
+
 
 	Client = client
 	log.Println("✅ Supabase connected successfully")
