@@ -185,10 +185,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!data && !dbError) {
         console.log('📝 Creating new user profile in database');
         
-        const newProfile = {
+        const newProfile: Record<string, any> = {
           id: authUser.id,
           email: authUser.email!,
-          name: authUser.user_metadata?.name || 'User',
           phone: authUser.user_metadata?.phone || '',
           address: '',
           role: (authUser.user_metadata?.role || 'customer') as UserRole,
