@@ -1,0 +1,108 @@
+﻿go : # finedine/backend
+/handlers
+At line:1 char:1
++ go build ./cmd/ 2>&1 
+| Out-File -Encoding 
+UTF8 err3.log; 
+Get-Content  ...
++ ~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo     
+         : NotSpecifi  
+  ed: (# finedine/ba   
+ ckend/handlers:Str    
+ing) [], RemoteExc    
+eption
+    + FullyQualifiedEr 
+   rorId : NativeComm  
+  andError
+ 
+handlers\new_handlers.g
+o:19:6: GetInventory 
+redeclared in this 
+block
+	handlers\inventory.go:
+14:6: other 
+declaration of 
+GetInventory
+handlers\new_handlers.g
+o:78:6: 
+AddInventoryItem 
+redeclared in this 
+block
+	handlers\inventory.go:
+38:6: other 
+declaration of 
+AddInventoryItem
+handlers\new_handlers.g
+o:111:6: 
+UpdateInventoryItem 
+redeclared in this 
+block
+	handlers\inventory.go:
+92:6: other 
+declaration of 
+UpdateInventoryItem
+handlers\new_handlers.g
+o:145:6: 
+DeleteInventoryItem 
+redeclared in this 
+block
+	handlers\inventory.go:
+131:6: other 
+declaration of 
+DeleteInventoryItem
+handlers\new_handlers.g
+o:164:6: 
+GetRestaurantEmployees 
+redeclared in this 
+block
+	handlers\handlers.go:4
+6:6: other declaration 
+of 
+GetRestaurantEmployees
+handlers\new_handlers.g
+o:211:6: 
+CreateEmployee 
+redeclared in this 
+block
+	handlers\handlers.go:7
+8:6: other declaration 
+of CreateEmployee
+handlers\new_handlers.g
+o:242:6: 
+UpdateEmployee 
+redeclared in this 
+block
+	handlers\handlers.go:1
+32:6: other 
+declaration of 
+UpdateEmployee
+handlers\new_handlers.g
+o:272:6: 
+DeleteEmployee 
+redeclared in this 
+block
+	handlers\handlers.go:1
+61:6: other 
+declaration of 
+DeleteEmployee
+handlers\new_handlers.g
+o:291:6: 
+GetRestaurantShifts 
+redeclared in this 
+block
+	handlers\handlers.go:1
+82:6: other 
+declaration of 
+GetRestaurantShifts
+handlers\new_handlers.g
+o:339:6: CreateShift 
+redeclared in this 
+block
+	handlers\handlers.go:2
+14:6: other 
+declaration of 
+CreateShift
+handlers\new_handlers.g
+o:339:6: too many 
+errors

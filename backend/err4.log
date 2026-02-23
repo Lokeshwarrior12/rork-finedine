@@ -1,0 +1,50 @@
+﻿go : # finedine/backend
+/handlers
+At line:1 char:1
++ go build ./cmd/ 2>&1 
+| Out-File -Encoding 
+UTF8 err4.log; 
+Get-Content  ...
++ ~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo     
+         : NotSpecifi  
+  ed: (# finedine/ba   
+ ckend/handlers:Str    
+ing) [], RemoteExc    
+eption
+    + FullyQualifiedEr 
+   rorId : NativeComm  
+  andError
+ 
+handlers\admin.go:27:29
+: undefined: 
+database.Query
+handlers\admin.go:50:29
+: undefined: 
+database.Query
+handlers\admin.go:78:29
+: undefined: 
+database.Query
+handlers\analytics.go:2
+0:24: undefined: 
+database.Query
+handlers\analytics.go:4
+6:30: undefined: 
+database.Query
+handlers\analytics.go:5
+3:32: undefined: 
+database.Query
+handlers\bookings.go:46
+:29: undefined: 
+database.Query
+handlers\bookings.go:82
+:29: undefined: 
+database.Query
+handlers\bookings.go:10
+1:29: undefined: 
+database.Query
+handlers\bookings.go:12
+1:29: undefined: 
+database.Query
+handlers\bookings.go:12
+1:29: too many errors

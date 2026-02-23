@@ -1,0 +1,9 @@
+﻿package postgrest // import "github.com/supabase-community/postgrest-go"
+
+type OrderOpts struct {
+	Ascending    bool
+	NullsFirst   bool
+	ForeignTable string
+}
+    OrderOpts describes the options to be provided to Order.
+

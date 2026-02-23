@@ -1,0 +1,12 @@
+﻿
+  
+> func (c *Client) 
+From(table string) 
+*postgrest.QueryBuilder
+>     Wrap postgrest 
+From method From 
+returns a QueryBuilder 
+for the specified
+      table.
+
+

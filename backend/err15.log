@@ -1,0 +1,61 @@
+﻿go : finedine/backend/h
+andlers
+At line:1 char:110
++ ... st -w handlers\re
+staurants.go; go build 
+-v -o nul ./cmd/ 2>&1 
+| Out-F ...
++                      
+              ~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo     
+         : NotSpecifi  
+  ed: (finedine/back   
+ end/handlers:Strin    
+g) [], RemoteExcep    
+tion
+    + FullyQualifiedEr 
+   rorId : NativeComm  
+  andError
+ 
+finedine/backend/cmd
+# finedine/backend/cmd
+cmd\main.go:34:12: 
+cache.InitRedis() (no 
+value) used as value
+cmd\main.go:40:12: data
+base.InitSupabase() 
+(no value) used as 
+value
+cmd\main.go:89:35: 
+undefined: 
+handlers.Register
+cmd\main.go:90:32: 
+undefined: 
+handlers.Login
+cmd\main.go:91:33: 
+undefined: 
+handlers.VerifyEmail
+cmd\main.go:92:42: 
+undefined: 
+handlers.ForgotPassword
+cmd\main.go:93:41: 
+undefined: 
+handlers.ResetPassword
+cmd\main.go:94:34: 
+undefined: 
+handlers.RefreshToken
+cmd\main.go:114:16: 
+not enough arguments 
+in call to middleware.A
+uthMiddleware
+	have ()
+	want (string)
+cmd\main.go:146:12: 
+not enough arguments 
+in call to middleware.A
+uthMiddleware
+	have ()
+	want (string)
+cmd\main.go:146:12: 
+too many errors

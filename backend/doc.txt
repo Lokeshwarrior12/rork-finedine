@@ -1,0 +1,6 @@
+﻿package postgrest // import "github.com/supabase-community/postgrest-go"
+
+func (c *Client) Rpc(name string, count string, rpcBody interface{}) string
+    Rpc executes a Postgres function (a.k.a., Remote Prodedure Call), given the
+    function name and, optionally, a body, returning the result as a string.
+

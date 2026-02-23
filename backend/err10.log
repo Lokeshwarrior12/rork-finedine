@@ -1,0 +1,55 @@
+﻿go : # finedine/backend
+/handlers
+At line:1 char:68
++ ... o, 
+fix_handlers2.go 
+-ErrorAction Ignore; 
+go build ./cmd/ 2>&1 | 
+Out-F ...
++                      
+                       
+ ~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo     
+         : NotSpecifi  
+  ed: (# finedine/ba   
+ ckend/handlers:Str    
+ing) [], RemoteExc    
+eption
+    + FullyQualifiedEr 
+   rorId : NativeComm  
+  andError
+ 
+handlers\inventory.go:1
+64:1: invalid NUL 
+character
+handlers\inventory.go:1
+64:2: syntax error: 
+non-declaration 
+statement outside 
+function body
+handlers\inventory.go:1
+65:1: invalid NUL 
+character
+handlers\inventory.go:1
+66:1: invalid NUL 
+character
+handlers\inventory.go:1
+67:1: invalid NUL 
+character
+handlers\inventory.go:1
+68:1: invalid NUL 
+character
+handlers\inventory.go:1
+69:1: invalid NUL 
+character
+handlers\inventory.go:1
+70:1: invalid NUL 
+character
+handlers\inventory.go:1
+71:1: invalid NUL 
+character
+handlers\inventory.go:1
+72:1: invalid NUL 
+character
+handlers\inventory.go:1
+72:1: too many errors

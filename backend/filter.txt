@@ -1,0 +1,40 @@
+﻿package postgrest // import "github.com/supabase-community/postgrest-go"
+
+type FilterBuilder struct {
+	// Has unexported fields.
+}
+    FilterBuilder describes a builder for a filtered result set.
+
+func (f *FilterBuilder) And(filters, foreignTable string) *FilterBuilder
+func (f *FilterBuilder) ContainedBy(column string, value []string) *FilterBuilder
+func (f *FilterBuilder) ContainedByObject(column string, value interface{}) *FilterBuilder
+func (f *FilterBuilder) Contains(column string, value []string) *FilterBuilder
+func (f *FilterBuilder) ContainsObject(column string, value interface{}) *FilterBuilder
+func (f *FilterBuilder) Eq(column, value string) *FilterBuilder
+func (f *FilterBuilder) Execute() ([]byte, int64, error)
+func (f *FilterBuilder) ExecuteString() (string, int64, error)
+func (f *FilterBuilder) ExecuteTo(to interface{}) (countType, error)
+func (f *FilterBuilder) Filter(column, operator, value string) *FilterBuilder
+func (f *FilterBuilder) Gt(column, value string) *FilterBuilder
+func (f *FilterBuilder) Gte(column, value string) *FilterBuilder
+func (f *FilterBuilder) Ilike(column, value string) *FilterBuilder
+func (f *FilterBuilder) In(column string, values []string) *FilterBuilder
+func (f *FilterBuilder) Is(column, value string) *FilterBuilder
+func (f *FilterBuilder) Like(column, value string) *FilterBuilder
+func (f *FilterBuilder) Limit(count int, foreignTable string) *FilterBuilder
+func (f *FilterBuilder) Lt(column, value string) *FilterBuilder
+func (f *FilterBuilder) Lte(column, value string) *FilterBuilder
+func (f *FilterBuilder) Match(userQuery map[string]string) *FilterBuilder
+func (f *FilterBuilder) Neq(column, value string) *FilterBuilder
+func (f *FilterBuilder) Not(column, operator, value string) *FilterBuilder
+func (f *FilterBuilder) Or(filters, foreignTable string) *FilterBuilder
+func (f *FilterBuilder) Order(column string, opts *OrderOpts) *FilterBuilder
+func (f *FilterBuilder) Overlaps(column string, value []string) *FilterBuilder
+func (f *FilterBuilder) Range(from, to int, foreignTable string) *FilterBuilder
+func (f *FilterBuilder) RangeAdjacent(column, value string) *FilterBuilder
+func (f *FilterBuilder) RangeGt(column, value string) *FilterBuilder
+func (f *FilterBuilder) RangeGte(column, value string) *FilterBuilder
+func (f *FilterBuilder) RangeLt(column, value string) *FilterBuilder
+func (f *FilterBuilder) RangeLte(column, value string) *FilterBuilder
+func (f *FilterBuilder) Single() *FilterBuilder
+func (f *FilterBuilder) TextSearch(column, userQuery, config, tsType string) *FilterBuilder

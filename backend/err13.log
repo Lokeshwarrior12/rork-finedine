@@ -1,0 +1,42 @@
+﻿go : # finedine/backend
+/handlers
+At line:1 char:385
++ ...  $_.FullName 
+-Value $c -Encoding 
+UTF8 }; go build 
+./cmd/ 2>&1 | Out-F ...
++                      
+                       
+ ~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo     
+         : NotSpecifi  
+  ed: (# finedine/ba   
+ ckend/handlers:Str    
+ing) [], RemoteExc    
+eption
+    + FullyQualifiedEr 
+   rorId : NativeComm  
+  andError
+ 
+handlers\restaurants.go
+:90:5: database.Client.
+Rpc("get_nearby_restaur
+ants", "", map[string]i
+nterface{}{ΓÇª}).Execut
+e undefined (type 
+string has no field or 
+method Execute)
+handlers\restaurants.go
+:146:17: query.ILike 
+undefined (type *postgr
+est.FilterBuilder has 
+no field or method 
+ILike, but does have 
+method Ilike)
+handlers\restaurants.go
+:152:40: cannot use 
+"[\"" + category + 
+"\"]" (value of type 
+string) as []string 
+value in argument to 
+query.Contains

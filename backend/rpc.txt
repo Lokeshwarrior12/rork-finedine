@@ -1,0 +1,5 @@
+﻿package supabase // import "github.com/supabase-community/supabase-go"
+
+func (c *Client) Rpc(name, count string, rpcBody interface{}) string
+    Wrap postgrest Rpc method Rpc returns a string for the specified function.
+

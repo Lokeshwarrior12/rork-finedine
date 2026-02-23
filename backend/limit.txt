@@ -1,0 +1,5 @@
+﻿package postgrest // import "github.com/supabase-community/postgrest-go"
+
+func (f *FilterBuilder) Limit(count int, foreignTable string) *FilterBuilder
+    Limit the result to the specified count.
+

@@ -1,0 +1,5 @@
+﻿package postgrest // import "github.com/supabase-community/postgrest-go"
+
+func (q *QueryBuilder) Select(columns, count string, head bool) *FilterBuilder
+    Select performs vertical filtering.
+

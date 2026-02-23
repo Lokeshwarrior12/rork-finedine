@@ -1,0 +1,115 @@
+﻿go : # finedine/backend
+/handlers
+At line:1 char:1
++ go build ./cmd/ 2>&1 
+| Out-File -Encoding 
+UTF8 err5.log; 
+Get-Content  ...
++ ~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo     
+         : NotSpecifi  
+  ed: (# finedine/ba   
+ ckend/handlers:Str    
+ing) [], RemoteExc    
+eption
+    + FullyQualifiedEr 
+   rorId : NativeComm  
+  andError
+ 
+handlers\admin.go:28:10
+: not enough arguments 
+in call to database.Que
+ry("users").Select
+	have (string)
+	want (string, string, 
+bool)
+handlers\admin.go:29:23
+: cannot use &database.
+OrderOpts{ΓÇª} (value 
+of type 
+*database.OrderOpts) 
+as 
+*postgrest.OrderOpts 
+value in argument to da
+tabase.Query("users").S
+elect("id, email, 
+full_name, role, 
+created_at").Order
+handlers\admin.go:30:9:
+ not enough arguments 
+in call to database.Que
+ry("users").Select("id,
+ email, full_name, 
+role, created_at").Orde
+r("created_at", &databa
+se.OrderOpts{ΓÇª}).Limi
+t
+	have (int)
+	want (int, string)
+handlers\admin.go:31:3:
+ database.Query("users"
+).Select("id, email, 
+full_name, role, create
+d_at").Order("created_a
+t", &database.OrderOpts
+{ΓÇª}).Limit(limit).Off
+set undefined (type *po
+stgrest.FilterBuilder 
+has no field or method 
+Offset)
+handlers\admin.go:51:10
+: not enough arguments 
+in call to database.Que
+ry("restaurants").Selec
+t
+	have (string)
+	want (string, string, 
+bool)
+handlers\admin.go:53:23
+: cannot use &database.
+OrderOpts{ΓÇª} (value 
+of type 
+*database.OrderOpts) 
+as 
+*postgrest.OrderOpts 
+value in argument to da
+tabase.Query("restauran
+ts").Select("*, 
+owner:users(id, 
+full_name, email)").Eq(
+"is_verified", 
+"false").Order
+handlers\analytics.go:2
+1:10: not enough 
+arguments in call to da
+tabase.Query("restauran
+ts").Select
+	have (string)
+	want (string, string, 
+bool)
+handlers\analytics.go:4
+7:10: not enough 
+arguments in call to da
+tabase.Query("orders").
+Select
+	have (string)
+	want (string, string, 
+bool)
+handlers\analytics.go:5
+4:10: not enough 
+arguments in call to da
+tabase.Query("bookings"
+).Select
+	have (string)
+	want (string, string, 
+bool)
+handlers\bookings.go:83
+:10: not enough 
+arguments in call to da
+tabase.Query("bookings"
+).Select
+	have (string)
+	want (string, string, 
+bool)
+handlers\bookings.go:83
+:10: too many errors

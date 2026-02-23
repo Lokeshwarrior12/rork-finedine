@@ -1,0 +1,53 @@
+﻿go : # finedine/backend
+/handlers
+At line:1 char:1
++ go build ./cmd/ 2>&1 
+| Out-File -Encoding 
+UTF8 err9.log; 
+Get-Content  ...
++ ~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo     
+         : NotSpecifi  
+  ed: (# finedine/ba   
+ ckend/handlers:Str    
+ing) [], RemoteExc    
+eption
+    + FullyQualifiedEr 
+   rorId : NativeComm  
+  andError
+ 
+handlers\deals.go:20:18
+: undefined: cache.Get
+handlers\deals.go:40:8:
+ undefined: cache.Set
+handlers\deals.go:101:8
+: undefined: 
+cache.Delete
+handlers\deals.go:134:8
+: undefined: 
+cache.Delete
+handlers\deals.go:156:8
+: undefined: 
+cache.Delete
+handlers\health.go:18:5
+: cache.RedisClient 
+(type) is not an 
+expression
+handlers\health.go:19:3
+1: 
+cache.RedisClient.Ping 
+undefined (type 
+cache.RedisClient has 
+no field or method 
+Ping)
+handlers\inventory.go:1
+8:12: undefined: 
+verifyOwner
+handlers\inventory.go:4
+2:12: undefined: 
+verifyOwner
+handlers\orders.go:70:8
+: undefined: 
+cache.Publish
+handlers\orders.go:70:8
+: too many errors

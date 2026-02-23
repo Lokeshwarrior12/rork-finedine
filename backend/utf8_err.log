@@ -1,0 +1,42 @@
+﻿go : # finedine/backend
+/internal/database
+At line:1 char:1
++ go build ./cmd/ 2>&1 
+| Out-File -Encoding 
+UTF8 utf8_err.log
++ ~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo     
+         : NotSpecifi  
+  ed: (# finedine/ba   
+ ckend/internal/dat    
+abase:String) [],     
+RemoteException
+    + FullyQualifiedEr 
+   rorId : NativeComm  
+  andError
+ 
+internal\database\supab
+ase.go:12:2: Client 
+redeclared in this 
+block
+	internal\database\db.g
+o:12:6: other 
+declaration of Client
+internal\database\supab
+ase.go:37:2: Client 
+(type) is not an 
+expression
+internal\database\supab
+ase.go:42:36: 
+undefined: 
+supabase.QueryBuilder
+internal\database\supab
+ase.go:43:16: 
+Client.From undefined 
+(type Client has no 
+field or method From)
+internal\database\types
+.go:3:8: "github.com/su
+pabase-community/supaba
+se-go" imported as 
+supabase and not used

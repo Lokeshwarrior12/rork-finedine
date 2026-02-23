@@ -1,0 +1,53 @@
+﻿go : # 
+finedine/backend/cmd
+At line:1 char:1
++ go build ./cmd/ 2>&1 
+| Out-File -Encoding 
+UTF8 err16.log; 
+Get-Content ...
++ ~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo     
+         : NotSpecifi  
+  ed: (# finedine/ba   
+ ckend/cmd:String)     
+[], RemoteExceptio    n
+    + FullyQualifiedEr 
+   rorId : NativeComm  
+  andError
+ 
+cmd\main.go:83:35: 
+undefined: 
+handlers.Register
+cmd\main.go:84:32: 
+undefined: 
+handlers.Login
+cmd\main.go:85:33: 
+undefined: 
+handlers.VerifyEmail
+cmd\main.go:86:42: 
+undefined: 
+handlers.ForgotPassword
+cmd\main.go:87:41: 
+undefined: 
+handlers.ResetPassword
+cmd\main.go:88:34: 
+undefined: 
+handlers.RefreshToken
+cmd\main.go:108:16: 
+not enough arguments 
+in call to middleware.A
+uthMiddleware
+	have ()
+	want (string)
+cmd\main.go:140:12: 
+not enough arguments 
+in call to middleware.A
+uthMiddleware
+	have ()
+	want (string)
+cmd\main.go:204:12: 
+not enough arguments 
+in call to middleware.A
+uthMiddleware
+	have ()
+	want (string)

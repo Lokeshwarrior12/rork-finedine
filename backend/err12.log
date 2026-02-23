@@ -1,0 +1,48 @@
+﻿go : # finedine/backend
+/handlers
+At line:1 char:1
++ go build ./cmd/ 2>&1 
+| Out-File -Encoding 
+UTF8 err12.log; 
+Get-Content ...
++ ~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo     
+         : NotSpecifi  
+  ed: (# finedine/ba   
+ ckend/handlers:Str    
+ing) [], RemoteExc    
+eption
+    + FullyQualifiedEr 
+   rorId : NativeComm  
+  andError
+ 
+handlers\deals.go:20:18
+: undefined: cache.Get
+handlers\deals.go:40:8:
+ undefined: cache.Set
+handlers\deals.go:101:8
+: undefined: 
+cache.Delete
+handlers\deals.go:134:8
+: undefined: 
+cache.Delete
+handlers\deals.go:156:8
+: undefined: 
+cache.Delete
+handlers\restaurants.go
+:20:18: undefined: 
+cache.Get
+handlers\restaurants.go
+:37:8: undefined: 
+cache.Set
+handlers\restaurants.go
+:47:18: undefined: 
+cache.Get
+handlers\restaurants.go
+:63:8: undefined: 
+cache.Set
+handlers\restaurants.go
+:81:18: undefined: 
+cache.Get
+handlers\restaurants.go
+:81:18: too many errors

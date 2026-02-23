@@ -1,0 +1,30 @@
+﻿go : # finedine/backend
+/handlers
+At line:1 char:166
++ ... 
+ndlers\restaurants.go 
+$c -Encoding UTF8; go 
+build ./cmd/ 2>&1 | 
+Out-F ...
++                      
+                       
+ ~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo     
+         : NotSpecifi  
+  ed: (# finedine/ba   
+ ckend/handlers:Str    
+ing) [], RemoteExc    
+eption
+    + FullyQualifiedEr 
+   rorId : NativeComm  
+  andError
+ 
+handlers\restaurants.go
+:5:2: json redeclared 
+in this block
+	handlers\restaurants.g
+o:4:2: other 
+declaration of json
+handlers\restaurants.go
+:5:2: "encoding/json" 
+imported and not used

@@ -1,0 +1,24 @@
+﻿go : # finedine/backend
+/internal/database
+At line:1 char:84
++ ... ase-go.Client > s
+upabase_client_doc.txt;
+ go build ./cmd/ 2>&1 
+| Out-F ...
++                      
+                       
+ ~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo     
+         : NotSpecifi  
+  ed: (# finedine/ba   
+ ckend/internal/dat    
+abase:String) [],     
+RemoteException
+    + FullyQualifiedEr 
+   rorId : NativeComm  
+  andError
+ 
+internal\database\supab
+ase.go:42:36: 
+undefined: 
+supabase.QueryBuilder
