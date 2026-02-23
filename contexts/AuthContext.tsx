@@ -152,33 +152,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       let data: any = null;
       let dbError: any = null;
 
-      try {
-        const result = await db
-          .users()
-          .select('*')
-          .eq('id', authUser.id)
-          .maybeSingle();
-        data = result.data;
-        dbError = result.error;
-      } catch (fetchErr: any) {
-        if (fetchErr?.name === 'AbortError' || fetchErr?.message?.includes('AbortError') || fetchErr?.message?.includes('signal is aborted')) {
-          console.warn('⚠️ Profile fetch aborted, retrying once...');
-          await new Promise(resolve => setTimeout(resolve, 500));
-          try {
-            const retryResult = await db
-              .users()
-              .select('*')
-              .eq('id', authUser.id)
-              .maybeSingle();
-            data = retryResult.data;
-            dbError = retryResult.error;
-          } catch (retryErr) {
-            console.warn('⚠️ Retry also failed, continuing without DB data');
+      const isAbortError = (err: any) =>
+        err?.name === 'AbortError' ||
+        err?.message?.includes('AbortError') ||
+        err?.message?.includes('signal is aborted') ||
+        err?.message?.includes('aborted');
+
+      const fetchWithRetry = async (attempt = 0): Promise<void> => {
+        try {
+          const result = await db
+            .users()
+            .select('*')
+            .eq('id', authUser.id)
+            .maybeSingle();
+          data = result.data;
+          dbError = result.error;
+        } catch (fetchErr: any) {
+          if (isAbortError(fetchErr) && attempt < 2) {
+            console.warn(`⚠️ Profile fetch aborted (attempt ${attempt + 1}), retrying...`);
+            await new Promise(resolve => setTimeout(resolve, 500 * (attempt + 1)));
+            return fetchWithRetry(attempt + 1);
+          } else if (isAbortError(fetchErr)) {
+            console.warn('⚠️ Profile fetch aborted after retries, continuing without DB data');
+          } else {
+            throw fetchErr;
           }
-        } else {
-          throw fetchErr;
         }
-      }
+      };
+
+      await fetchWithRetry();
 
       if (!data && !dbError) {
         console.log('📝 Creating new user profile in database');
@@ -191,7 +193,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           address: '',
           role: (authUser.user_metadata?.role || 'customer') as UserRole,
           loyalty_points: 0,
-          favorites: [],
           photo: authUser.user_metadata?.avatar_url || null,
         };
 
@@ -204,14 +205,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
           if (insertError) {
             const errStr = JSON.stringify(insertError);
-            if (!errStr.includes('AbortError') && !errStr.includes('signal is aborted')) {
+            if (!errStr.includes('AbortError') && !errStr.includes('signal is aborted') && !errStr.includes('aborted')) {
               console.error('❌ Failed to create user profile:', errStr);
             } else {
               console.warn('⚠️ Profile insert aborted - will retry on next auth event');
             }
+          } else {
+            console.log('✅ User profile created successfully');
           }
         } catch (insertErr: any) {
-          if (insertErr?.name === 'AbortError' || insertErr?.message?.includes('AbortError') || insertErr?.message?.includes('signal is aborted')) {
+          if (isAbortError(insertErr)) {
             console.warn('⚠️ Profile insert aborted - will retry on next auth event');
           } else {
             console.error('❌ Failed to create user profile:', insertErr);
@@ -252,7 +255,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       console.log('✅ Profile loaded:', profile.email, `(${profile.role})`);
     } catch (err: any) {
-      if (err?.name === 'AbortError' || err?.message?.includes('AbortError') || err?.message?.includes('signal is aborted')) {
+      const isAbort = err?.name === 'AbortError' ||
+        err?.message?.includes('AbortError') ||
+        err?.message?.includes('signal is aborted') ||
+        err?.message?.includes('aborted');
+      if (isAbort) {
         console.warn('⚠️ Profile fetch was aborted - will retry on next auth event');
       } else {
         console.error('[Auth] Profile fetch failed:', err);

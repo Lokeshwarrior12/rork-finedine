@@ -286,14 +286,16 @@ class APIClient {
 
       clearTimeout(timeoutId);
 
-      // Handle non-OK responses
       if (!response.ok) {
-        const errorData: APIError = await response
-          .json()
-          .catch(() => ({
-            error: 'Unknown error',
-            statusCode: response.status,
-          }));
+        let errorData: APIError = { error: 'Unknown error', statusCode: response.status };
+        try {
+          const text = await response.text();
+          if (text && text.trim().length > 0) {
+            errorData = JSON.parse(text);
+          }
+        } catch {
+          // empty or non-JSON response
+        }
 
         console.error(`❌ API Error [${response.status}]:`, endpoint, errorData);
 
@@ -302,26 +304,29 @@ class APIClient {
         );
       }
 
-      const data: APIResponse<T> = await response.json();
+      const text = await response.text();
+      if (!text || text.trim().length === 0) {
+        console.warn(`⚠️ Empty response from: ${endpoint}`);
+        return { data: [] as unknown as T };
+      }
+
+      const data: APIResponse<T> = JSON.parse(text);
       console.log(`✅ API Response: ${endpoint}`, data.cached ? '(cached)' : '');
 
       return data;
     } catch (error: any) {
       clearTimeout(timeoutId);
 
-      // Handle timeout
-      if (error.name === 'AbortError') {
-        console.error('⏱️ API Timeout:', endpoint);
+      if (error.name === 'AbortError' || error.message?.includes('aborted')) {
+        console.warn('⏱️ API Timeout/Abort:', endpoint);
         throw new Error('Request timeout. Please try again.');
       }
 
-      // Handle network errors
-      if (error.message === 'Network request failed' || error.message.includes('fetch')) {
-        console.error('🔌 Network Error:', endpoint);
+      if (error.message === 'Network request failed' || error.message?.includes('fetch')) {
+        console.warn('🔌 Network Error:', endpoint);
         throw new Error('Unable to connect. Please check your internet connection.');
       }
 
-      // Re-throw other errors
       console.error('❌ API Error:', endpoint, error);
       throw error;
     }

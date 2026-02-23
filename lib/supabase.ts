@@ -57,7 +57,6 @@ export interface Database {
           role: 'customer' | 'restaurant_owner' | 'admin';
           loyalty_points: number;
           restaurant_id: string | null;
-          favorites: string[];
           photo: string | null;
           card_details: any | null;
           created_at: string;
@@ -72,7 +71,6 @@ export interface Database {
           role?: 'customer' | 'restaurant_owner' | 'admin';
           loyalty_points?: number;
           restaurant_id?: string | null;
-          favorites?: string[];
           photo?: string | null;
           card_details?: any | null;
         };
@@ -84,7 +82,6 @@ export interface Database {
           role?: 'customer' | 'restaurant_owner' | 'admin';
           loyalty_points?: number;
           restaurant_id?: string | null;
-          favorites?: string[];
           photo?: string | null;
           card_details?: any | null;
         };

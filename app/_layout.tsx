@@ -181,7 +181,7 @@ function RootLayoutInner() {
       </Stack>
 
       {/* Development Health Check Button */}
-      {__DEV__ && <DevHealthCheckButton />}
+      {Platform.OS !== 'web' && __DEV__ && <DevHealthCheckButton />}
     </>
   );
 }
