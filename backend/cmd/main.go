@@ -32,7 +32,7 @@ func main() {
 	// ────────────────────────────────────────────────────────────────────────────
 
 	// Redis
-	//cache.InitRedis()
+	cache.InitRedis()
 
 	// Supabase
 	database.InitSupabase()
@@ -253,4 +253,5 @@ func main() {
 		log.Fatalf("❌ Server failed to start: %v", err)
 	}
 }
+
 
