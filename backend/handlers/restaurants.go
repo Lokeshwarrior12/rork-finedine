@@ -15,11 +15,12 @@ import (
 
 // GetRestaurants - public list of open verified restaurants with caching
 func GetRestaurants(c *gin.Context) {
-	// Try cache first (safe even if Redis is nil)
+	// Try cache first (SAFE - checks if cache.Client is not nil)
 	var cached []map[string]interface{}
 	cacheKey := cache.RestaurantsListKey("all")
 	
-	if cache.Client != nil {
+	// ✅ FIXED: Check if Client is not nil AND call IsAvailable()
+	if cache.Client != nil && cache.Client.IsAvailable() {
 		if err := cache.Client.Get(cacheKey, &cached); err == nil {
 			c.JSON(http.StatusOK, gin.H{"data": cached, "cached": true})
 			return
@@ -40,7 +41,8 @@ func GetRestaurants(c *gin.Context) {
 	}
 
 	// Cache result (silently skips if no Redis)
-	if cache.Client != nil {
+	// ✅ FIXED: Check if Client is not nil AND call IsAvailable()
+	if cache.Client != nil && cache.Client.IsAvailable() {
 		cache.Client.Set(cacheKey, result, 5*time.Minute)
 	}
 
@@ -54,7 +56,8 @@ func GetRestaurantByID(c *gin.Context) {
 
 	// Try cache first
 	var cached map[string]interface{}
-	if cache.Client != nil {
+	// ✅ FIXED: Check if Client is not nil AND call IsAvailable()
+	if cache.Client != nil && cache.Client.IsAvailable() {
 		if err := cache.Client.Get(cacheKey, &cached); err == nil {
 			c.JSON(http.StatusOK, gin.H{"data": cached, "cached": true})
 			return
@@ -74,7 +77,8 @@ func GetRestaurantByID(c *gin.Context) {
 	}
 
 	// Cache result
-	if cache.Client != nil {
+	// ✅ FIXED: Check if Client is not nil AND call IsAvailable()
+	if cache.Client != nil && cache.Client.IsAvailable() {
 		cache.Client.Set(cacheKey, result, 10*time.Minute)
 	}
 
@@ -96,7 +100,8 @@ func GetNearbyRestaurants(c *gin.Context) {
 
 	// Try cache first
 	var cached []map[string]interface{}
-	if cache.Client != nil {
+	// ✅ FIXED: Check if Client is not nil AND call IsAvailable()
+	if cache.Client != nil && cache.Client.IsAvailable() {
 		if err := cache.Client.Get(cacheKey, &cached); err == nil {
 			c.JSON(http.StatusOK, gin.H{"data": cached, "cached": true})
 			return
@@ -119,7 +124,8 @@ func GetNearbyRestaurants(c *gin.Context) {
 	}
 
 	// Cache for 2 minutes (location data expires quickly)
-	if cache.Client != nil {
+	// ✅ FIXED: Check if Client is not nil AND call IsAvailable()
+	if cache.Client != nil && cache.Client.IsAvailable() {
 		cache.Client.Set(cacheKey, result, 2*time.Minute)
 	}
 
@@ -133,7 +139,8 @@ func GetRestaurantMenu(c *gin.Context) {
 
 	// Try cache first
 	var cached []map[string]interface{}
-	if cache.Client != nil {
+	// ✅ FIXED: Check if Client is not nil AND call IsAvailable()
+	if cache.Client != nil && cache.Client.IsAvailable() {
 		if err := cache.Client.Get(cacheKey, &cached); err == nil {
 			c.JSON(http.StatusOK, gin.H{"data": cached, "cached": true})
 			return
@@ -154,7 +161,8 @@ func GetRestaurantMenu(c *gin.Context) {
 	}
 
 	// Cache result
-	if cache.Client != nil {
+	// ✅ FIXED: Check if Client is not nil AND call IsAvailable()
+	if cache.Client != nil && cache.Client.IsAvailable() {
 		cache.Client.Set(cacheKey, result, 10*time.Minute)
 	}
 
@@ -226,7 +234,8 @@ func CreateRestaurant(c *gin.Context) {
 	}
 
 	// Bust list cache
-	if cache.Client != nil {
+	// ✅ FIXED: Check if Client is not nil AND call IsAvailable()
+	if cache.Client != nil && cache.Client.IsAvailable() {
 		cache.Client.Delete(cache.RestaurantsListKey("all"))
 	}
 
@@ -278,7 +287,8 @@ func UpdateRestaurant(c *gin.Context) {
 	}
 
 	// Bust caches
-	if cache.Client != nil {
+	// ✅ FIXED: Check if Client is not nil AND call IsAvailable()
+	if cache.Client != nil && cache.Client.IsAvailable() {
 		cache.Client.Delete(cache.RestaurantKey(restaurantID))
 		cache.Client.Delete(cache.RestaurantsListKey("all"))
 	}
@@ -325,7 +335,8 @@ func AddMenuItem(c *gin.Context) {
 	}
 
 	// Bust menu cache
-	if cache.Client != nil {
+	// ✅ FIXED: Check if Client is not nil AND call IsAvailable()
+	if cache.Client != nil && cache.Client.IsAvailable() {
 		cache.Client.Delete(cache.MenuKey(restaurantID))
 	}
 
@@ -396,7 +407,8 @@ func DeleteMenuItem(c *gin.Context) {
 	}
 
 	// Bust menu cache
-	if cache.Client != nil && existing != nil {
+	// ✅ FIXED: Check if Client is not nil AND call IsAvailable()
+	if cache.Client != nil && cache.Client.IsAvailable() {
 		if item, ok := existing.(map[string]interface{}); ok {
 			if rid, ok := item["restaurant_id"].(string); ok {
 				cache.Client.Delete(cache.MenuKey(rid))
