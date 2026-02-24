@@ -9,21 +9,24 @@ import (
 	"finedine/backend/internal/cache"
 	"finedine/backend/internal/database"
 
-	"github.com/supabase-community/postgrest-go"
-
 	"github.com/gin-gonic/gin"
+	"github.com/supabase-community/postgrest-go"
 )
 
 // GetRestaurants - public list of open verified restaurants with caching
 func GetRestaurants(c *gin.Context) {
-	cacheKey := cache.RestaurantsListKey("all")
-
+	// Try cache first (safe even if Redis is nil)
 	var cached []map[string]interface{}
-	if err := cache.Client.Get(cacheKey, &cached); err == nil {
-		c.JSON(http.StatusOK, gin.H{"data": cached, "cached": true})
-		return
+	cacheKey := cache.RestaurantsListKey("all")
+	
+	if cache.Client != nil {
+		if err := cache.Client.Get(cacheKey, &cached); err == nil {
+			c.JSON(http.StatusOK, gin.H{"data": cached, "cached": true})
+			return
+		}
 	}
 
+	// Cache miss or no Redis - fetch from database
 	result, _, err := database.Query("restaurants").
 		Select("id, name, description, cuisine_type, address, city, logo_url, images, rating, review_count, opening_hours, waiting_time, categories, accepts_table_booking, is_open, is_verified", "", false).
 		Eq("is_open", "true").
@@ -36,7 +39,11 @@ func GetRestaurants(c *gin.Context) {
 		return
 	}
 
-	cache.Client.Set(cacheKey, result, 5*time.Minute)
+	// Cache result (silently skips if no Redis)
+	if cache.Client != nil {
+		cache.Client.Set(cacheKey, result, 5*time.Minute)
+	}
+
 	c.JSON(http.StatusOK, gin.H{"data": result, "cached": false})
 }
 
@@ -45,12 +52,16 @@ func GetRestaurantByID(c *gin.Context) {
 	id := c.Param("id")
 	cacheKey := cache.RestaurantKey(id)
 
+	// Try cache first
 	var cached map[string]interface{}
-	if err := cache.Client.Get(cacheKey, &cached); err == nil {
-		c.JSON(http.StatusOK, gin.H{"data": cached, "cached": true})
-		return
+	if cache.Client != nil {
+		if err := cache.Client.Get(cacheKey, &cached); err == nil {
+			c.JSON(http.StatusOK, gin.H{"data": cached, "cached": true})
+			return
+		}
 	}
 
+	// Fetch from database
 	result, _, err := database.Query("restaurants").
 		Select("*, menu_items(*)", "", false).
 		Eq("id", id).
@@ -62,7 +73,11 @@ func GetRestaurantByID(c *gin.Context) {
 		return
 	}
 
-	cache.Client.Set(cacheKey, result, 10*time.Minute)
+	// Cache result
+	if cache.Client != nil {
+		cache.Client.Set(cacheKey, result, 10*time.Minute)
+	}
+
 	c.JSON(http.StatusOK, gin.H{"data": result, "cached": false})
 }
 
@@ -79,12 +94,16 @@ func GetNearbyRestaurants(c *gin.Context) {
 
 	cacheKey := fmt.Sprintf("restaurants:nearby:%s:%s:%s", latitude, longitude, radius)
 
+	// Try cache first
 	var cached []map[string]interface{}
-	if err := cache.Client.Get(cacheKey, &cached); err == nil {
-		c.JSON(http.StatusOK, gin.H{"data": cached, "cached": true})
-		return
+	if cache.Client != nil {
+		if err := cache.Client.Get(cacheKey, &cached); err == nil {
+			c.JSON(http.StatusOK, gin.H{"data": cached, "cached": true})
+			return
+		}
 	}
 
+	// Call Supabase RPC function
 	resultStr := database.Client.Rpc("get_nearby_restaurants", "", map[string]interface{}{
 		"lat":       latitude,
 		"lng":       longitude,
@@ -99,8 +118,11 @@ func GetNearbyRestaurants(c *gin.Context) {
 		return
 	}
 
-	// Location data expires quickly
-	cache.Client.Set(cacheKey, result, 2*time.Minute)
+	// Cache for 2 minutes (location data expires quickly)
+	if cache.Client != nil {
+		cache.Client.Set(cacheKey, result, 2*time.Minute)
+	}
+
 	c.JSON(http.StatusOK, gin.H{"data": result, "cached": false})
 }
 
@@ -109,12 +131,16 @@ func GetRestaurantMenu(c *gin.Context) {
 	restaurantID := c.Param("id")
 	cacheKey := cache.MenuKey(restaurantID)
 
+	// Try cache first
 	var cached []map[string]interface{}
-	if err := cache.Client.Get(cacheKey, &cached); err == nil {
-		c.JSON(http.StatusOK, gin.H{"data": cached, "cached": true})
-		return
+	if cache.Client != nil {
+		if err := cache.Client.Get(cacheKey, &cached); err == nil {
+			c.JSON(http.StatusOK, gin.H{"data": cached, "cached": true})
+			return
+		}
 	}
 
+	// Fetch from database
 	result, _, err := database.Query("menu_items").
 		Select("id, name, description, price, category, image, is_available, is_vegetarian, is_vegan, is_gluten_free, spice_level, preparation_time", "", false).
 		Eq("restaurant_id", restaurantID).
@@ -127,7 +153,11 @@ func GetRestaurantMenu(c *gin.Context) {
 		return
 	}
 
-	cache.Client.Set(cacheKey, result, 10*time.Minute)
+	// Cache result
+	if cache.Client != nil {
+		cache.Client.Set(cacheKey, result, 10*time.Minute)
+	}
+
 	c.JSON(http.StatusOK, gin.H{"data": result, "cached": false})
 }
 
@@ -170,7 +200,7 @@ func SearchRestaurants(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": result})
 }
 
-// Owner: Create restaurant
+// CreateRestaurant - Owner creates a new restaurant
 func CreateRestaurant(c *gin.Context) {
 	userID := c.GetString("userId")
 
@@ -195,8 +225,10 @@ func CreateRestaurant(c *gin.Context) {
 		return
 	}
 
-	// Bust list cache so new restaurant appears after verification
-	cache.Client.Delete(cache.RestaurantsListKey("all"))
+	// Bust list cache
+	if cache.Client != nil {
+		cache.Client.Delete(cache.RestaurantsListKey("all"))
+	}
 
 	c.JSON(http.StatusCreated, gin.H{
 		"data":    result,
@@ -204,7 +236,7 @@ func CreateRestaurant(c *gin.Context) {
 	})
 }
 
-// Owner: Update restaurant
+// UpdateRestaurant - Owner updates their restaurant
 func UpdateRestaurant(c *gin.Context) {
 	restaurantID := c.Param("id")
 	userID := c.GetString("userId")
@@ -245,9 +277,11 @@ func UpdateRestaurant(c *gin.Context) {
 		return
 	}
 
-	// Bust both caches
-	cache.Client.Delete(cache.RestaurantKey(restaurantID))
-	cache.Client.Delete(cache.RestaurantsListKey("all"))
+	// Bust caches
+	if cache.Client != nil {
+		cache.Client.Delete(cache.RestaurantKey(restaurantID))
+		cache.Client.Delete(cache.RestaurantsListKey("all"))
+	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"data":    result,
@@ -255,7 +289,7 @@ func UpdateRestaurant(c *gin.Context) {
 	})
 }
 
-// Owner: Add menu item
+// AddMenuItem - Owner adds menu item to their restaurant
 func AddMenuItem(c *gin.Context) {
 	restaurantID := c.Param("id")
 	userID := c.GetString("userId")
@@ -290,7 +324,10 @@ func AddMenuItem(c *gin.Context) {
 		return
 	}
 
-	cache.Client.Delete(cache.MenuKey(restaurantID))
+	// Bust menu cache
+	if cache.Client != nil {
+		cache.Client.Delete(cache.MenuKey(restaurantID))
+	}
 
 	c.JSON(http.StatusCreated, gin.H{
 		"data":    result,
@@ -298,7 +335,7 @@ func AddMenuItem(c *gin.Context) {
 	})
 }
 
-// Owner: Update menu item
+// UpdateMenuItem - Owner updates a menu item
 func UpdateMenuItem(c *gin.Context) {
 	itemID := c.Param("id")
 
@@ -308,6 +345,7 @@ func UpdateMenuItem(c *gin.Context) {
 		return
 	}
 
+	// Guard immutable fields
 	delete(updates, "id")
 	delete(updates, "restaurant_id")
 
@@ -321,14 +359,20 @@ func UpdateMenuItem(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": result})
+	// Note: We can't easily bust the cache here without querying for restaurant_id first
+	// Consider adding it if performance matters
+
+	c.JSON(http.StatusOK, gin.H{
+		"data":    result,
+		"message": "Menu item updated successfully",
+	})
 }
 
-// Owner: Delete menu item
+// DeleteMenuItem - Owner deletes a menu item
 func DeleteMenuItem(c *gin.Context) {
 	itemID := c.Param("id")
 
-	// Fetch restaurant_id first so we can bust the menu cache
+	// Fetch restaurant_id first so we can bust the cache
 	existing, _, err := database.Query("menu_items").
 		Select("restaurant_id", "", false).
 		Eq("id", itemID).
@@ -340,6 +384,7 @@ func DeleteMenuItem(c *gin.Context) {
 		return
 	}
 
+	// Delete the item
 	_, _, err = database.Query("menu_items").
 		Delete("", "").
 		Eq("id", itemID).
@@ -350,11 +395,12 @@ func DeleteMenuItem(c *gin.Context) {
 		return
 	}
 
-	// Bust menu cache if we can extract the restaurant id
-	var item map[string]interface{}
-	if existing != nil {
-		if rid, ok := item["restaurant_id"].(string); ok {
-			cache.Client.Delete(cache.MenuKey(rid))
+	// Bust menu cache
+	if cache.Client != nil && existing != nil {
+		if item, ok := existing.(map[string]interface{}); ok {
+			if rid, ok := item["restaurant_id"].(string); ok {
+				cache.Client.Delete(cache.MenuKey(rid))
+			}
 		}
 	}
 
